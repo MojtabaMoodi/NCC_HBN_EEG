@@ -995,7 +995,7 @@ def standardize_age(age):
 # Example usage and testing functions
 def test_dataset():
     """Test the EEG dataset functionality."""
-    pickle_dir = "/home/mojtabam/projects/def-aghodsib/mojtabam/processed_eeg_data"
+    pickle_dir = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data"
     
     # Test basic dataset creation
     dataset = EEGDataset(pickle_dir=pickle_dir, task_type="both")
