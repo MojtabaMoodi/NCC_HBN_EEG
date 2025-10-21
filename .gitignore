@@ -1,2 +1,4 @@
+CNN/__pycache__/*
+CNN/checkpoints/*
 data_processing/__pycache__/*
 data_processing/processed_eeg_data/*
