@@ -1,5 +1,6 @@
 CNN/__pycache__/*
 CNN/checkpoints/*
 CNN/models/__pycache__/*
+utils/__pycache__/*
 data_processing/__pycache__/*
 data_processing/processed_eeg_data/*

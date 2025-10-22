@@ -18,6 +18,12 @@ from pathlib import Path
 from constants import (
     get_stratify_label, validate_stratify_by
 )
+from target_transforms import (
+    gender_classification_transform,
+    age_classification_transform,
+    age_regression_transform,
+    combined_gender_age_classification_transform
+)
 
 logger = logging.getLogger(__name__)
 
@@ -202,18 +208,6 @@ class EEGDataset(Dataset):
         """
         return [sample for sample in self.samples if sample['participant_id'] == participant_id]
     
-    def get_task_samples(self, task_name: str) -> List[Dict[str, Any]]:
-        """
-        Get all samples for a specific task.
-        
-        Args:
-            task_name: Name of the task
-            
-        Returns:
-            List of samples for the task
-        """
-        return [sample for sample in self.samples if sample['task_name'] == task_name]
-    
     def get_statistics(self) -> Dict[str, Any]:
         """
         Get dataset statistics.
@@ -258,7 +252,7 @@ class EEGDataset(Dataset):
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
             target_type: Type of target to return
-            
+
         Returns:
             EEGDataset instance
         """
@@ -279,7 +273,6 @@ class EEGDataset(Dataset):
     @classmethod
     def create_gender_classification_dataset(cls, pickle_dir: str, **kwargs):
         """Create dataset for gender classification."""
-        from target_transforms import gender_classification_transform
         return cls(
             pickle_dir=pickle_dir,
             gender_transform=gender_classification_transform,
@@ -290,7 +283,6 @@ class EEGDataset(Dataset):
     @classmethod
     def create_age_classification_dataset(cls, pickle_dir: str, **kwargs):
         """Create dataset for age classification."""
-        from target_transforms import age_classification_transform
         return cls(
             pickle_dir=pickle_dir,
             age_transform=age_classification_transform,
@@ -301,7 +293,6 @@ class EEGDataset(Dataset):
     @classmethod
     def create_age_regression_dataset(cls, pickle_dir: str, **kwargs):
         """Create dataset for age regression."""
-        from target_transforms import age_regression_transform
         return cls(
             pickle_dir=pickle_dir,
             age_transform=age_regression_transform,
@@ -312,7 +303,6 @@ class EEGDataset(Dataset):
     @classmethod
     def create_combined_classification_dataset(cls, pickle_dir: str, **kwargs):
         """Create dataset for combined gender+age classification."""
-        from target_transforms import combined_gender_age_classification_transform
         return cls(
             pickle_dir=pickle_dir,
             gender_transform=lambda g, a: combined_gender_age_classification_transform(g, a),
@@ -323,7 +313,6 @@ class EEGDataset(Dataset):
     @classmethod
     def create_multi_task_dataset(cls, pickle_dir: str, **kwargs):
         """Create dataset for multi-task learning (both gender and age)."""
-        from target_transforms import gender_classification_transform, age_regression_transform
         return cls(
             pickle_dir=pickle_dir,
             gender_transform=gender_classification_transform,
@@ -982,15 +971,6 @@ class EEGDataLoader:
         
         return fold_loaders
 
-
-# Example transform functions (deprecated - use target_transforms.py instead)
-def normalize_age(age):
-    """Normalize age to [0, 1] range assuming age range 5-22."""
-    return (age - 5.0) / (22.0 - 5.0)
-
-def standardize_age(age):
-    """Standardize age using mean=10.5, std=3.4 (from our data)."""
-    return (age - 10.5) / 3.4
 
 # Example usage and testing functions
 def test_dataset():
