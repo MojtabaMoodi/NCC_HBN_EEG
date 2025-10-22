@@ -4,8 +4,8 @@ Provides a centralized way to create and configure models.
 """
 
 from typing import Dict, Any, Type
-from base_model import BaseEEGCNN
-from model import EEGGenderCNN, EEGAgeCNN
+from .base_model import BaseEEGCNN
+from .model import EEGGenderCNN, EEGAgeCNN
 
 class ModelFactory:
     """

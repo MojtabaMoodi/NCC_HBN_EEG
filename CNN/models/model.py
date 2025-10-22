@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from base_model import BaseEEGCNN
+from .base_model import BaseEEGCNN
 
 class EEGGenderCNN(BaseEEGCNN):
     """
