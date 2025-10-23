@@ -8,7 +8,7 @@ The framework follows a systematic, modular design with clear separation of conc
 
 ```
 CNN/
-├── main_systematic.py    # Main entry point for comprehensive experiments
+├── main.py              # Main entry point for comprehensive experiments
 ├── config.py            # Centralized configuration management
 ├── experiment.py        # Experiment lifecycle management and execution
 ├── trainer.py           # Model-agnostic training with progress logging
@@ -70,16 +70,16 @@ CNN/
 
 ```bash
 # Run all 12 comprehensive experiments
-python main_systematic.py --mode comprehensive
+python main.py --mode comprehensive
 
 # Run single experiment
-python main_systematic.py --mode single --experiment test_gender --target gender --epochs 10
+python main.py --mode single --experiment test_gender --target gender --epochs 10
 
 # Run default experiments (basic gender and age)
-python main_systematic.py --mode default
+python main.py --mode default
 
 # Run custom batch experiments
-python main_systematic.py --mode batch --epochs 100 --learning_rate 0.01
+python main.py --mode batch --epochs 100 --learning_rate 0.01
 ```
 
 ### Comprehensive Experiment Types
@@ -116,7 +116,7 @@ from models import ModelFactory
 # Create custom experiment
 data_config = DataConfig(
     pickle_dir="/path/to/data",
-    batch_size=32,
+    batch_size=128,
     use_cross_validation=True,
     n_folds=5,
     cv_strategy="gender"
@@ -169,7 +169,7 @@ result = experiment.run()
 ```python
 data_config = DataConfig(
     pickle_dir="/path/to/data",
-    batch_size=32,
+    batch_size=128,
     num_workers=4,
     random_seed=42,
     use_cross_validation=True,
@@ -228,11 +228,27 @@ checkpoints/                         # Model checkpoints organized by model type
 experiment_results/
 ├── experiment_summary.json          # Overall experiment summary
 ├── model_comparison.json           # Model comparison results
-├── gender_cnn_baseline/            # Individual experiment results
-│   ├── gender_cnn_baseline_complete.json
-│   ├── gender_cnn_baseline_metrics.json
-│   ├── gender_cnn_baseline_predictions.json
-│   └── gender_cnn_baseline_confusion_matrix.png
+├── gender_baseline_train_val_test/  # Basic experiment results
+│   ├── gender_baseline_train_val_test_result.json
+│   ├── gender_baseline_train_val_test_training_metrics.json
+│   └── (other experiment-specific files)
+├── gender_cv_gender_stratified/     # Cross-validation experiment (organized)
+│   ├── fold_1/                     # Individual fold results
+│   │   ├── gender_cv_gender_stratified_result.json
+│   │   ├── gender_cv_gender_stratified_training_metrics.json
+│   │   └── (other fold-specific files)
+│   ├── fold_2/
+│   ├── fold_3/
+│   ├── fold_4/
+│   ├── fold_5/
+│   └── gender_cv_gender_stratified_result.json  # Aggregated results
+├── gender_cross_task_cv_active_to_passive_gender_stratified/  # Cross-task CV
+│   ├── fold_1/
+│   ├── fold_2/
+│   ├── fold_3/
+│   ├── fold_4/
+│   ├── fold_5/
+│   └── gender_cross_task_cv_active_to_passive_gender_stratified_result.json
 └── ...
 
 reports/
@@ -317,7 +333,7 @@ config = ExperimentConfig(
 
 2. **Add to Comprehensive Experiments**:
 ```python
-# In main_systematic.py, add to create_comprehensive_experiments()
+# In main.py, add to create_comprehensive_experiments()
 experiments.append(config)
 ```
 
@@ -332,7 +348,7 @@ def create_my_custom_loaders(data_config):
 
 2. **Update create_specialized_data_loaders**:
 ```python
-# In main_systematic.py, add new condition
+# In main.py, add new condition
 elif data_config.my_custom_condition:
     return create_my_custom_loaders(data_config)
 ```

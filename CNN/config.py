@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 class DataConfig:
     """Configuration for data loading and preprocessing."""
     pickle_dir: str = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data"
-    batch_size: int = 32
+    batch_size: int = 128  # Increased from 32 for better GPU utilization
     num_workers: int = 4
     random_seed: int = 42
     task_type: str = "both"  # "active", "passive", or "both"

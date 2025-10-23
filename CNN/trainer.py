@@ -48,7 +48,7 @@ class EEGTrainer:
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate)
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=3, verbose=True
+            self.optimizer, mode='min', factor=0.5, patience=10, verbose=True
         )
         
         # Create checkpoint directory
