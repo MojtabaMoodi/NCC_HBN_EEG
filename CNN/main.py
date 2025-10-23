@@ -377,9 +377,9 @@ def run_comprehensive_experiments(experiments, system_config, random_seed):
                 for fold_idx, (train_loader, val_loader, test_loader) in enumerate(data_loaders):
                     print(f"  Fold {fold_idx + 1}/{len(data_loaders)}")
                     
-                    # Create experiment for this fold
+                    # Create experiment for this fold with organized naming
                     fold_config = ExperimentConfig(
-                        name=f"{config.name}_fold_{fold_idx + 1}",
+                        name=config.name,  # Use base experiment name
                         model_type=config.model_type,
                         target_type=config.target_type,
                         data_config=config.data_config,
@@ -387,8 +387,15 @@ def run_comprehensive_experiments(experiments, system_config, random_seed):
                         training_config=config.training_config
                     )
                     
+                    # Create experiment with fold-specific directory
                     experiment = Experiment(fold_config, system_config)
                     experiment.setup(train_loader, val_loader, test_loader)
+                    
+                    # Override the results directory to include fold subdirectory
+                    original_results_dir = experiment.logger.results_dir
+                    fold_dir = os.path.join(original_results_dir, config.name, f"fold_{fold_idx + 1}")
+                    experiment.logger.results_dir = fold_dir
+                    
                     result = experiment.run()
                     fold_results.append(result)
                 
@@ -417,8 +424,19 @@ def run_comprehensive_experiments(experiments, system_config, random_seed):
                         training_metrics=fold_results[0].training_metrics,  # Use first fold's training metrics
                         error=None
                     )
+                    
+                    # Save aggregated result in the main experiment directory
+                    exp_dir = os.path.join(system_config.results_dir, config.name)
+                    os.makedirs(exp_dir, exist_ok=True)
+                    
+                    # Create a special logger for saving aggregated results
+                    from experiment import ExperimentLogger
+                    agg_logger = ExperimentLogger(exp_dir)
+                    agg_logger.save_experiment_result(aggregated_result)
+                    
                     results.append(aggregated_result)
                     print(f"  ✅ Cross-validation completed: {len(fold_results)} folds")
+                    print(f"  📁 Results organized in: {exp_dir}")
                 else:
                     print(f"  ❌ Cross-validation failed")
                     results.append(ExperimentResult(
@@ -489,7 +507,7 @@ def main():
     parser.add_argument('--target', choices=['gender', 'age'], help='Target type for single mode')
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
                        help='Directory to save results')
