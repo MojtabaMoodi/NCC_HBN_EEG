@@ -5,7 +5,7 @@ Provides a centralized way to create and configure models.
 
 from typing import Dict, Any, Type
 from .base_model import BaseEEGCNN
-from .model import EEGGenderCNN, EEGAgeCNN
+from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN
 
 class ModelFactory:
     """
@@ -15,8 +15,9 @@ class ModelFactory:
     
     # Registry of available models
     _models: Dict[str, Type[BaseEEGCNN]] = {
-        'gender_cnn': EEGGenderCNN,
-        'age_cnn': EEGAgeCNN,
+        'eeg_cnn': EEGCNN,           # Unified model for any number of classes
+        'gender_cnn': EEGGenderCNN,  # Backward compatibility (2 classes)
+        'age_cnn': EEGAgeCNN,        # Backward compatibility (3 classes)
     }
     
     @classmethod
@@ -25,7 +26,8 @@ class ModelFactory:
         Create a model instance by type.
         
         Args:
-            model_type: Type of model to create ('gender_cnn', 'age_cnn')
+            model_type: Type of model to create 
+                       ('eeg_cnn', 'gender_cnn', 'age_cnn')
             **kwargs: Additional arguments for model initialization
             
         Returns:
