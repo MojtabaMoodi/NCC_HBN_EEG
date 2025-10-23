@@ -57,8 +57,8 @@ class ReportGenerator:
             f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             
             # Overall statistics
-            successful = [r for r in experiment_results if r['success']]
-            failed = [r for r in experiment_results if not r['success']]
+            successful = [r for r in experiment_results if r.success]
+            failed = [r for r in experiment_results if not r.success]
             
             f.write(f"Total Experiments: {len(experiment_results)}\n")
             f.write(f"Successful: {len(successful)}\n")
@@ -70,12 +70,12 @@ class ReportGenerator:
                 f.write("-" * 30 + "\n")
                 
                 for result in successful:
-                    f.write(f"\nExperiment: {result['experiment_name']}\n")
-                    f.write(f"Model: {result['model_type']}\n")
-                    f.write(f"Target: {result['target_type']}\n")
-                    f.write(f"Accuracy: {result['evaluation_results']['metrics']['accuracy']:.4f}\n")
-                    f.write(f"F1-Score: {result['evaluation_results']['metrics']['f1_weighted']:.4f}\n")
-                    f.write(f"Training Time: {result['total_time']:.2f}s\n")
+                    f.write(f"\nExperiment: {result.experiment_name}\n")
+                    f.write(f"Model: {result.model_type}\n")
+                    f.write(f"Target: {result.target_type}\n")
+                    f.write(f"Accuracy: {result.metrics['accuracy']:.4f}\n")
+                    f.write(f"F1-Score: {result.metrics['f1_weighted']:.4f}\n")
+                    f.write(f"Training Time: {result.total_time:.2f}s\n")
             
             # Failed experiments
             if failed:
@@ -83,14 +83,14 @@ class ReportGenerator:
                 f.write("-" * 20 + "\n")
                 
                 for result in failed:
-                    f.write(f"\nExperiment: {result['experiment_name']}\n")
-                    f.write(f"Error: {result['error']}\n")
+                    f.write(f"\nExperiment: {result.experiment_name}\n")
+                    f.write(f"Error: {result.error}\n")
     
     def _generate_html_report(self, experiment_results: List[Dict[str, Any]]):
         """Generate HTML report."""
         html_file = os.path.join(self.output_dir, 'experiment_report.html')
         
-        successful = [r for r in experiment_results if r['success']]
+        successful = [r for r in experiment_results if r.success]
         
         html_content = f"""
 <!DOCTYPE html>
@@ -114,35 +114,35 @@ class ReportGenerator:
     <div class="header">
         <h1>EEG Classification Experiment Report</h1>
         <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        <p>Total Experiments: {len(experiment_results)} | Successful: {len(successful)} | Failed: {len([r for r in experiment_results if not r['success']])}</p>
+        <p>Total Experiments: {len(experiment_results)} | Successful: {len(successful)} | Failed: {len([r for r in experiment_results if not r.success])}</p>
     </div>
 """
         
         # Add experiment details
         for result in experiment_results:
-            status_class = "success" if result['success'] else "failure"
-            status_text = "SUCCESS" if result['success'] else "FAILED"
+            status_class = "success" if result.success else "failure"
+            status_text = "SUCCESS" if result.success else "FAILED"
             
             html_content += f"""
     <div class="experiment {status_class}">
-        <h2>{result['experiment_name']} - {status_text}</h2>
-        <p><strong>Model:</strong> {result['model_type']} | <strong>Target:</strong> {result['target_type']}</p>
+        <h2>{result.experiment_name} - {status_text}</h2>
+        <p><strong>Model:</strong> {result.model_type} | <strong>Target:</strong> {result.target_type}</p>
 """
             
-            if result['success']:
-                metrics = result['evaluation_results']['metrics']
+            if result.success:
+                metrics = result.metrics
                 html_content += f"""
         <div class="metrics">
             <div class="metric"><strong>Accuracy:</strong> {metrics['accuracy']:.4f}</div>
             <div class="metric"><strong>Precision:</strong> {metrics['precision_weighted']:.4f}</div>
             <div class="metric"><strong>Recall:</strong> {metrics['recall_weighted']:.4f}</div>
             <div class="metric"><strong>F1-Score:</strong> {metrics['f1_weighted']:.4f}</div>
-            <div class="metric"><strong>Training Time:</strong> {result['total_time']:.2f}s</div>
+            <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
         </div>
 """
             else:
                 html_content += f"""
-        <p><strong>Error:</strong> {result['error']}</p>
+        <p><strong>Error:</strong> {result.error}</p>
 """
             
             html_content += "    </div>\n"
@@ -163,15 +163,15 @@ class ReportGenerator:
 """
             
             for result in successful:
-                metrics = result['evaluation_results']['metrics']
+                metrics = result.metrics
                 html_content += f"""
         <tr>
-            <td>{result['experiment_name']}</td>
-            <td>{result['model_type']}</td>
-            <td>{result['target_type']}</td>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
             <td>{metrics['accuracy']:.4f}</td>
             <td>{metrics['f1_weighted']:.4f}</td>
-            <td>{result['total_time']:.2f}</td>
+            <td>{result.total_time:.2f}</td>
         </tr>
 """
             
@@ -187,7 +187,7 @@ class ReportGenerator:
     
     def _generate_visualizations(self, experiment_results: List[Dict[str, Any]]):
         """Generate visualization plots."""
-        successful = [r for r in experiment_results if r['success']]
+        successful = [r for r in experiment_results if r.success]
         
         if not successful:
             return
@@ -206,8 +206,8 @@ class ReportGenerator:
     
     def _plot_accuracy_comparison(self, successful_results: List[Dict[str, Any]]):
         """Plot accuracy comparison across experiments."""
-        experiments = [r['experiment_name'] for r in successful_results]
-        accuracies = [r['evaluation_results']['metrics']['accuracy'] for r in successful_results]
+        experiments = [r.experiment_name for r in successful_results]
+        accuracies = [r.metrics['accuracy'] for r in successful_results]
         
         plt.figure(figsize=(12, 6))
         bars = plt.bar(experiments, accuracies, color='skyblue', alpha=0.7)
@@ -229,8 +229,8 @@ class ReportGenerator:
     
     def _plot_training_time_comparison(self, successful_results: List[Dict[str, Any]]):
         """Plot training time comparison."""
-        experiments = [r['experiment_name'] for r in successful_results]
-        times = [r['total_time'] for r in successful_results]
+        experiments = [r.experiment_name for r in successful_results]
+        times = [r.total_time for r in successful_results]
         
         plt.figure(figsize=(12, 6))
         bars = plt.bar(experiments, times, color='lightcoral', alpha=0.7)
@@ -254,7 +254,7 @@ class ReportGenerator:
         # Group by target type
         target_groups = {}
         for result in successful_results:
-            target = result['target_type']
+            target = result.target_type
             if target not in target_groups:
                 target_groups[target] = []
             target_groups[target].append(result)
@@ -264,7 +264,7 @@ class ReportGenerator:
         
         # Accuracy by target type
         targets = list(target_groups.keys())
-        accuracies = [max([r['evaluation_results']['metrics']['accuracy'] 
+        accuracies = [max([r.metrics['accuracy'] 
                           for r in target_groups[target]]) for target in targets]
         
         axes[0].bar(targets, accuracies, color=['skyblue', 'lightcoral'], alpha=0.7)
@@ -273,7 +273,7 @@ class ReportGenerator:
         axes[0].set_ylim(0, 1)
         
         # F1-score by target type
-        f1_scores = [max([r['evaluation_results']['metrics']['f1_weighted'] 
+        f1_scores = [max([r.metrics['f1_weighted'] 
                          for r in target_groups[target]]) for target in targets]
         
         axes[1].bar(targets, f1_scores, color=['skyblue', 'lightcoral'], alpha=0.7)
@@ -288,7 +288,7 @@ class ReportGenerator:
     
     def _generate_csv_summary(self, experiment_results: List[Dict[str, Any]]):
         """Generate CSV summary for easy analysis."""
-        successful = [r for r in experiment_results if r['success']]
+        successful = [r for r in experiment_results if r.success]
         
         if not successful:
             return
@@ -296,17 +296,17 @@ class ReportGenerator:
         # Prepare data for CSV
         data = []
         for result in successful:
-            metrics = result['evaluation_results']['metrics']
+            metrics = result.metrics
             data.append({
-                'experiment_name': result['experiment_name'],
-                'model_type': result['model_type'],
-                'target_type': result['target_type'],
+                'experiment_name': result.experiment_name,
+                'model_type': result.model_type,
+                'target_type': result.target_type,
                 'accuracy': metrics['accuracy'],
                 'precision_weighted': metrics['precision_weighted'],
                 'recall_weighted': metrics['recall_weighted'],
                 'f1_weighted': metrics['f1_weighted'],
-                'training_time': result['total_time'],
-                'evaluation_time': result['evaluation_results']['evaluation_time']
+                'training_time': result.total_time,
+                'evaluation_time': result.evaluation_time
             })
         
         # Create DataFrame and save
