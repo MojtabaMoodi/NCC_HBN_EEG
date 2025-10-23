@@ -103,8 +103,12 @@ class ExperimentLogger:
         return self.training_metrics.copy()
     
     def save_training_metrics(self, experiment_name: str):
-        """Save training metrics to JSON file."""
-        metrics_file = os.path.join(self.results_dir, f'{experiment_name}_training_metrics.json')
+        """Save training metrics to JSON file in experiment-specific directory."""
+        # Create experiment-specific directory
+        exp_dir = os.path.join(self.results_dir, experiment_name)
+        os.makedirs(exp_dir, exist_ok=True)
+        
+        metrics_file = os.path.join(exp_dir, f'{experiment_name}_training_metrics.json')
         safe_json_dump(convert_numpy_types(self.training_metrics), metrics_file)
         print(f"   Training metrics saved to: {metrics_file}")
     
@@ -178,10 +182,14 @@ class ExperimentLogger:
         print(f"   Time: {result.total_time:.2f}s")
     
     def save_experiment_result(self, result: ExperimentResult):
-        """Save experiment result to file."""
+        """Save experiment result to file in experiment-specific directory."""
         if result.success:
+            # Create experiment-specific directory
+            exp_dir = os.path.join(self.results_dir, result.experiment_name)
+            os.makedirs(exp_dir, exist_ok=True)
+            
             result_file = os.path.join(
-                self.results_dir, 
+                exp_dir, 
                 f"{result.experiment_name}_result.json"
             )
             sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -418,11 +426,15 @@ def run_multiple_experiments(experiments: List[ExperimentConfig],
 
 def _save_experiment_summary(results: List[ExperimentResult], results_dir: str):
     """Save summary of all experiment results."""
-    # Save individual results
+    # Save individual results in experiment-specific directories
     for result in results:
         if result.success:
+            # Create experiment-specific directory
+            exp_dir = os.path.join(results_dir, result.experiment_name)
+            os.makedirs(exp_dir, exist_ok=True)
+            
             result_file = os.path.join(
-                results_dir, 
+                exp_dir, 
                 f"{result.experiment_name}_complete.json"
             )
             safe_json_dump(convert_numpy_types(result.to_dict()), result_file)
@@ -444,6 +456,43 @@ def _save_experiment_summary(results: List[ExperimentResult], results_dir: str):
         _generate_comparison_report(successful_results, results_dir)
 
 
+def _get_experiment_description(experiment_name: str) -> str:
+    """Get a description for the experiment based on its name."""
+    descriptions = {
+        # Basic experiments
+        'gender_baseline_train_val_test': 'Standard gender classification with train/val/test split',
+        'age_baseline_train_val_test': 'Standard age classification with train/val/test split',
+        
+        # Cross-validation experiments
+        'gender_cv_gender_stratified': '5-fold cross-validation with gender stratification',
+        'age_cv_age_stratified': '5-fold cross-validation with age stratification',
+        
+        # Cross-task experiments
+        'gender_cross_task_active_to_passive': 'Train on active tasks, test on passive tasks (gender)',
+        'gender_cross_task_passive_to_active': 'Train on passive tasks, test on active tasks (gender)',
+        'age_cross_task_active_to_passive': 'Train on active tasks, test on passive tasks (age)',
+        'age_cross_task_passive_to_active': 'Train on passive tasks, test on active tasks (age)',
+        
+        # Cross-task cross-validation experiments
+        'gender_cross_task_cv_active_to_passive_gender_stratified': '5-fold CV: train active, test passive (gender stratified)',
+        'gender_cross_task_cv_passive_to_active_gender_stratified': '5-fold CV: train passive, test active (gender stratified)',
+        'age_cross_task_cv_active_to_passive_age_stratified': '5-fold CV: train active, test passive (age stratified)',
+        'age_cross_task_cv_passive_to_active_age_stratified': '5-fold CV: train passive, test active (age stratified)',
+    }
+    
+    # Check for exact match first
+    if experiment_name in descriptions:
+        return descriptions[experiment_name]
+    
+    # Check for partial matches (for fold-specific names)
+    for key, desc in descriptions.items():
+        if key in experiment_name:
+            return desc
+    
+    # Default description
+    return 'Custom experiment configuration'
+
+
 def _generate_comparison_report(successful_results: List[ExperimentResult], results_dir: str):
     """Generate comparison report for successful experiments."""
     # Create evaluation results for comparison
@@ -461,24 +510,35 @@ def _generate_comparison_report(successful_results: List[ExperimentResult], resu
     from evaluator import compare_models
     comparison = compare_models(eval_results)
     
+    # Add experiment names and descriptions to comparison
+    for i, result in enumerate(successful_results):
+        if i < len(comparison['models']):
+            comparison['models'][i]['experiment_name'] = result.experiment_name
+            comparison['models'][i]['description'] = _get_experiment_description(result.experiment_name)
+    
     # Save comparison
     comparison_file = os.path.join(results_dir, 'model_comparison.json')
     safe_json_dump(convert_numpy_types(comparison), comparison_file)
     
-    # Print comparison
-    print("\n" + "="*80)
+    # Print comparison with description column
+    print("\n" + "="*120)
     print("MODEL COMPARISON")
-    print("="*80)
-    print(f"{'Model':<20} {'Target':<10} {'Accuracy':<10} {'F1-Score':<10} {'Time (s)':<10}")
-    print("-"*80)
+    print("="*120)
+    print(f"{'Model':<20} {'Target':<10} {'Accuracy':<10} {'F1-Score':<10} {'Time (s)':<10} {'Description':<50}")
+    print("-"*120)
     
     for model_info in comparison['models']:
+        description = model_info.get('description', 'Unknown experiment')
+        # Truncate description if too long
+        if len(description) > 47:
+            description = description[:44] + "..."
+        
         print(f"{model_info['name']:<20} {model_info['target_type']:<10} "
               f"{model_info['accuracy']:<10.4f} {model_info['f1_weighted']:<10.4f} "
-              f"{model_info['evaluation_time']:<10.2f}")
+              f"{model_info['evaluation_time']:<10.2f} {description:<50}")
     
     print(f"\nBest Model: {comparison['best_model']} (Accuracy: {comparison['best_accuracy']:.4f})")
-    print("="*80)
+    print("="*120)
 
 
 # Experiment Creation Functions
