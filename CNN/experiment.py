@@ -17,6 +17,11 @@ from evaluator import EEGEvaluator, EvaluationResults
 from config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
 from utils import safe_json_dump, convert_numpy_types
 
+# Import data processing modules
+sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
+from eeg_dataset import EEGDataLoader
+from target_transforms import gender_classification_transform, age_classification_transform
+
 @dataclass
 class ExperimentResult:
     """Represents the result of an experiment."""
@@ -27,6 +32,7 @@ class ExperimentResult:
     total_time: float
     training_time: float
     evaluation_time: float
+    description: Optional[str] = None  # Human-readable description of the experiment
     metrics: Optional[Dict[str, Any]] = None
     training_metrics: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -42,6 +48,7 @@ class ExperimentResult:
             'total_time': self.total_time,
             'training_time': self.training_time,
             'evaluation_time': self.evaluation_time,
+            'description': self.description,
             'metrics': self.metrics,
             'training_metrics': self.training_metrics,
             'error': self.error,
@@ -199,12 +206,11 @@ class ExperimentLogger:
 class Experiment:
     """
     Represents a single experiment with its complete lifecycle.
-    Follows Single Responsibility Principle and Domain-Driven Design.
     """
     
     def __init__(self, config: ExperimentConfig, system_config: SystemConfig = None):
         """
-        Initialize an experiment.
+        Initialize an experiment. Data loaders will be created during setup.
         
         Args:
             config: Experiment configuration
@@ -217,17 +223,17 @@ class Experiment:
         self.trainer = None
         self.evaluator = None
         self.result = None
+        self.data_loaders = None
+        self.is_cross_validation = False
     
-    def setup(self, train_loader, val_loader, test_loader):
+    def setup(self):
         """
-        Setup the experiment with data loaders.
-        
-        Args:
-            train_loader: Training data loader
-            val_loader: Validation data loader  
-            test_loader: Test data loader
+        Setup the experiment components (data loaders, model, trainer, evaluator).
         """
         print(f"Setting up experiment: {self.config.name}")
+        
+        # Create data loaders using the DataConfig
+        self._create_data_loaders()
         
         # Create model using ModelFactory
         self.model = ModelFactory.create_model(
@@ -241,16 +247,94 @@ class Experiment:
         # Create evaluator
         self.evaluator = EEGEvaluator(self.model, self.config.target_type)
         
-        # Store data loaders
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.test_loader = test_loader
-        
         print(f"✅ Experiment setup complete")
+    
+    def _create_data_loaders(self):
+        """
+        Create data loaders using the experiment's DataConfig.
+        """
+        data_config = self.config.data_config
+        target_type = self.config.target_type
+        
+        # Select appropriate transforms based on target type
+        if target_type == 'gender':
+            gender_transform = gender_classification_transform
+            age_transform = None
+        else:  # age
+            gender_transform = None
+            age_transform = age_classification_transform
+        
+        # Handle different experiment types based on data config
+        if data_config.use_cross_validation and data_config.train_task_type and data_config.val_test_task_type:
+            # Cross-task cross-validation experiments
+            print(f"Creating cross-task cross-validation loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
+            self.data_loaders = EEGDataLoader.create_cross_task_cross_validation_loaders(
+                pickle_dir=data_config.pickle_dir,
+                train_task_type=data_config.train_task_type,
+                val_test_task_type=data_config.val_test_task_type,
+                batch_size=data_config.batch_size,
+                num_workers=data_config.num_workers,
+                random_seed=data_config.random_seed,
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                transform=None
+            )
+            self.is_cross_validation = True
+            
+        elif data_config.use_cross_validation:
+            # Standard cross-validation experiments
+            print(f"Creating cross-validation loaders for {target_type} classification")
+            self.data_loaders = EEGDataLoader.create_cross_validation_loaders(
+                pickle_dir=data_config.pickle_dir,
+                batch_size=data_config.batch_size,
+                num_workers=data_config.num_workers,
+                random_seed=data_config.random_seed,
+                task_type=data_config.task_type,
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                transform=None
+            )
+            self.is_cross_validation = True
+            
+        elif data_config.train_task_type and data_config.val_test_task_type:
+            # Cross-task experiments
+            print(f"Creating cross-task loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
+            self.data_loaders = EEGDataLoader.create_cross_task_loaders(
+                pickle_dir=data_config.pickle_dir,
+                train_task_type=data_config.train_task_type,
+                val_test_task_type=data_config.val_test_task_type,
+                batch_size=data_config.batch_size,
+                num_workers=data_config.num_workers,
+                random_seed=data_config.random_seed,
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                transform=None
+            )
+            self.is_cross_validation = False
+            
+        else:
+            # Standard train/val/test split experiments
+            print(f"Creating standard loaders for {target_type} classification")
+            self.data_loaders = EEGDataLoader.create_train_val_test_loaders(
+                pickle_dir=data_config.pickle_dir,
+                batch_size=data_config.batch_size,
+                num_workers=data_config.num_workers,
+                random_seed=data_config.random_seed,
+                task_type=data_config.task_type,
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                transform=None
+            )
+            self.is_cross_validation = False
 
     def run(self) -> ExperimentResult:
         """
         Run the complete experiment.
+        Handles both single experiments and cross-validation experiments.
         
         Returns:
             ExperimentResult containing all experiment information
@@ -262,33 +346,12 @@ class Experiment:
         experiment_start = time.time()
         
         try:
-            # Training phase
-            training_start = time.time()
-            self._train()
-            training_time = time.time() - training_start
-            
-            # Evaluation phase
-            evaluation_start = time.time()
-            evaluation_results = self._evaluate()
-            evaluation_time = time.time() - evaluation_start
-            
-            total_time = time.time() - experiment_start
-            
-            # Create successful result
-            self.result = ExperimentResult(
-                experiment_name=self.config.name,
-                model_type=self.config.model_type,
-                target_type=self.config.target_type,
-                success=True,
-                total_time=total_time,
-                training_time=training_time,
-                evaluation_time=evaluation_time,
-                metrics=evaluation_results.metrics,
-                model_checkpoint_path=self._get_checkpoint_path()
-            )
-            
-            # Add training metrics to result
-            self.result.training_metrics = self.logger.get_training_metrics()
+            if self.is_cross_validation:
+                # Handle cross-validation experiments
+                self.result = self._run_cross_validation()
+            else:
+                # Handle single experiments
+                self.result = self._run_single_experiment(experiment_start)
             
             self.logger.log_experiment_success(self.result)
             
@@ -304,6 +367,7 @@ class Experiment:
                 total_time=total_time,
                 training_time=0.0,
                 evaluation_time=0.0,
+                description=self.config.description,
                 error=str(e)
             )
             
@@ -313,6 +377,129 @@ class Experiment:
         self.logger.save_experiment_result(self.result)
         
         return self.result
+    
+    def _run_single_experiment(self, experiment_start: float) -> ExperimentResult:
+        """Run a single experiment (train/val/test split)."""
+        # Extract data loaders from injected data
+        self.train_loader, self.val_loader, self.test_loader = self.data_loaders
+        
+        # Training phase
+        training_start = time.time()
+        self._train()
+        training_time = time.time() - training_start
+        
+        # Evaluation phase
+        evaluation_start = time.time()
+        evaluation_results = self._evaluate()
+        evaluation_time = time.time() - evaluation_start
+        
+        total_time = time.time() - experiment_start
+        
+        # Create successful result
+        result = ExperimentResult(
+            experiment_name=self.config.name,
+            model_type=self.config.model_type,
+            target_type=self.config.target_type,
+            success=True,
+            total_time=total_time,
+            training_time=training_time,
+            evaluation_time=evaluation_time,
+            description=self.config.description,
+            metrics=evaluation_results.metrics,
+            model_checkpoint_path=self._get_checkpoint_path()
+        )
+        
+        # Add training metrics to result
+        result.training_metrics = self.logger.get_training_metrics()
+        
+        return result
+    
+    def _run_cross_validation(self) -> ExperimentResult:
+        """Run cross-validation experiment with multiple folds."""
+        print(f"Running {len(self.data_loaders)} folds for cross-validation...")
+        fold_results = []
+        
+        for fold_idx, (train_loader, val_loader, test_loader) in enumerate(self.data_loaders):
+            print(f"  Fold {fold_idx + 1}/{len(self.data_loaders)}")
+            
+            # Store data loaders for this fold
+            self.train_loader = train_loader
+            self.val_loader = val_loader
+            self.test_loader = test_loader
+            
+            # Run single fold
+            fold_start = time.time()
+            
+            # Training phase
+            training_start = time.time()
+            self._train()
+            training_time = time.time() - training_start
+            
+            # Evaluation phase
+            evaluation_start = time.time()
+            evaluation_results = self._evaluate()
+            evaluation_time = time.time() - evaluation_start
+            
+            fold_time = time.time() - fold_start
+            
+            # Create fold result
+            fold_result = ExperimentResult(
+                experiment_name=f"{self.config.name}_fold_{fold_idx + 1}",
+                model_type=self.config.model_type,
+                target_type=self.config.target_type,
+                success=True,
+                total_time=fold_time,
+                training_time=training_time,
+                evaluation_time=evaluation_time,
+                description=f"Fold {fold_idx + 1} of {self.config.description}",
+                metrics=evaluation_results.metrics,
+                model_checkpoint_path=self._get_checkpoint_path()
+            )
+            
+            fold_results.append(fold_result)
+        
+        # Aggregate fold results
+        if fold_results and all(r.success for r in fold_results):
+            # Calculate average metrics across folds
+            avg_metrics = {}
+            for key in fold_results[0].metrics.keys():
+                if isinstance(fold_results[0].metrics[key], (int, float)):
+                    # Numeric metrics - calculate average
+                    avg_metrics[key] = sum(r.metrics[key] for r in fold_results) / len(fold_results)
+                else:
+                    # Non-numeric metrics (like lists) - use first fold's value
+                    avg_metrics[key] = fold_results[0].metrics[key]
+            
+            # Create aggregated result
+            aggregated_result = ExperimentResult(
+                experiment_name=self.config.name,
+                model_type=self.config.model_type,
+                target_type=self.config.target_type,
+                success=True,
+                total_time=sum(r.total_time for r in fold_results),
+                training_time=sum(r.training_time for r in fold_results),
+                evaluation_time=sum(r.evaluation_time for r in fold_results),
+                description=self.config.description,
+                metrics=avg_metrics,
+                training_metrics=fold_results[0].training_metrics,  # Use first fold's training metrics
+                model_checkpoint_path=fold_results[0].model_checkpoint_path
+            )
+            
+            print(f"✅ Cross-validation completed: {len(fold_results)} folds")
+            return aggregated_result
+        else:
+            print(f"❌ Cross-validation failed")
+            return ExperimentResult(
+                experiment_name=self.config.name,
+                model_type=self.config.model_type,
+                target_type=self.config.target_type,
+                success=False,
+                total_time=0.0,
+                training_time=0.0,
+                evaluation_time=0.0,
+                description=self.config.description,
+                error="Cross-validation failed"
+            )
     
     def _train(self):
         """Train the model."""
@@ -326,7 +513,8 @@ class Experiment:
         self.trainer.train(
             self.train_loader,
             self.val_loader,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            experiment_results_dir=self.logger.results_dir
         )
         
         print(f"✅ Training completed")
@@ -354,30 +542,38 @@ class Experiment:
     
     def _get_checkpoint_path(self) -> str:
         """Get the path to the best model checkpoint."""
-        model_name = self.model.__class__.__name__
-        model_checkpoint_dir = os.path.join(
-            self.config.training_config.checkpoint_dir, 
-            model_name
+        # Create experiment-specific checkpoint directory
+        exp_checkpoint_dir = os.path.join(
+            self.logger.results_dir,
+            'checkpoints'
         )
+        os.makedirs(exp_checkpoint_dir, exist_ok=True)
+        
         return os.path.join(
-            model_checkpoint_dir,
+            exp_checkpoint_dir,
             f'{self.config.name}_best.pth'
         )
-    
 
-
-def run_multiple_experiments(experiments: List[ExperimentConfig], 
-                           data_loaders_dict: Dict[str, Tuple], 
-                           system_config: SystemConfig = None,
-                           random_seed: int = 42) -> List[ExperimentResult]:
+def run_experiments(experiments: List[ExperimentConfig], 
+                   system_config: SystemConfig = None,
+                   random_seed: int = 42,
+                   generate_reports: bool = True) -> List[ExperimentResult]:
     """
-    Run multiple experiments using separate Experiment instances.
+    Unified experiment orchestrator that coordinates multiple experiments.
+    
+    Each experiment is now self-contained and handles its own:
+    - Data loader creation
+    - Model setup
+    - Training and evaluation
+    - Cross-validation (if applicable)
+    
+    This function just orchestrates the execution of multiple experiments.
     
     Args:
         experiments: List of experiment configurations
-        data_loaders_dict: Dictionary mapping target_type to (train_loader, val_loader, test_loader)
         system_config: System-wide configuration
         random_seed: Random seed for reproducibility
+        generate_reports: Whether to generate comparison reports
         
     Returns:
         List of ExperimentResult objects
@@ -390,31 +586,56 @@ def run_multiple_experiments(experiments: List[ExperimentConfig],
     system_config = system_config or SystemConfig()
     
     print(f"\n{'='*80}")
-    print(f"STARTING MULTIPLE EXPERIMENTS")
+    print(f"STARTING EXPERIMENTS")
     print(f"Number of experiments: {len(experiments)}")
     print(f"Random seed: {random_seed}")
     print(f"Results directory: {system_config.results_dir}")
+    print(f"Generate reports: {generate_reports}")
     print(f"{'='*80}")
     
     results = []
     
     for i, config in enumerate(experiments):
         print(f"\nProgress: {i+1}/{len(experiments)}")
+        print(f"Experiment: {config.name}")
         
-        # Create a separate experiment for each
-        experiment = Experiment(config, system_config)
-        
-        # Get data loaders for this experiment
-        train_loader, val_loader, test_loader = data_loaders_dict[config.target_type]
-        print(f"Using {config.target_type} data loaders: Train={len(train_loader)}, Val={len(val_loader)}, Test={len(test_loader)}")
-        
-        # Setup and run the experiment
-        experiment.setup(train_loader, val_loader, test_loader)
-        result = experiment.run()
-        results.append(result)
+        try:
+            # Create and run experiment (data loaders created internally)
+            experiment = Experiment(config, system_config)
+            experiment.setup()  # Setup data loaders, model, trainer, evaluator
+            result = experiment.run()  # Run the experiment
+            results.append(result)
+            
+            if result.success:
+                print(f"✅ Experiment completed: {config.name}")
+            else:
+                print(f"❌ Experiment failed: {config.name} - {result.error}")
+                
+        except Exception as e:
+            print(f"❌ Experiment {config.name} failed: {str(e)}")
+            # Create failed result
+            failed_result = ExperimentResult(
+                experiment_name=config.name,
+                model_type=config.model_type,
+                target_type=config.target_type,
+                success=False,
+                total_time=0.0,
+                training_time=0.0,
+                evaluation_time=0.0,
+                description=config.description,
+                error=str(e)
+            )
+            results.append(failed_result)
     
     # Save summary of all results
     _save_experiment_summary(results, system_config.results_dir)
+    
+    # Generate reports if requested
+    if generate_reports:
+        from report_generator import ReportGenerator
+        report_generator = ReportGenerator(system_config.results_dir, system_config.reports_dir)
+        report_generator.generate_all_reports(results)
+        print(f"Reports generated in: {system_config.reports_dir}")
     
     print(f"\n{'='*80}")
     print("ALL EXPERIMENTS COMPLETED")
@@ -422,7 +643,6 @@ def run_multiple_experiments(experiments: List[ExperimentConfig],
     print(f"{'='*80}")
     
     return results
-
 
 def _save_experiment_summary(results: List[ExperimentResult], results_dir: str):
     """Save summary of all experiment results."""
@@ -455,44 +675,6 @@ def _save_experiment_summary(results: List[ExperimentResult], results_dir: str):
     if successful_results:
         _generate_comparison_report(successful_results, results_dir)
 
-
-def _get_experiment_description(experiment_name: str) -> str:
-    """Get a description for the experiment based on its name."""
-    descriptions = {
-        # Basic experiments
-        'gender_baseline_train_val_test': 'Standard gender classification with train/val/test split',
-        'age_baseline_train_val_test': 'Standard age classification with train/val/test split',
-        
-        # Cross-validation experiments
-        'gender_cv_gender_stratified': '5-fold cross-validation with gender stratification',
-        'age_cv_age_stratified': '5-fold cross-validation with age stratification',
-        
-        # Cross-task experiments
-        'gender_cross_task_active_to_passive': 'Train on active tasks, test on passive tasks (gender)',
-        'gender_cross_task_passive_to_active': 'Train on passive tasks, test on active tasks (gender)',
-        'age_cross_task_active_to_passive': 'Train on active tasks, test on passive tasks (age)',
-        'age_cross_task_passive_to_active': 'Train on passive tasks, test on active tasks (age)',
-        
-        # Cross-task cross-validation experiments
-        'gender_cross_task_cv_active_to_passive_gender_stratified': '5-fold CV: train active, test passive (gender stratified)',
-        'gender_cross_task_cv_passive_to_active_gender_stratified': '5-fold CV: train passive, test active (gender stratified)',
-        'age_cross_task_cv_active_to_passive_age_stratified': '5-fold CV: train active, test passive (age stratified)',
-        'age_cross_task_cv_passive_to_active_age_stratified': '5-fold CV: train passive, test active (age stratified)',
-    }
-    
-    # Check for exact match first
-    if experiment_name in descriptions:
-        return descriptions[experiment_name]
-    
-    # Check for partial matches (for fold-specific names)
-    for key, desc in descriptions.items():
-        if key in experiment_name:
-            return desc
-    
-    # Default description
-    return 'Custom experiment configuration'
-
-
 def _generate_comparison_report(successful_results: List[ExperimentResult], results_dir: str):
     """Generate comparison report for successful experiments."""
     # Create evaluation results for comparison
@@ -514,7 +696,8 @@ def _generate_comparison_report(successful_results: List[ExperimentResult], resu
     for i, result in enumerate(successful_results):
         if i < len(comparison['models']):
             comparison['models'][i]['experiment_name'] = result.experiment_name
-            comparison['models'][i]['description'] = _get_experiment_description(result.experiment_name)
+            # Use description from experiment result
+            comparison['models'][i]['description'] = result.description or 'Custom experiment configuration'
     
     # Save comparison
     comparison_file = os.path.join(results_dir, 'model_comparison.json')
@@ -539,123 +722,3 @@ def _generate_comparison_report(successful_results: List[ExperimentResult], resu
     
     print(f"\nBest Model: {comparison['best_model']} (Accuracy: {comparison['best_accuracy']:.4f})")
     print("="*120)
-
-
-# Experiment Creation Functions
-def create_default_experiments() -> List[ExperimentConfig]:
-    """Create default experiment configurations."""
-    experiments = []
-    
-    # Gender baseline
-    experiments.append(ExperimentConfig(
-        name="gender_cnn_baseline",
-        model_type="gender_cnn",
-        target_type="gender",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="gender")
-    ))
-    
-    # Age baseline
-    experiments.append(ExperimentConfig(
-        name="age_cnn_baseline", 
-        model_type="age_cnn",
-        target_type="age",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="age")
-    ))
-    
-    return experiments
-
-
-def create_cross_validation_experiments(n_folds: int = 5, cv_strategy: str = "stratified") -> List[ExperimentConfig]:
-    """Create cross-validation experiment configurations."""
-    experiments = []
-    
-    # Gender cross-validation experiments
-    for fold in range(n_folds):
-        experiments.append(ExperimentConfig(
-            name=f"gender_cnn_cv_fold_{fold+1}",
-            model_type="gender_cnn",
-            target_type="gender",
-            data_config=DataConfig(use_cross_validation=True, n_folds=n_folds, cv_strategy=cv_strategy),
-            model_config=ModelConfig(num_channels=60),
-            training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="gender")
-        ))
-    
-    # Age cross-validation experiments
-    for fold in range(n_folds):
-        experiments.append(ExperimentConfig(
-            name=f"age_cnn_cv_fold_{fold+1}",
-            model_type="age_cnn",
-            target_type="age",
-            data_config=DataConfig(use_cross_validation=True, n_folds=n_folds, cv_strategy=cv_strategy),
-            model_config=ModelConfig(num_channels=60),
-            training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="age")
-        ))
-    
-    return experiments
-
-
-def create_custom_experiments() -> List[ExperimentConfig]:
-    """Create custom experiment configurations."""
-    experiments = []
-    
-    # Gender classification experiments
-    experiments.append(ExperimentConfig(
-        name="gender_cnn_baseline",
-        model_type="gender_cnn",
-        target_type="gender",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="gender")
-    ))
-    
-    experiments.append(ExperimentConfig(
-        name="gender_cnn_high_dropout",
-        model_type="gender_cnn",
-        target_type="gender",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60, dropout_rate=0.7),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="gender")
-    ))
-    
-    experiments.append(ExperimentConfig(
-        name="gender_cnn_no_layer_norm",
-        model_type="gender_cnn",
-        target_type="gender",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60, use_layer_norm=False),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="gender")
-    ))
-    
-    # Age classification experiments
-    experiments.append(ExperimentConfig(
-        name="age_cnn_baseline",
-        model_type="age_cnn",
-        target_type="age",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="age")
-    ))
-    
-    experiments.append(ExperimentConfig(
-        name="age_cnn_high_dropout",
-        model_type="age_cnn",
-        target_type="age",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60, dropout_rate=0.7),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="age")
-    ))
-    
-    experiments.append(ExperimentConfig(
-        name="age_cnn_no_layer_norm",
-        model_type="age_cnn",
-        target_type="age",
-        data_config=DataConfig(),
-        model_config=ModelConfig(num_channels=60, use_layer_norm=False),
-        training_config=TrainingConfig(epochs=50, learning_rate=0.001, target_key="age")
-    ))
-    
-    return experiments

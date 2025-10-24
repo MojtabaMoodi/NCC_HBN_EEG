@@ -109,7 +109,7 @@ class EEGTrainer:
         accuracy = correct / total
         return avg_loss, accuracy
     
-    def save_checkpoint(self, epoch: int, is_best: bool = False):
+    def save_checkpoint(self, epoch: int, is_best: bool = False, experiment_results_dir: str = None):
         """Save model checkpoint."""
         checkpoint = {
             'epoch': epoch,
@@ -121,14 +121,19 @@ class EEGTrainer:
             'model_info': self.model.get_model_info()
         }
         
-        # Create model-specific directory
-        model_name = self.model.__class__.__name__
-        model_checkpoint_dir = os.path.join(self.config.checkpoint_dir, model_name)
-        os.makedirs(model_checkpoint_dir, exist_ok=True)
+        # Use experiment-specific directory if provided, otherwise fall back to global
+        if experiment_results_dir:
+            checkpoint_dir = os.path.join(experiment_results_dir, 'checkpoints')
+        else:
+            # Fallback to global checkpoint directory
+            model_name = self.model.__class__.__name__
+            checkpoint_dir = os.path.join(self.config.checkpoint_dir, model_name)
+        
+        os.makedirs(checkpoint_dir, exist_ok=True)
         
         # Save regular checkpoint
         checkpoint_path = os.path.join(
-            model_checkpoint_dir, 
+            checkpoint_dir, 
             f'{self.experiment_name}_epoch_{epoch+1}.pth'
         )
         torch.save(checkpoint, checkpoint_path)
@@ -136,13 +141,13 @@ class EEGTrainer:
         # Save best model
         if is_best:
             best_path = os.path.join(
-                model_checkpoint_dir, 
+                checkpoint_dir, 
                 f'{self.experiment_name}_best.pth'
             )
             torch.save(checkpoint, best_path)
-            print(f"New best model saved at epoch {epoch+1} in {model_checkpoint_dir}")
+            print(f"New best model saved at epoch {epoch+1} in {checkpoint_dir}")
     
-    def train(self, train_loader: DataLoader, val_loader: DataLoader, progress_callback=None) -> Dict[str, Any]:
+    def train(self, train_loader: DataLoader, val_loader: DataLoader, progress_callback=None, experiment_results_dir: str = None) -> Dict[str, Any]:
         """
         Train the model with early stopping and comprehensive logging.
         
@@ -189,13 +194,13 @@ class EEGTrainer:
                 self.best_val_loss = val_loss
                 self.patience_counter = 0
                 self.best_epoch = epoch
-                self.save_checkpoint(epoch, is_best=True)
+                self.save_checkpoint(epoch, is_best=True, experiment_results_dir=experiment_results_dir)
             else:
                 self.patience_counter += 1
             
             # Save regular checkpoint
             if (epoch + 1) % self.config.save_every == 0:
-                self.save_checkpoint(epoch)
+                self.save_checkpoint(epoch, experiment_results_dir=experiment_results_dir)
             
             # Early stopping
             if self.patience_counter >= self.config.patience:

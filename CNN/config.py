@@ -9,11 +9,16 @@ from typing import Dict, Any, List, Optional
 @dataclass
 class DataConfig:
     """Configuration for data loading and preprocessing."""
-    pickle_dir: str = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data"
-    batch_size: int = 128  # Increased from 32 for better GPU utilization
+    pickle_dir: str = "path/to/pickle_dir"
+    segment_length: int = 200  # 200 for 1s, 800 for 4s
+    
+    # Data loading parameters
+    batch_size: int = 128
     num_workers: int = 4
     random_seed: int = 42
     task_type: str = "both"  # "active", "passive", or "both"
+    
+    # Train/val/test splits
     train_split: float = 0.7
     val_split: float = 0.15
     test_split: float = 0.15
@@ -31,6 +36,7 @@ class DataConfig:
         """Convert config to dictionary for serialization."""
         return {
             'pickle_dir': self.pickle_dir,
+            'segment_length': self.segment_length,
             'batch_size': self.batch_size,
             'num_workers': self.num_workers,
             'random_seed': self.random_seed,
@@ -91,6 +97,7 @@ class ExperimentConfig:
     name: str
     model_type: str  # 'gender_cnn' or 'age_cnn'
     target_type: str  # 'gender' or 'age'
+    description: Optional[str] = None  # Human-readable description of the experiment
     data_config: Optional[DataConfig] = None
     model_config: Optional[ModelConfig] = None
     training_config: Optional[TrainingConfig] = None
