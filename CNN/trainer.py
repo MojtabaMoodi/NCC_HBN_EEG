@@ -68,18 +68,43 @@ class EEGTrainer:
         
         for batch in train_loader:
             inputs = batch['eeg_data'].to(self.device)
-            labels = batch[self.config.target_key].to(self.device)
+            
+            # Handle multi_output case where we have separate gender and age keys
+            if self.config.target_key == 'multi_output' and 'gender' in batch and 'age' in batch:
+                labels = {
+                    'gender': batch['gender'].to(self.device),
+                    'age': batch['age'].to(self.device)
+                }
+            else:
+                labels = batch[self.config.target_key].to(self.device)
             
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
-            loss = self.criterion(outputs, labels)
+            
+            # Handle multi-output models
+            if isinstance(outputs, dict):
+                # Multi-output model (e.g., MultiOutputCNN)
+                gender_loss = self.criterion(outputs['gender'], labels['gender'])
+                age_loss = self.criterion(outputs['age'], labels['age'])
+                loss = gender_loss + age_loss  # Combined loss
+                
+                # Calculate combined accuracy
+                _, gender_pred = torch.max(outputs['gender'].data, 1)
+                _, age_pred = torch.max(outputs['age'].data, 1)
+                gender_correct = (gender_pred == labels['gender']).sum().item()
+                age_correct = (age_pred == labels['age']).sum().item()
+                correct += (gender_correct + age_correct) / 2  # Average of both accuracies
+            else:
+                # Single-output model (e.g., EEGCNN, CombinedCNN)
+                loss = self.criterion(outputs, labels)
+                _, predicted = torch.max(outputs.data, 1)
+                correct += (predicted == labels).sum().item()
+            
             loss.backward()
             self.optimizer.step()
             
             total_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
         avg_loss = total_loss / len(train_loader)
         accuracy = correct / total
@@ -95,15 +120,39 @@ class EEGTrainer:
         with torch.no_grad():
             for batch in val_loader:
                 inputs = batch['eeg_data'].to(self.device)
-                labels = batch[self.config.target_key].to(self.device)
+                
+                # Handle multi_output case where we have separate gender and age keys
+                if self.config.target_key == 'multi_output' and 'gender' in batch and 'age' in batch:
+                    labels = {
+                        'gender': batch['gender'].to(self.device),
+                        'age': batch['age'].to(self.device)
+                    }
+                else:
+                    labels = batch[self.config.target_key].to(self.device)
                 
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
+                
+                # Handle multi-output models
+                if isinstance(outputs, dict):
+                    # Multi-output model (e.g., MultiOutputCNN)
+                    gender_loss = self.criterion(outputs['gender'], labels['gender'])
+                    age_loss = self.criterion(outputs['age'], labels['age'])
+                    loss = gender_loss + age_loss  # Combined loss
+                    
+                    # Calculate combined accuracy
+                    _, gender_pred = torch.max(outputs['gender'].data, 1)
+                    _, age_pred = torch.max(outputs['age'].data, 1)
+                    gender_correct = (gender_pred == labels['gender']).sum().item()
+                    age_correct = (age_pred == labels['age']).sum().item()
+                    correct += (gender_correct + age_correct) / 2  # Average of both accuracies
+                else:
+                    # Single-output model (e.g., EEGCNN, CombinedCNN)
+                    loss = self.criterion(outputs, labels)
+                    _, predicted = torch.max(outputs.data, 1)
+                    correct += (predicted == labels).sum().item()
                 
                 total_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
         avg_loss = total_loss / len(val_loader)
         accuracy = correct / total

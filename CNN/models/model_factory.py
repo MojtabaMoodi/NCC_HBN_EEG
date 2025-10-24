@@ -5,7 +5,7 @@ Provides a centralized way to create and configure models.
 
 from typing import Dict, Any, Type
 from .base_model import BaseEEGCNN
-from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN
+from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN
 
 class ModelFactory:
     """
@@ -19,6 +19,7 @@ class ModelFactory:
         'gender_cnn': EEGGenderCNN,  # Backward compatibility (2 classes)
         'age_cnn': EEGAgeCNN,        # Backward compatibility (3 classes)
         'combined_cnn': CombinedCNN, # Combined age+gender classification (6 classes)
+        'multi_output_cnn': MultiOutputCNN, # Multi-output model (2 heads: gender + age)
     }
     
     @classmethod
@@ -28,7 +29,7 @@ class ModelFactory:
         
         Args:
             model_type: Type of model to create 
-                       ('eeg_cnn', 'gender_cnn', 'age_cnn', 'combined_cnn')
+                       ('eeg_cnn', 'gender_cnn', 'age_cnn', 'combined_cnn', 'multi_output_cnn')
             **kwargs: Additional arguments for model initialization
             
         Returns:

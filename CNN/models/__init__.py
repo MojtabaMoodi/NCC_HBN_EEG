@@ -4,7 +4,7 @@ Contains base models, specific implementations, and model factory.
 """
 
 from .base_model import BaseEEGCNN
-from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN
+from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN
 from .model_factory import ModelFactory, create_model_from_config
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     'EEGGenderCNN',     # Backward compatibility alias (2 classes)
     'EEGAgeCNN',        # Backward compatibility alias (3 classes)
     'CombinedCNN',      # Combined age+gender classification (6 classes)
+    'MultiOutputCNN',   # Multi-output model (2 heads: gender + age)
     'ModelFactory',
     'create_model_from_config'
 ]

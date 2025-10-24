@@ -33,6 +33,12 @@ class EvaluationResults:
         self.probabilities = []
         self.class_names = []
         self.evaluation_time = 0.0
+        
+        # Multi-output specific attributes
+        self.gender_predictions = None
+        self.gender_true_labels = None
+        self.age_predictions = None
+        self.age_true_labels = None
     
     def add_metrics(self, metrics: Dict[str, Any]):
         """Add computed metrics."""
@@ -123,15 +129,56 @@ class EEGEvaluator:
         with torch.no_grad():
             for batch in test_loader:
                 inputs = batch['eeg_data'].to(self.device)
-                labels = batch[self.target_type].to(self.device)
+                
+                # Handle multi_output case where we have separate gender and age keys
+                if self.target_type == 'multi_output' and 'gender' in batch and 'age' in batch:
+                    labels = {
+                        'gender': batch['gender'].to(self.device),
+                        'age': batch['age'].to(self.device)
+                    }
+                else:
+                    labels = batch[self.target_type].to(self.device)
                 
                 outputs = self.model(inputs)
-                probabilities = torch.softmax(outputs, dim=1)
-                _, predicted = torch.max(outputs, 1)
                 
-                all_predictions.extend(predicted.cpu().numpy())
-                all_true_labels.extend(labels.cpu().numpy())
-                all_probabilities.extend(probabilities.cpu().numpy())
+                # Handle multi-output models
+                if isinstance(outputs, dict):
+                    # Multi-output model (e.g., MultiOutputCNN)
+                    # For multi-output, we'll evaluate both outputs separately
+                    # and combine the results
+                    gender_outputs = outputs['gender']
+                    age_outputs = outputs['age']
+                    gender_labels = labels['gender']
+                    age_labels = labels['age']
+                    
+                    # Process gender predictions
+                    gender_probabilities = torch.softmax(gender_outputs, dim=1)
+                    _, gender_predicted = torch.max(gender_outputs, 1)
+                    
+                    # Process age predictions
+                    age_probabilities = torch.softmax(age_outputs, dim=1)
+                    _, age_predicted = torch.max(age_outputs, 1)
+                    
+                    # For now, we'll use gender as the primary output for compatibility
+                    # In a full implementation, you might want separate evaluation results
+                    all_predictions.extend(gender_predicted.cpu().numpy())
+                    all_true_labels.extend(gender_labels.cpu().numpy())
+                    all_probabilities.extend(gender_probabilities.cpu().numpy())
+                    
+                    # Store both predictions for detailed analysis
+                    results.gender_predictions = gender_predicted.cpu().numpy()
+                    results.gender_true_labels = gender_labels.cpu().numpy()
+                    results.age_predictions = age_predicted.cpu().numpy()
+                    results.age_true_labels = age_labels.cpu().numpy()
+                    
+                else:
+                    # Single-output model (e.g., EEGCNN, CombinedCNN)
+                    probabilities = torch.softmax(outputs, dim=1)
+                    _, predicted = torch.max(outputs, 1)
+                    
+                    all_predictions.extend(predicted.cpu().numpy())
+                    all_true_labels.extend(labels.cpu().numpy())
+                    all_probabilities.extend(probabilities.cpu().numpy())
         
         # Add predictions to results
         results.add_predictions(all_predictions, all_true_labels, all_probabilities)

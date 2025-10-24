@@ -267,6 +267,11 @@ class Experiment:
             age_transform = age_classification_transform
         elif target_type == 'combined':
             combined_transform = combined_gender_age_classification_transform
+        elif target_type == 'multi_output':
+            # For multi-output, we need both individual transforms
+            gender_transform = gender_classification_transform
+            age_transform = age_classification_transform
+            combined_transform = None
         
         # Handle different experiment types based on data config
         if data_config.use_cross_validation and data_config.train_task_type and data_config.val_test_task_type:
@@ -282,7 +287,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=combined_transform
+                combined_transform=combined_transform
             )
             self.is_cross_validation = True
             
@@ -298,7 +303,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=combined_transform
+                combined_transform=combined_transform
             )
             self.is_cross_validation = True
             
@@ -315,7 +320,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=combined_transform
+                combined_transform=combined_transform
             )
             self.is_cross_validation = False
             
@@ -331,7 +336,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=combined_transform
+                combined_transform=combined_transform
             )
             self.is_cross_validation = False
 

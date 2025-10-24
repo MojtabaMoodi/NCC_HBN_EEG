@@ -250,6 +250,71 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
         ))
     
+    # 31-40. Multi-output gender+age classification experiments (2 separate heads)
+    # 31. Multi-output baseline (train/val/test split)
+    multi_output_baseline_config = create_data_config_for_segment_length(segment_length, batch_size)
+    
+    experiments.append(ExperimentConfig(
+        name=f"multi_output_baseline_{segment_length}",
+        model_type="multi_output_cnn",
+        target_type="multi_output",
+        description=f"Multi-output gender+age classification baseline with {segment_length} segments (2 separate heads)",
+        data_config=multi_output_baseline_config,
+        model_config=ModelConfig(num_channels=60, num_classes=2),  # Will be overridden by multi-output heads
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
+    ))
+    
+    # 32. Multi-output cross-validation (gender stratified)
+    multi_output_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
+    multi_output_cv_config.use_cross_validation = True
+    multi_output_cv_config.n_folds = 5
+    multi_output_cv_config.cv_strategy = "gender"  # Use gender for stratification
+    
+    experiments.append(ExperimentConfig(
+        name=f"multi_output_cv_gender_stratified_{segment_length}",
+        model_type="multi_output_cnn",
+        target_type="multi_output",
+        description=f"Multi-output gender+age classification with 5-fold CV (gender stratified) using {segment_length} segments",
+        data_config=multi_output_cv_config,
+        model_config=ModelConfig(num_channels=60, num_classes=2),
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
+    ))
+    
+    # 33-36. Multi-output cross-task experiments
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+        multi_output_cross_config = create_data_config_for_segment_length(segment_length, batch_size)
+        multi_output_cross_config.train_task_type = train_task
+        multi_output_cross_config.val_test_task_type = val_test_task
+        
+        experiments.append(ExperimentConfig(
+            name=f"multi_output_cross_task_{train_task}_to_{val_test_task}_{segment_length}",
+            model_type="multi_output_cnn",
+            target_type="multi_output",
+            description=f"Multi-output gender+age classification cross-task ({train_task}->{val_test_task}) using {segment_length} segments",
+            data_config=multi_output_cross_config,
+            model_config=ModelConfig(num_channels=60, num_classes=2),
+            training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
+        ))
+    
+    # 37-40. Multi-output cross-task cross-validation experiments
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+        multi_output_cross_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
+        multi_output_cross_cv_config.use_cross_validation = True
+        multi_output_cross_cv_config.n_folds = 5
+        multi_output_cross_cv_config.cv_strategy = "gender"  # Use gender for stratification
+        multi_output_cross_cv_config.train_task_type = train_task
+        multi_output_cross_cv_config.val_test_task_type = val_test_task
+        
+        experiments.append(ExperimentConfig(
+            name=f"multi_output_cross_task_cv_{train_task}_to_{val_test_task}_gender_stratified_{segment_length}",
+            model_type="multi_output_cnn",
+            target_type="multi_output",
+            description=f"Multi-output gender+age classification cross-task CV ({train_task}->{val_test_task}, gender stratified) using {segment_length} segments",
+            data_config=multi_output_cross_cv_config,
+            model_config=ModelConfig(num_channels=60, num_classes=2),
+            training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
+        ))
+    
     return experiments
 
 

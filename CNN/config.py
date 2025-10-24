@@ -117,6 +117,8 @@ class ExperimentConfig:
             self.model_config.num_classes = 3
         elif self.target_type == 'combined':
             self.model_config.num_classes = 6  # 2 genders × 3 age groups = 6 classes
+        elif self.target_type == 'multi_output':
+            self.model_config.num_classes = 2  # Will be overridden by multi-output heads
 
 @dataclass
 class SystemConfig:
