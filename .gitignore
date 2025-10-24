@@ -3,6 +3,9 @@ CNN/checkpoints/*
 CNN/models/__pycache__/*
 CNN/experiment_results/*
 CNN/reports/*
-utils/__pycache__/*
 data_processing/__pycache__/*
-data_processing/processed_eeg_data/*
+data_processing/processed_eeg_data*
+LaBraM_systematic/__pycache__/*
+LaBraM_systematic/data_loaders/__pycache__/*
+LaBraM_systematic/models/__pycache__/*
+utils/__pycache__/*
