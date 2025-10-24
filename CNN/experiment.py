@@ -257,20 +257,16 @@ class Experiment:
         target_type = self.config.target_type
         
         # Select appropriate transforms based on target type
+        gender_transform = None
+        age_transform = None
+        combined_transform = None
+        
         if target_type == 'gender':
             gender_transform = gender_classification_transform
-            age_transform = None
         elif target_type == 'age':
-            gender_transform = None
             age_transform = age_classification_transform
         elif target_type == 'combined':
-            gender_transform = None
-            age_transform = None
             combined_transform = combined_gender_age_classification_transform
-        else:
-            gender_transform = None
-            age_transform = None
-            combined_transform = None
         
         # Handle different experiment types based on data config
         if data_config.use_cross_validation and data_config.train_task_type and data_config.val_test_task_type:
