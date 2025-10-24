@@ -41,6 +41,7 @@ class EEGDataset(Dataset):
                  transform: Optional[callable] = None,
                  gender_transform: Optional[callable] = None,
                  age_transform: Optional[callable] = None,
+                 combined_transform: Optional[callable] = None,
                  target_type: str = "both"):  # "gender", "age", "both", "combined"
         """
         Initialize the EEG Dataset.
@@ -51,6 +52,7 @@ class EEGDataset(Dataset):
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             target_type: Type of target to return ("gender", "age", "both", "combined")
         """
         self.pickle_dir = Path(pickle_dir)
@@ -58,6 +60,7 @@ class EEGDataset(Dataset):
         self.transform = transform
         self.gender_transform = gender_transform
         self.age_transform = age_transform
+        self.combined_transform = combined_transform
         self.target_type = target_type
         
         # Load all pickle files and create samples
@@ -117,43 +120,33 @@ class EEGDataset(Dataset):
         
         # Process active tasks
         if self.task_type in ["active", "both"]:
-            active_eeg = participant.get('active_eeg', {})
-            for task_name, eeg_data_list in active_eeg.items():
-                # Each task_name already represents a specific run, so we expect exactly 1 element
-                if len(eeg_data_list) != 1:
-                    logger.warning(f"Expected 1 EEG data per task, got {len(eeg_data_list)} for {task_name}")
-                    continue
-                
-                eeg_data = eeg_data_list[0]  # Get the single EEG data
+            active_eeg = participant.get('active_eeg', [])
+            
+            # Process list of arrays
+            for i, eeg_data in enumerate(active_eeg):
                 sample = {
-                    'eeg_data': eeg_data,  # Shape: (60, 200)
+                    'eeg_data': eeg_data,  # Shape: (60, 200) for 1s or (60, 800) for 4s
                     'task_type': 'active',
-                    'task_name': task_name,
                     'participant_id': participant_id,
                     'gender': gender,
                     'age': age,
-                    'sample_id': f"{participant_id}_{task_name}"
+                    'sample_id': f"{participant_id}_active_{i}"
                 }
                 samples.append(sample)
         
         # Process passive tasks
         if self.task_type in ["passive", "both"]:
-            passive_eeg = participant.get('passive_eeg', {})
-            for task_name, eeg_data_list in passive_eeg.items():
-                # Each task_name already represents a specific run, so we expect exactly 1 element
-                if len(eeg_data_list) != 1:
-                    logger.warning(f"Expected 1 EEG data per task, got {len(eeg_data_list)} for {task_name}")
-                    continue
-                
-                eeg_data = eeg_data_list[0]  # Get the single EEG data
+            passive_eeg = participant.get('passive_eeg', [])
+            
+            # Process list of arrays
+            for i, eeg_data in enumerate(passive_eeg):
                 sample = {
-                    'eeg_data': eeg_data,  # Shape: (60, 200)
+                    'eeg_data': eeg_data,  # Shape: (60, 200) for 1s or (60, 800) for 4s
                     'task_type': 'passive',
-                    'task_name': task_name,
                     'participant_id': participant_id,
                     'gender': gender,
                     'age': age,
-                    'sample_id': f"{participant_id}_{task_name}"
+                    'sample_id': f"{participant_id}_passive_{i}"
                 }
                 samples.append(sample)
         
@@ -188,59 +181,25 @@ class EEGDataset(Dataset):
         sample['eeg_data'] = eeg_data
         
         # Apply target transforms if provided
-        if self.gender_transform and 'gender' in sample:
-            sample['gender'] = self.gender_transform(sample['gender'])
-        
-        if self.age_transform and 'age' in sample:
-            sample['age'] = self.age_transform(sample['age'])
+        if self.combined_transform and 'gender' in sample and 'age' in sample:
+            # Apply combined transform (e.g., combined_gender_age_classification_transform)
+            combined_result = self.combined_transform(sample['gender'], sample['age'])
+            sample['combined_target'] = combined_result
+        else:
+            # Apply individual transforms
+            if self.gender_transform and 'gender' in sample:
+                sample['gender'] = self.gender_transform(sample['gender'])
+            
+            if self.age_transform and 'age' in sample:
+                sample['age'] = self.age_transform(sample['age'])
         
         return sample
-    
-    def get_participant_samples(self, participant_id: str) -> List[Dict[str, Any]]:
-        """
-        Get all samples for a specific participant.
-        
-        Args:
-            participant_id: ID of the participant
-            
-        Returns:
-            List of samples for the participant
-        """
-        return [sample for sample in self.samples if sample['participant_id'] == participant_id]
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """
-        Get dataset statistics.
-        
-        Returns:
-            Dictionary containing dataset statistics
-        """
-        stats = {
-            'total_samples': len(self.samples),
-            'unique_participants': len(set(sample['participant_id'] for sample in self.samples)),
-            'unique_tasks': len(set(sample['task_name'] for sample in self.samples)),
-            'gender_distribution': {},
-            'age_range': {'min': float('inf'), 'max': float('-inf')}
-        }
-        
-        # Count genders
-        for sample in self.samples:
-            gender = sample['gender']
-            stats['gender_distribution'][gender] = stats['gender_distribution'].get(gender, 0) + 1
-        
-        # Age range
-        ages = [sample['age'] for sample in self.samples]
-        if ages:
-            stats['age_range']['min'] = min(ages)
-            stats['age_range']['max'] = max(ages)
-        
-        return stats
-    
+
     @classmethod
     def _create_from_samples(cls, samples: List[Dict[str, Any]], pickle_dir: str, 
                            task_type: str, transform: Optional[callable], 
                            gender_transform: Optional[callable], age_transform: Optional[callable],
-                           target_type: str) -> 'EEGDataset':
+                           combined_transform: Optional[callable], target_type: str) -> 'EEGDataset':
         """
         Create a dataset from pre-loaded samples (for cross-validation).
         
@@ -251,6 +210,7 @@ class EEGDataset(Dataset):
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             target_type: Type of target to return
 
         Returns:
@@ -265,6 +225,7 @@ class EEGDataset(Dataset):
         instance.transform = transform
         instance.gender_transform = gender_transform
         instance.age_transform = age_transform
+        instance.combined_transform = combined_transform
         instance.target_type = target_type
         instance.samples = samples
         
@@ -305,7 +266,7 @@ class EEGDataset(Dataset):
         """Create dataset for combined gender+age classification."""
         return cls(
             pickle_dir=pickle_dir,
-            gender_transform=lambda g, a: combined_gender_age_classification_transform(g, a),
+            combined_transform=combined_gender_age_classification_transform,
             target_type="combined",
             **kwargs
         )
@@ -398,7 +359,6 @@ class EEGDataLoader:
             'gender': gender,       # Shape: (batch_size,), dtype: long (for classification)
             'age': age,            # Shape: (batch_size,), dtype: float32 (for regression)
             'participant_ids': [sample['participant_id'] for sample in batch],
-            'task_names': [sample['task_name'] for sample in batch],
             'task_types': [sample['task_type'] for sample in batch],
             'sample_ids': [sample['sample_id'] for sample in batch]
         }
@@ -415,7 +375,8 @@ class EEGDataLoader:
                                     target_type: str = "both",
                                     transform: Optional[callable] = None,
                                     gender_transform: Optional[callable] = None,
-                                    age_transform: Optional[callable] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
+                                    age_transform: Optional[callable] = None,
+                                    combined_transform: Optional[callable] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
         """
         Create train, validation, and test data loaders.
         
@@ -432,6 +393,7 @@ class EEGDataLoader:
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             
         Returns:
             Tuple of (train_loader, val_loader, test_loader)
@@ -447,6 +409,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -476,6 +439,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -486,6 +450,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -496,6 +461,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -528,7 +494,8 @@ class EEGDataLoader:
                                       target_type: str = "both",
                                       transform: Optional[callable] = None,
                                       gender_transform: Optional[callable] = None,
-                                      age_transform: Optional[callable] = None) -> List[Tuple[DataLoader, DataLoader, DataLoader]]:
+                                      age_transform: Optional[callable] = None,
+                                      combined_transform: Optional[callable] = None) -> List[Tuple[DataLoader, DataLoader, DataLoader]]:
         """
         Create n-fold cross-validation data loaders with stratification.
         
@@ -544,6 +511,7 @@ class EEGDataLoader:
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             
         Returns:
             List of (train_loader, val_loader, test_loader) tuples for each fold
@@ -562,6 +530,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -614,6 +583,7 @@ class EEGDataLoader:
                 transform=full_dataset.transform,
                 gender_transform=full_dataset.gender_transform,
                 age_transform=full_dataset.age_transform,
+                combined_transform=full_dataset.combined_transform,
                 target_type=full_dataset.target_type
             )
             
@@ -624,6 +594,7 @@ class EEGDataLoader:
                 transform=full_dataset.transform,
                 gender_transform=full_dataset.gender_transform,
                 age_transform=full_dataset.age_transform,
+                combined_transform=full_dataset.combined_transform,
                 target_type=full_dataset.target_type
             )
             
@@ -634,6 +605,7 @@ class EEGDataLoader:
                 transform=full_dataset.transform,
                 gender_transform=full_dataset.gender_transform,
                 age_transform=full_dataset.age_transform,
+                combined_transform=full_dataset.combined_transform,
                 target_type=full_dataset.target_type
             )
             
@@ -670,7 +642,8 @@ class EEGDataLoader:
                                 target_type: str = "both",
                                 transform: Optional[callable] = None,
                                 gender_transform: Optional[callable] = None,
-                                age_transform: Optional[callable] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
+                                age_transform: Optional[callable] = None,
+                                combined_transform: Optional[callable] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
         """
         Create cross-task data loaders for training on one task type and testing on another.
         
@@ -694,6 +667,7 @@ class EEGDataLoader:
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             
         Returns:
             Tuple of (train_loader, val_loader, test_loader)
@@ -721,6 +695,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -760,6 +735,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -770,6 +746,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -780,6 +757,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -815,7 +793,8 @@ class EEGDataLoader:
                                                  target_type: str = "both",
                                                  transform: Optional[callable] = None,
                                                  gender_transform: Optional[callable] = None,
-                                                 age_transform: Optional[callable] = None) -> List[Tuple[DataLoader, DataLoader, DataLoader]]:
+                                                 age_transform: Optional[callable] = None,
+                                                 combined_transform: Optional[callable] = None) -> List[Tuple[DataLoader, DataLoader, DataLoader]]:
         """
         Create n-fold cross-validation with cross-task evaluation.
         
@@ -839,6 +818,7 @@ class EEGDataLoader:
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
+            combined_transform: Optional transform to be applied on combined targets (gender + age)
             
         Returns:
             List of (train_loader, val_loader, test_loader) tuples for each fold
@@ -865,6 +845,7 @@ class EEGDataLoader:
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
+            combined_transform=combined_transform,
             target_type=target_type
         )
         
@@ -927,6 +908,7 @@ class EEGDataLoader:
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
+                combined_transform=combined_transform,
                 target_type=target_type
             )
             
@@ -937,6 +919,7 @@ class EEGDataLoader:
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
+                combined_transform=combined_transform,
                 target_type=target_type
             )
             
@@ -947,6 +930,7 @@ class EEGDataLoader:
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
+                combined_transform=combined_transform,
                 target_type=target_type
             )
             
@@ -970,44 +954,3 @@ class EEGDataLoader:
             logger.info(f"  No participant overlap between train and val/test sets")
         
         return fold_loaders
-
-
-# Example usage and testing functions
-def test_dataset():
-    """Test the EEG dataset functionality."""
-    pickle_dir = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data"
-    
-    # Test basic dataset creation
-    dataset = EEGDataset(pickle_dir=pickle_dir, task_type="both")
-    print(f"Dataset size: {len(dataset)}")
-    
-    # Test statistics
-    stats = dataset.get_statistics()
-    print("Dataset statistics:")
-    for key, value in stats.items():
-        print(f"  {key}: {value}")
-    
-    # Test sample access
-    if len(dataset) > 0:
-        sample = dataset[0]
-        print(f"Sample keys: {sample.keys()}")
-        print(f"EEG data shape: {sample['eeg_data'].shape}")
-    
-    # Test data loader creation
-    train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
-        pickle_dir=pickle_dir, batch_size=16
-    )
-    
-    print(f"Train batches: {len(train_loader)}")
-    print(f"Val batches: {len(val_loader)}")
-    print(f"Test batches: {len(test_loader)}")
-    
-    # Test batch loading
-    if len(train_loader) > 0:
-        batch = next(iter(train_loader))
-        print(f"Batch keys: {batch.keys()}")
-        print(f"Batch EEG shape: {batch['eeg_data'].shape}")
-
-
-if __name__ == "__main__":
-    test_dataset()
