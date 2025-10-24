@@ -47,7 +47,7 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
 def create_all_experiments_for_segment_length(segment_length: str, epochs: int = 50, 
                                             learning_rate: float = 0.001, batch_size: int = 128):
     """
-    Create all 12 experiment types for a specific segment length.
+    Create all experiment types for a specific segment length.
     
     Args:
         segment_length: '1s' or '4s'
@@ -115,8 +115,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
     ))
     
-    # 5-12. Cross-task experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 5-8. Cross-task experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         # Gender cross-task
         gender_cross_config = create_data_config_for_segment_length(segment_length, batch_size)
         gender_cross_config.train_task_type = train_task
@@ -147,8 +147,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
         ))
     
-    # 13-20. Cross-task cross-validation experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 9-12. Cross-task cross-validation experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         # Gender cross-task CV
         gender_cross_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
         gender_cross_cv_config.use_cross_validation = True
@@ -215,8 +215,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
     ))
     
-    # 23-26. Combined cross-task experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 23-24. Combined cross-task experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         combined_cross_config = create_data_config_for_segment_length(segment_length, batch_size)
         combined_cross_config.train_task_type = train_task
         combined_cross_config.val_test_task_type = val_test_task
@@ -231,8 +231,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
         ))
     
-    # 25-30. Combined cross-task cross-validation experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 25-28. Combined cross-task cross-validation experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         combined_cross_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
         combined_cross_cv_config.use_cross_validation = True
         combined_cross_cv_config.n_folds = 5
@@ -280,8 +280,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
     ))
     
-    # 33-36. Multi-output cross-task experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 33-34. Multi-output cross-task experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         multi_output_cross_config = create_data_config_for_segment_length(segment_length, batch_size)
         multi_output_cross_config.train_task_type = train_task
         multi_output_cross_config.val_test_task_type = val_test_task
@@ -296,8 +296,8 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
         ))
     
-    # 37-40. Multi-output cross-task cross-validation experiments
-    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+    # 35-38. Multi-output cross-task cross-validation experiments (only valid combinations)
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active")]:
         multi_output_cross_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
         multi_output_cross_cv_config.use_cross_validation = True
         multi_output_cross_cv_config.n_folds = 5
