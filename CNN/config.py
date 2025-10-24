@@ -115,6 +115,8 @@ class ExperimentConfig:
             self.model_config.num_classes = 2
         elif self.target_type == 'age':
             self.model_config.num_classes = 3
+        elif self.target_type == 'combined':
+            self.model_config.num_classes = 6  # 2 genders × 3 age groups = 6 classes
 
 @dataclass
 class SystemConfig:

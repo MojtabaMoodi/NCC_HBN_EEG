@@ -62,3 +62,15 @@ class EEGAgeCNN(EEGCNN):
             dropout_rate=dropout_rate,
             use_layer_norm=use_layer_norm
         )
+
+class CombinedCNN(EEGCNN):
+    """
+    CNN model for combined age+gender classification (6 classes).
+    """
+    def __init__(self, num_channels=64, num_classes=6, dropout_rate=0.5, use_layer_norm=True):
+        super(CombinedCNN, self).__init__(
+            num_channels=num_channels, 
+            num_classes=num_classes,
+            dropout_rate=dropout_rate,
+            use_layer_norm=use_layer_norm
+        )

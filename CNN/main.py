@@ -185,6 +185,71 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
         ))
     
+    # 21-30. Combined age+gender classification experiments (6 classes)
+    # 21. Combined baseline (train/val/test split)
+    combined_baseline_config = create_data_config_for_segment_length(segment_length, batch_size)
+    
+    experiments.append(ExperimentConfig(
+        name=f"combined_baseline_{segment_length}",
+        model_type="combined_cnn",
+        target_type="combined",
+        description=f"Combined age+gender classification baseline with {segment_length} segments (6 classes)",
+        data_config=combined_baseline_config,
+        model_config=ModelConfig(num_channels=60, num_classes=6),
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
+    ))
+    
+    # 22. Combined cross-validation (combined stratified)
+    combined_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
+    combined_cv_config.use_cross_validation = True
+    combined_cv_config.n_folds = 5
+    combined_cv_config.cv_strategy = "combined"
+    
+    experiments.append(ExperimentConfig(
+        name=f"combined_cv_combined_stratified_{segment_length}",
+        model_type="combined_cnn",
+        target_type="combined",
+        description=f"Combined age+gender classification with 5-fold CV (combined stratified) using {segment_length} segments (6 classes)",
+        data_config=combined_cv_config,
+        model_config=ModelConfig(num_channels=60, num_classes=6),
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
+    ))
+    
+    # 23-26. Combined cross-task experiments
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+        combined_cross_config = create_data_config_for_segment_length(segment_length, batch_size)
+        combined_cross_config.train_task_type = train_task
+        combined_cross_config.val_test_task_type = val_test_task
+        
+        experiments.append(ExperimentConfig(
+            name=f"combined_cross_task_{train_task}_to_{val_test_task}_{segment_length}",
+            model_type="combined_cnn",
+            target_type="combined",
+            description=f"Combined age+gender classification cross-task ({train_task}->{val_test_task}) using {segment_length} segments (6 classes)",
+            data_config=combined_cross_config,
+            model_config=ModelConfig(num_channels=60, num_classes=6),
+            training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
+        ))
+    
+    # 25-30. Combined cross-task cross-validation experiments
+    for train_task, val_test_task in [("active", "passive"), ("passive", "active"), ("active", "active"), ("passive", "passive")]:
+        combined_cross_cv_config = create_data_config_for_segment_length(segment_length, batch_size)
+        combined_cross_cv_config.use_cross_validation = True
+        combined_cross_cv_config.n_folds = 5
+        combined_cross_cv_config.cv_strategy = "combined"
+        combined_cross_cv_config.train_task_type = train_task
+        combined_cross_cv_config.val_test_task_type = val_test_task
+        
+        experiments.append(ExperimentConfig(
+            name=f"combined_cross_task_cv_{train_task}_to_{val_test_task}_combined_stratified_{segment_length}",
+            model_type="combined_cnn",
+            target_type="combined",
+            description=f"Combined age+gender classification cross-task CV ({train_task}->{val_test_task}, combined stratified) using {segment_length} segments (6 classes)",
+            data_config=combined_cross_cv_config,
+            model_config=ModelConfig(num_channels=60, num_classes=6),
+            training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
+        ))
+    
     return experiments
 
 

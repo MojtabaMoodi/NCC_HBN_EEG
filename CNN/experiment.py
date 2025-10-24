@@ -20,7 +20,7 @@ from utils import safe_json_dump, convert_numpy_types
 # Import data processing modules
 sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
 from eeg_dataset import EEGDataLoader
-from target_transforms import gender_classification_transform, age_classification_transform
+from target_transforms import gender_classification_transform, age_classification_transform, combined_gender_age_classification_transform
 
 @dataclass
 class ExperimentResult:
@@ -260,9 +260,17 @@ class Experiment:
         if target_type == 'gender':
             gender_transform = gender_classification_transform
             age_transform = None
-        else:  # age
+        elif target_type == 'age':
             gender_transform = None
             age_transform = age_classification_transform
+        elif target_type == 'combined':
+            gender_transform = None
+            age_transform = None
+            combined_transform = combined_gender_age_classification_transform
+        else:
+            gender_transform = None
+            age_transform = None
+            combined_transform = None
         
         # Handle different experiment types based on data config
         if data_config.use_cross_validation and data_config.train_task_type and data_config.val_test_task_type:
@@ -278,7 +286,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=None
+                transform=combined_transform
             )
             self.is_cross_validation = True
             
@@ -294,7 +302,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=None
+                transform=combined_transform
             )
             self.is_cross_validation = True
             
@@ -311,7 +319,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=None
+                transform=combined_transform
             )
             self.is_cross_validation = False
             
@@ -327,7 +335,7 @@ class Experiment:
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                transform=None
+                transform=combined_transform
             )
             self.is_cross_validation = False
 
