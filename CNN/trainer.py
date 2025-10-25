@@ -19,6 +19,9 @@ from models import BaseEEGCNN
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# For combined experiments, compute combined class from gender and age
+sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
+from constants import get_combined_class
 from utils import safe_json_dump, convert_numpy_types
 from config import TrainingConfig
 
@@ -75,6 +78,14 @@ class EEGTrainer:
                     'gender': batch['gender'].to(self.device),
                     'age': batch['age'].to(self.device)
                 }
+            elif self.config.target_key == 'combined':
+                gender = batch['gender'].to(self.device)
+                age = batch['age'].to(self.device)
+                # For combined experiments, age should be classification (0, 1, 2), not regression
+                # Gender should also be classification (0, 1)
+                combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
+                                              dtype=torch.long, device=self.device)
+                labels = combined_classes
             else:
                 labels = batch[self.config.target_key].to(self.device)
             
@@ -127,6 +138,15 @@ class EEGTrainer:
                         'gender': batch['gender'].to(self.device),
                         'age': batch['age'].to(self.device)
                     }
+                elif self.config.target_key == 'combined':
+                    # For combined experiments, compute combined class from gender and age
+                    gender = batch['gender'].to(self.device)
+                    age = batch['age'].to(self.device)
+                    # For combined experiments, age should be classification (0, 1, 2), not regression
+                    # Gender should also be classification (0, 1)
+                    combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
+                                                  dtype=torch.long, device=self.device)
+                    labels = combined_classes
                 else:
                     labels = batch[self.config.target_key].to(self.device)
                 

@@ -180,18 +180,12 @@ class EEGDataset(Dataset):
         
         sample['eeg_data'] = eeg_data
         
-        # Apply target transforms if provided
-        if self.combined_transform and 'gender' in sample and 'age' in sample:
-            # Apply combined transform (e.g., combined_gender_age_classification_transform)
-            combined_result = self.combined_transform(sample['gender'], sample['age'])
-            sample['combined_target'] = combined_result
-        else:
-            # Apply individual transforms
-            if self.gender_transform and 'gender' in sample:
-                sample['gender'] = self.gender_transform(sample['gender'])
-            
-            if self.age_transform and 'age' in sample:
-                sample['age'] = self.age_transform(sample['age'])
+        # Apply individual transforms
+        if self.gender_transform and 'gender' in sample:
+            sample['gender'] = self.gender_transform(sample['gender'])
+        
+        if self.age_transform and 'age' in sample:
+            sample['age'] = self.age_transform(sample['age'])
         
         return sample
 

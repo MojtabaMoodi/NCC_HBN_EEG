@@ -59,7 +59,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         List of all experiment configurations
     """
     experiments = []
-    
+
     # Create base data config for this segment length
     base_data_config = create_data_config_for_segment_length(segment_length, batch_size)
     
@@ -184,7 +184,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             model_config=ModelConfig(num_channels=60),
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
         ))
-    
+
     # 21-30. Combined age+gender classification experiments (6 classes)
     # 21. Combined baseline (train/val/test split)
     combined_baseline_config = create_data_config_for_segment_length(segment_length, batch_size)
@@ -249,7 +249,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             model_config=ModelConfig(num_channels=60, num_classes=6),
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="combined")
         ))
-    
+   
     # 31-40. Multi-output gender+age classification experiments (2 separate heads)
     # 31. Multi-output baseline (train/val/test split)
     multi_output_baseline_config = create_data_config_for_segment_length(segment_length, batch_size)
@@ -314,7 +314,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             model_config=ModelConfig(num_channels=60, num_classes=2),
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
         ))
-    
+
     return experiments
 
 
