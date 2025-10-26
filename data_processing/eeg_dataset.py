@@ -557,7 +557,7 @@ class EEGDataLoader:
             train_val_labels = [stratify_labels[i] for i in train_val_indices]
             
             # Use StratifiedShuffleSplit for train/val split to maintain stratification
-            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=random_seed)
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=random_seed)
             
             train_indices, val_indices = next(sss.split(train_val_participants, train_val_labels))
             
@@ -872,7 +872,7 @@ class EEGDataLoader:
             train_val_labels = [stratify_labels[i] for i in train_val_indices]
             
             # Use StratifiedShuffleSplit for train/val split to maintain stratification
-            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=random_seed)
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=random_seed)
             
             train_indices, val_indices = next(sss.split(train_val_participants, train_val_labels))
             

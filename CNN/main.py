@@ -324,7 +324,7 @@ def main():
     parser.add_argument('--mode', choices=['1s', '4s'], default='1s',
                        help='EEG segment length: 1s (1-second segments) or 4s (4-second segments)')
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
