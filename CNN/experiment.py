@@ -141,12 +141,31 @@ class ExperimentLogger:
         
         # Save predictions
         predictions_file = os.path.join(eval_dir, f'{results.model_name}_{results.target_type}_predictions.json')
-        predictions_data = convert_numpy_types({
-            'predictions': results.predictions,
-            'true_labels': results.true_labels,
-            'probabilities': results.probabilities,
-            'class_names': results.class_names
-        })
+        
+        # For multi-output models, save gender and age predictions separately
+        if results.target_type == 'multi_output' and results.gender_predictions is not None:
+            predictions_data = convert_numpy_types({
+                'gender': {
+                    'predictions': results.gender_predictions.tolist() if isinstance(results.gender_predictions, np.ndarray) else results.gender_predictions,
+                    'true_labels': results.gender_true_labels.tolist() if isinstance(results.gender_true_labels, np.ndarray) else results.gender_true_labels,
+                    'probabilities': results.gender_probabilities.tolist() if isinstance(results.gender_probabilities, np.ndarray) else results.gender_probabilities,
+                    'class_names': ['Female', 'Male']
+                },
+                'age': {
+                    'predictions': results.age_predictions.tolist() if isinstance(results.age_predictions, np.ndarray) else results.age_predictions,
+                    'true_labels': results.age_true_labels.tolist() if isinstance(results.age_true_labels, np.ndarray) else results.age_true_labels,
+                    'probabilities': results.age_probabilities.tolist() if isinstance(results.age_probabilities, np.ndarray) else results.age_probabilities,
+                    'class_names': ['<8.5 years', '8.5-12.5 years', '>12.5 years']
+                }
+            })
+        else:
+            # Single-output model
+            predictions_data = convert_numpy_types({
+                'predictions': results.predictions,
+                'true_labels': results.true_labels,
+                'probabilities': results.probabilities,
+                'class_names': results.class_names
+            })
         safe_json_dump(predictions_data, predictions_file)
         
         # Save confusion matrix plot
