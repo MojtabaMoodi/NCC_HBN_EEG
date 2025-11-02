@@ -424,6 +424,11 @@ class EEGDataLoader:
         train_samples = [s for s in full_dataset.samples if s['participant_id'] in train_participants]
         val_samples = [s for s in full_dataset.samples if s['participant_id'] in val_participants]
         test_samples = [s for s in full_dataset.samples if s['participant_id'] in test_participants]
+
+        # Shuffle samples within each split to ensure random ordering
+        np.random.shuffle(train_samples)
+        np.random.shuffle(val_samples)
+        np.random.shuffle(test_samples)
         
         # Create datasets using proper initialization
         train_dataset = EEGDataset._create_from_samples(
@@ -720,6 +725,11 @@ class EEGDataLoader:
         test_samples = [s for s in full_dataset.samples 
                        if s['participant_id'] in test_participants 
                        and s['task_type'] == val_test_task_type]
+
+        # Shuffle samples within each split to ensure random ordering
+        np.random.shuffle(train_samples)
+        np.random.shuffle(val_samples)
+        np.random.shuffle(test_samples)
         
         # Create datasets
         train_dataset = EEGDataset._create_from_samples(
