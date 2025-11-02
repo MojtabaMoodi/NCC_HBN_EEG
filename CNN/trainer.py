@@ -62,6 +62,12 @@ class EEGTrainer:
         self.patience_counter = 0
         self.best_epoch = 0
     
+    def _get_underlying_model(self):
+        """Get the underlying model, unwrapping DataParallel if needed."""
+        if isinstance(self.model, nn.DataParallel):
+            return self.model.module
+        return self.model
+    
     def train_epoch(self, train_loader: DataLoader) -> Tuple[float, float]:
         """Train for one epoch."""
         self.model.train()
@@ -187,7 +193,7 @@ class EEGTrainer:
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
             'config': self.config.to_dict(),
-            'model_info': self.model.get_model_info()
+            'model_info': self._get_underlying_model().get_model_info()
         }
         
         # Use experiment-specific directory if provided, otherwise fall back to global
@@ -195,7 +201,7 @@ class EEGTrainer:
             checkpoint_dir = os.path.join(experiment_results_dir, 'checkpoints')
         else:
             # Fallback to global checkpoint directory
-            model_name = self.model.__class__.__name__
+            model_name = self._get_underlying_model().__class__.__name__
             checkpoint_dir = os.path.join(self.config.checkpoint_dir, model_name)
         
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -224,7 +230,7 @@ class EEGTrainer:
             Dictionary with training results and metrics
         """
         print(f"Starting training for {self.experiment_name}")
-        print(f"Model: {self.model.__class__.__name__}")
+        print(f"Model: {self._get_underlying_model().__class__.__name__}")
         print(f"Target: {self.config.target_key}")
         print(f"Epochs: {self.config.epochs}")
         print(f"Learning rate: {self.config.learning_rate}")
@@ -284,7 +290,7 @@ class EEGTrainer:
         # Return training results
         results = {
             'experiment_name': self.experiment_name,
-            'model_info': self.model.get_model_info(),
+            'model_info': self._get_underlying_model().get_model_info(),
             'config': self.config.to_dict(),
             'best_epoch': self.best_epoch,
             'best_val_loss': self.best_val_loss,
