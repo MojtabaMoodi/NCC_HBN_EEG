@@ -307,12 +307,13 @@ def load_checkpoint(checkpoint_path: str, model: BaseEEGCNN,
                    device: torch.device = None) -> Dict[str, Any]:
     """
     Load model from checkpoint.
+    Handles DataParallel checkpoints by stripping 'module.' prefix if needed.
     
     Args:
         checkpoint_path: Path to checkpoint file
         model: Model instance to load weights into
         device: Device to load model on
-        
+    
     Returns:
         Checkpoint information dictionary
     """
@@ -320,7 +321,29 @@ def load_checkpoint(checkpoint_path: str, model: BaseEEGCNN,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    state_dict = checkpoint['model_state_dict']
+    
+    # Handle DataParallel checkpoints: handle 'module.' prefix mismatch
+    has_module_prefix = any(k.startswith('module.') for k in state_dict.keys())
+    model_is_wrapped = isinstance(model, nn.DataParallel)
+    
+    if has_module_prefix and not model_is_wrapped:
+        # State dict has 'module.' prefix but model is not wrapped - strip prefix
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('module.'):
+                new_state_dict[k[7:]] = v  # Remove 'module.' prefix (7 characters)
+            else:
+                new_state_dict[k] = v
+        state_dict = new_state_dict
+    elif not has_module_prefix and model_is_wrapped:
+        # State dict doesn't have 'module.' prefix but model is wrapped - add prefix
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            new_state_dict[f'module.{k}'] = v
+        state_dict = new_state_dict
+    
+    model.load_state_dict(state_dict)
     model.to(device)
     
     return checkpoint
