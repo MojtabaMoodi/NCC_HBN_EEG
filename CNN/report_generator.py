@@ -73,8 +73,19 @@ class ReportGenerator:
                     f.write(f"\nExperiment: {result.experiment_name}\n")
                     f.write(f"Model: {result.model_type}\n")
                     f.write(f"Target: {result.target_type}\n")
-                    f.write(f"Accuracy: {result.metrics['accuracy']:.4f}\n")
-                    f.write(f"F1-Score: {result.metrics['f1_weighted']:.4f}\n")
+                    
+                    # Check for multi-output metrics
+                    if result.target_type == 'multi_output' and 'gender_head' in result.metrics and 'age_head' in result.metrics:
+                        gender_metrics = result.metrics['gender_head']
+                        age_metrics = result.metrics['age_head']
+                        f.write(f"Gender Head - Accuracy: {gender_metrics['accuracy']:.4f}\n")
+                        f.write(f"Gender Head - F1-Score: {gender_metrics['f1_weighted']:.4f}\n")
+                        f.write(f"Age Head - Accuracy: {age_metrics['accuracy']:.4f}\n")
+                        f.write(f"Age Head - F1-Score: {age_metrics['f1_weighted']:.4f}\n")
+                    else:
+                        f.write(f"Accuracy: {result.metrics['accuracy']:.4f}\n")
+                        f.write(f"F1-Score: {result.metrics['f1_weighted']:.4f}\n")
+                    
                     f.write(f"Training Time: {result.total_time:.2f}s\n")
             
             # Failed experiments
@@ -131,7 +142,33 @@ class ReportGenerator:
             
             if result.success:
                 metrics = result.metrics
-                html_content += f"""
+                
+                # Check for multi-output metrics
+                if result.target_type == 'multi_output' and 'gender_head' in metrics and 'age_head' in metrics:
+                    gender_metrics = metrics['gender_head']
+                    age_metrics = metrics['age_head']
+                    html_content += f"""
+        <div class="metrics">
+            <div class="metric" style="grid-column: span 2; border: 2px solid #4CAF50; padding: 15px;">
+                <h3 style="margin-top: 0;">Gender Head</h3>
+                <div><strong>Accuracy:</strong> {gender_metrics['accuracy']:.4f}</div>
+                <div><strong>Precision:</strong> {gender_metrics['precision_weighted']:.4f}</div>
+                <div><strong>Recall:</strong> {gender_metrics['recall_weighted']:.4f}</div>
+                <div><strong>F1-Score:</strong> {gender_metrics['f1_weighted']:.4f}</div>
+                {f"<div><strong>ROC-AUC:</strong> {gender_metrics['roc_auc']:.4f}</div>" if gender_metrics.get('roc_auc') else ""}
+            </div>
+            <div class="metric" style="grid-column: span 2; border: 2px solid #2196F3; padding: 15px;">
+                <h3 style="margin-top: 0;">Age Head</h3>
+                <div><strong>Accuracy:</strong> {age_metrics['accuracy']:.4f}</div>
+                <div><strong>Precision:</strong> {age_metrics['precision_weighted']:.4f}</div>
+                <div><strong>Recall:</strong> {age_metrics['recall_weighted']:.4f}</div>
+                <div><strong>F1-Score:</strong> {age_metrics['f1_weighted']:.4f}</div>
+            </div>
+            <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
+        </div>
+"""
+                else:
+                    html_content += f"""
         <div class="metrics">
             <div class="metric"><strong>Accuracy:</strong> {metrics['accuracy']:.4f}</div>
             <div class="metric"><strong>Precision:</strong> {metrics['precision_weighted']:.4f}</div>
@@ -149,7 +186,59 @@ class ReportGenerator:
         
         # Add comparison table
         if successful:
-            html_content += """
+            # Check if any experiments are multi-output to determine table headers
+            has_multi_output = any(r.target_type == 'multi_output' and 'gender_head' in r.metrics and 'age_head' in r.metrics 
+                                   for r in successful)
+            
+            if has_multi_output:
+                html_content += """
+    <h2>Model Comparison</h2>
+    <table>
+        <tr>
+            <th>Experiment</th>
+            <th>Model</th>
+            <th>Target</th>
+            <th>Gender Head Acc</th>
+            <th>Age Head Acc</th>
+            <th>Gender F1</th>
+            <th>Age F1</th>
+            <th>Training Time (s)</th>
+        </tr>
+"""
+                
+                for result in successful:
+                    metrics = result.metrics
+                    if result.target_type == 'multi_output' and 'gender_head' in metrics and 'age_head' in metrics:
+                        gender_metrics = metrics['gender_head']
+                        age_metrics = metrics['age_head']
+                        html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{gender_metrics['accuracy']:.4f}</td>
+            <td>{age_metrics['accuracy']:.4f}</td>
+            <td>{gender_metrics['f1_weighted']:.4f}</td>
+            <td>{age_metrics['f1_weighted']:.4f}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                    else:
+                        # Single-output: show both columns but use same values
+                        html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{metrics['accuracy']:.4f}</td>
+            <td>{metrics['accuracy']:.4f}</td>
+            <td>{metrics['f1_weighted']:.4f}</td>
+            <td>{metrics['f1_weighted']:.4f}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+            else:
+                html_content += """
     <h2>Model Comparison</h2>
     <table>
         <tr>
@@ -161,10 +250,10 @@ class ReportGenerator:
             <th>Training Time (s)</th>
         </tr>
 """
-            
-            for result in successful:
-                metrics = result.metrics
-                html_content += f"""
+                
+                for result in successful:
+                    metrics = result.metrics
+                    html_content += f"""
         <tr>
             <td>{result.experiment_name}</td>
             <td>{result.model_type}</td>
@@ -207,20 +296,102 @@ class ReportGenerator:
     def _plot_accuracy_comparison(self, successful_results: List[Dict[str, Any]]):
         """Plot accuracy comparison across experiments."""
         experiments = [r.experiment_name for r in successful_results]
-        accuracies = [r.metrics['accuracy'] for r in successful_results]
         
-        plt.figure(figsize=(12, 6))
-        bars = plt.bar(experiments, accuracies, color='skyblue', alpha=0.7)
-        plt.title('Model Accuracy Comparison', fontsize=16, fontweight='bold')
-        plt.xlabel('Experiment', fontsize=12)
-        plt.ylabel('Accuracy', fontsize=12)
-        plt.xticks(rotation=45, ha='right')
-        plt.ylim(0, 1)
+        # Check if we have multi-output experiments
+        has_multi_output = any(r.target_type == 'multi_output' and 'gender_head' in r.metrics and 'age_head' in r.metrics 
+                              for r in successful_results)
         
-        # Add value labels on bars
-        for bar, acc in zip(bars, accuracies):
-            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                    f'{acc:.3f}', ha='center', va='bottom')
+        if has_multi_output:
+            # Create grouped bar chart for multi-output
+            gender_accs = []
+            age_accs = []
+            single_accs = []
+            single_exps = []
+            
+            for result in successful_results:
+                if result.target_type == 'multi_output' and 'gender_head' in result.metrics:
+                    gender_accs.append(result.metrics['gender_head']['accuracy'])
+                    age_accs.append(result.metrics['age_head']['accuracy'])
+                else:
+                    single_accs.append(result.metrics['accuracy'])
+                    single_exps.append(result.experiment_name)
+            
+            # Plot multi-output experiments
+            if gender_accs:
+                x = range(len(experiments))
+                width = 0.35
+                fig, ax = plt.subplots(figsize=(14, 6))
+                
+                multi_exps = [exp for exp, r in zip(experiments, successful_results) 
+                            if r.target_type == 'multi_output' and 'gender_head' in r.metrics]
+                multi_x = range(len(multi_exps))
+                
+                if multi_exps:
+                    ax.bar([xi - width/2 for xi in multi_x], gender_accs, width, 
+                          label='Gender Head', color='#4CAF50', alpha=0.7)
+                    ax.bar([xi + width/2 for xi in multi_x], age_accs, width, 
+                          label='Age Head', color='#2196F3', alpha=0.7)
+                    ax.set_xticks(multi_x)
+                    ax.set_xticklabels(multi_exps, rotation=45, ha='right')
+                
+                # Add single-output experiments if any
+                if single_exps:
+                    single_x_start = len(multi_exps) + 0.5
+                    single_x = [single_x_start + i for i in range(len(single_exps))]
+                    ax.bar(single_x, single_accs, width=0.7, label='Single Output', 
+                          color='skyblue', alpha=0.7)
+                    ax.set_xticks(list(ax.get_xticks()) + single_x)
+                    ax.set_xticklabels(list(ax.get_xticklabels()) + 
+                                     [exp[:30] for exp in single_exps], rotation=45, ha='right')
+                
+                ax.set_xlabel('Experiment', fontsize=12)
+                ax.set_ylabel('Accuracy', fontsize=12)
+                ax.set_title('Model Accuracy Comparison (Multi-Output Shows Separate Heads)', 
+                           fontsize=16, fontweight='bold')
+                ax.legend()
+                ax.set_ylim(0, 1)
+                
+                # Add value labels
+                for i, (g_acc, a_acc) in enumerate(zip(gender_accs, age_accs)):
+                    ax.text(i - width/2, g_acc + 0.01, f'{g_acc:.3f}', 
+                           ha='center', va='bottom', fontsize=8)
+                    ax.text(i + width/2, a_acc + 0.01, f'{a_acc:.3f}', 
+                           ha='center', va='bottom', fontsize=8)
+                
+                if single_accs:
+                    for i, acc in enumerate(single_accs):
+                        ax.text(single_x_start + i, acc + 0.01, f'{acc:.3f}', 
+                               ha='center', va='bottom', fontsize=8)
+            else:
+                # Fallback to single output plotting (shouldn't happen, but just in case)
+                accuracies = [r.metrics['accuracy'] for r in successful_results]
+                fig, ax = plt.subplots(figsize=(12, 6))
+                bars = ax.bar(range(len(experiments)), accuracies, color='skyblue', alpha=0.7)
+                ax.set_xlabel('Experiment', fontsize=12)
+                ax.set_ylabel('Accuracy', fontsize=12)
+                ax.set_title('Model Accuracy Comparison', fontsize=16, fontweight='bold')
+                ax.set_xticks(range(len(experiments)))
+                ax.set_xticklabels(experiments, rotation=45, ha='right')
+                ax.set_ylim(0, 1)
+                for bar, acc in zip(bars, accuracies):
+                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                           f'{acc:.3f}', ha='center', va='bottom')
+        else:
+            # Original single-output plotting
+            accuracies = [r.metrics['accuracy'] for r in successful_results]
+            fig, ax = plt.subplots(figsize=(12, 6))
+            bars = ax.bar(range(len(experiments)), accuracies, color='skyblue', alpha=0.7)
+            ax.set_xlabel('Experiment', fontsize=12)
+            ax.set_ylabel('Accuracy', fontsize=12)
+            ax.set_title('Model Accuracy Comparison', fontsize=16, fontweight='bold')
+            ax.set_xticks(range(len(experiments)))
+            ax.set_xticklabels(experiments, rotation=45, ha='right')
+            ax.set_ylim(0, 1)
+            
+            # Add value labels on bars
+            for bar, acc in zip(bars, accuracies):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                       f'{acc:.3f}', ha='center', va='bottom')
         
         plt.tight_layout()
         plt.savefig(os.path.join(self.output_dir, 'accuracy_comparison.png'), 
@@ -297,17 +468,45 @@ class ReportGenerator:
         data = []
         for result in successful:
             metrics = result.metrics
-            data.append({
-                'experiment_name': result.experiment_name,
-                'model_type': result.model_type,
-                'target_type': result.target_type,
-                'accuracy': metrics['accuracy'],
-                'precision_weighted': metrics['precision_weighted'],
-                'recall_weighted': metrics['recall_weighted'],
-                'f1_weighted': metrics['f1_weighted'],
-                'training_time': result.total_time,
-                'evaluation_time': result.evaluation_time
-            })
+            
+            # Check for multi-output metrics
+            if result.target_type == 'multi_output' and 'gender_head' in metrics and 'age_head' in metrics:
+                gender_metrics = metrics['gender_head']
+                age_metrics = metrics['age_head']
+                data.append({
+                    'experiment_name': result.experiment_name,
+                    'model_type': result.model_type,
+                    'target_type': result.target_type,
+                    'gender_head_accuracy': gender_metrics['accuracy'],
+                    'gender_head_precision': gender_metrics['precision_weighted'],
+                    'gender_head_recall': gender_metrics['recall_weighted'],
+                    'gender_head_f1': gender_metrics['f1_weighted'],
+                    'gender_head_roc_auc': gender_metrics.get('roc_auc', None),
+                    'age_head_accuracy': age_metrics['accuracy'],
+                    'age_head_precision': age_metrics['precision_weighted'],
+                    'age_head_recall': age_metrics['recall_weighted'],
+                    'age_head_f1': age_metrics['f1_weighted'],
+                    # Keep primary metrics for backward compatibility
+                    # Use averaged metrics if available, otherwise calculate average from heads
+                    'accuracy': metrics.get('accuracy', (gender_metrics['accuracy'] + age_metrics['accuracy']) / 2.0),
+                    'precision_weighted': metrics.get('precision_weighted', (gender_metrics['precision_weighted'] + age_metrics['precision_weighted']) / 2.0),
+                    'recall_weighted': metrics.get('recall_weighted', (gender_metrics['recall_weighted'] + age_metrics['recall_weighted']) / 2.0),
+                    'f1_weighted': metrics.get('f1_weighted', (gender_metrics['f1_weighted'] + age_metrics['f1_weighted']) / 2.0),
+                    'training_time': result.total_time,
+                    'evaluation_time': result.evaluation_time
+                })
+            else:
+                data.append({
+                    'experiment_name': result.experiment_name,
+                    'model_type': result.model_type,
+                    'target_type': result.target_type,
+                    'accuracy': metrics['accuracy'],
+                    'precision_weighted': metrics['precision_weighted'],
+                    'recall_weighted': metrics['recall_weighted'],
+                    'f1_weighted': metrics['f1_weighted'],
+                    'training_time': result.total_time,
+                    'evaluation_time': result.evaluation_time
+                })
         
         # Create DataFrame and save
         df = pd.DataFrame(data)
