@@ -5,7 +5,6 @@ CNN/experiment_results/*
 CNN/reports/*
 data_processing/__pycache__/*
 data_processing/processed_eeg_data*
-LaBraM_systematic/__pycache__/*
-LaBraM_systematic/data_loaders/__pycache__/*
-LaBraM_systematic/models/__pycache__/*
+LaBraM/__pycache__/*
+LaBraM/data_processor/__pycache__/*
 utils/__pycache__/*
