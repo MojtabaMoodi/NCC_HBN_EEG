@@ -261,7 +261,8 @@ class Experiment:
         )
         
         # Create trainer
-        self.trainer = EEGTrainer(self.model, self.config.training_config, self.config.name)
+        num_gpus = self.system_config.num_gpus if self.system_config else 2
+        self.trainer = EEGTrainer(self.model, self.config.training_config, self.config.name, num_gpus=num_gpus)
         
         # Create evaluator
         self.evaluator = EEGEvaluator(self.model, self.config.target_type)
@@ -300,9 +301,11 @@ class Experiment:
                 pickle_dir=data_config.pickle_dir,
                 train_task_type=data_config.train_task_type,
                 val_test_task_type=data_config.val_test_task_type,
+                n_folds=data_config.n_folds,
                 batch_size=data_config.batch_size,
                 num_workers=data_config.num_workers,
                 random_seed=data_config.random_seed,
+                stratify_by=data_config.cv_strategy,
                 target_type=target_type,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
@@ -315,9 +318,11 @@ class Experiment:
             print(f"Creating cross-validation loaders for {target_type} classification")
             self.data_loaders = EEGDataLoader.create_cross_validation_loaders(
                 pickle_dir=data_config.pickle_dir,
+                n_folds=data_config.n_folds,
                 batch_size=data_config.batch_size,
                 num_workers=data_config.num_workers,
                 random_seed=data_config.random_seed,
+                stratify_by=data_config.cv_strategy,
                 task_type=data_config.task_type,
                 target_type=target_type,
                 gender_transform=gender_transform,
