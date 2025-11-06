@@ -6,6 +6,7 @@ Provides model-agnostic training functionality with comprehensive logging.
 import os
 import time
 import json
+import sys
 from typing import Dict, Any, Optional, Tuple, List
 import torch
 import torch.nn as nn
@@ -33,7 +34,7 @@ class EEGTrainer:
     """
     
     def __init__(self, model: BaseEEGCNN, config: TrainingConfig, 
-                 experiment_name: str = None):
+                 experiment_name: str = None, num_gpus: int = 2):
         self.model = model
         self.config = config
         self.experiment_name = experiment_name or f"{model.__class__.__name__}_{int(time.time())}"
@@ -42,9 +43,14 @@ class EEGTrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
         
-        # Setup model
+        # Setup model - use specified number of GPUs for DataParallel
         if torch.cuda.device_count() > 1:
-            self.model = nn.DataParallel(model)
+            num_gpus_to_use = min(num_gpus, torch.cuda.device_count())
+            if num_gpus_to_use < num_gpus:
+                print(f"Warning: Requested {num_gpus} GPUs but only {torch.cuda.device_count()} available. Using {num_gpus_to_use} GPUs.")
+            else:
+                print(f"Using {num_gpus_to_use} GPUs (out of {torch.cuda.device_count()} available)")
+            self.model = nn.DataParallel(model, device_ids=list(range(num_gpus_to_use)))
         self.model.to(self.device)
         
         # Setup training components
@@ -75,7 +81,15 @@ class EEGTrainer:
         correct = 0
         total = 0
         
-        for batch in train_loader:
+        batch_start_time = time.time()
+        num_batches = 0
+        for batch_idx, batch in enumerate(train_loader):
+            num_batches = batch_idx + 1
+            if batch_idx % 1000 == 0 and batch_idx > 0:
+                elapsed = time.time() - batch_start_time
+                print(f"  Processed {batch_idx} batches, elapsed: {elapsed:.1f}s")
+                sys.stdout.flush()
+            
             inputs = batch['eeg_data'].to(self.device)
             
             # Handle multi_output case where we have separate gender and age keys
@@ -96,6 +110,7 @@ class EEGTrainer:
                 labels = batch[self.config.target_key].to(self.device)
             
             self.optimizer.zero_grad()
+            
             outputs = self.model(inputs)
             
             # Handle multi-output models
@@ -123,8 +138,9 @@ class EEGTrainer:
             total_loss += loss.item()
             total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
-        avg_loss = total_loss / len(train_loader)
-        accuracy = correct / total
+        # Use num_batches instead of len(train_loader) since IterableDataset doesn't support __len__()
+        avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+        accuracy = correct / total if total > 0 else 0.0
         return avg_loss, accuracy
     
     def validate_epoch(self, val_loader: DataLoader) -> Tuple[float, float]:
@@ -133,9 +149,11 @@ class EEGTrainer:
         total_loss = 0.0
         correct = 0
         total = 0
+        num_batches = 0
         
         with torch.no_grad():
-            for batch in val_loader:
+            for batch_idx, batch in enumerate(val_loader):
+                num_batches = batch_idx + 1
                 inputs = batch['eeg_data'].to(self.device)
                 
                 # Handle multi_output case where we have separate gender and age keys
@@ -180,8 +198,9 @@ class EEGTrainer:
                 total_loss += loss.item()
                 total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
-        avg_loss = total_loss / len(val_loader)
-        accuracy = correct / total
+        # Use num_batches instead of len(val_loader) since IterableDataset doesn't support __len__()
+        avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+        accuracy = correct / total if total > 0 else 0.0
         return avg_loss, accuracy
     
     def save_checkpoint(self, epoch: int, is_best: bool = False, experiment_results_dir: str = None):
@@ -238,8 +257,15 @@ class EEGTrainer:
         
         start_time = time.time()
         
+        # Log that we're about to start loading first batch
+        print(f"⏳ Loading first batch (batch_size={train_loader.batch_size}, num_workers={train_loader.num_workers})...")
+        # Note: IterableDataset doesn't support __len__(), so we can't print dataset size
+        sys.stdout.flush()
+        
         for epoch in range(self.config.epochs):
             epoch_start = time.time()
+            print(f"\n🔄 Starting epoch {epoch+1}/{self.config.epochs}")
+            sys.stdout.flush()
             
             # Train
             train_loss, train_acc = self.train_epoch(train_loader)
