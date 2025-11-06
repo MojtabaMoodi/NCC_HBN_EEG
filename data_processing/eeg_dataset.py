@@ -8,10 +8,11 @@ and processing the preprocessed EEG data from pickle files.
 
 import os
 import pickle
+import time
 import numpy as np
 import torch
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import IterableDataset, DataLoader
 from typing import Dict, List, Tuple, Any, Optional, Union
 import logging
 from pathlib import Path
@@ -27,12 +28,14 @@ from target_transforms import (
 
 logger = logging.getLogger(__name__)
 
-class EEGDataset(Dataset):
+class EEGDataset(IterableDataset):
     """
-    PyTorch Dataset class for EEG data.
+    PyTorch IterableDataset class for EEG data.
     
     This class loads preprocessed EEG data from pickle files and provides
-    access to individual samples for training, validation, and testing.
+    an iterator that yields samples for training, validation, and testing.
+    
+    Supports datasets of any size by iterating through pickle files on-demand.
     """
     
     def __init__(self, 
@@ -42,9 +45,10 @@ class EEGDataset(Dataset):
                  gender_transform: Optional[callable] = None,
                  age_transform: Optional[callable] = None,
                  combined_transform: Optional[callable] = None,
-                 target_type: str = "both"):  # "gender", "age", "both", "combined"
+                 target_type: str = "both",  # "gender", "age", "both", "combined"
+                 participant_filter: Optional[List[str]] = None):  
         """
-        Initialize the EEG Dataset.
+        Initialize the EEG IterableDataset.
         
         Args:
             pickle_dir: Directory containing pickle files
@@ -54,6 +58,7 @@ class EEGDataset(Dataset):
             age_transform: Optional transform to be applied on age targets
             combined_transform: Optional transform to be applied on combined targets (gender + age)
             target_type: Type of target to return ("gender", "age", "both", "combined")
+            participant_filter: Optional list of participant IDs to include (None = all participants)
         """
         self.pickle_dir = Path(pickle_dir)
         self.task_type = task_type
@@ -62,123 +67,106 @@ class EEGDataset(Dataset):
         self.age_transform = age_transform
         self.combined_transform = combined_transform
         self.target_type = target_type
+        self.participant_filter = participant_filter if participant_filter is None else set(participant_filter)
         
-        # Load all pickle files and create samples
-        self.samples = self._load_samples()
-        
-        logger.info(f"Loaded {len(self.samples)} samples from {task_type} tasks")
+        logger.info(f"Initialized EEGDataset with task_type={task_type}, target_type={target_type}")
+        if self.participant_filter is not None:
+            logger.info(f"Filtering to {len(self.participant_filter)} participants")
     
-    def _load_samples(self) -> List[Dict[str, Any]]:
+    def __iter__(self):
         """
-        Load all samples from pickle files.
+        Iterate through the dataset, yielding samples from pickle files.
         
-        Returns:
-            List of sample dictionaries
+        Yields:
+            Dictionary containing sample data with transforms applied
         """
-        samples = []
-        
         # Find all pickle files
         pickle_files = list(self.pickle_dir.glob("eeg_batch_*.pkl"))
         pickle_files.sort()
         
-        logger.info(f"Found {len(pickle_files)} pickle files")
-        
         for pickle_file in pickle_files:
-            logger.info(f"Loading {pickle_file.name}")
-            
             try:
+                # Load pickle file
                 with open(pickle_file, 'rb') as f:
                     batch_data = pickle.load(f)
                 
                 # Process each participant in the batch
                 for participant in batch_data:
-                    participant_samples = self._create_participant_samples(participant)
-                    samples.extend(participant_samples)
+                    participant_id = str(participant['participant_id'])
+                    
+                    # Filter by participant if specified
+                    if self.participant_filter is not None and participant_id not in self.participant_filter:
+                        continue
+                    
+                    # Get participant metadata
+                    gender = participant['gender']
+                    age = participant['age']
+                    
+                    # Process active tasks
+                    if self.task_type in ["active", "both"]:
+                        active_eeg = participant.get('active_eeg', [])
+                        for i, eeg_data in enumerate(active_eeg):
+                            sample = self._create_sample_dict(
+                                eeg_data=eeg_data,
+                                task_type='active',
+                                participant_id=participant_id,
+                                gender=gender,
+                                age=age,
+                                sample_idx=i
+                            )
+                            yield sample
+                    
+                    # Process passive tasks
+                    if self.task_type in ["passive", "both"]:
+                        passive_eeg = participant.get('passive_eeg', [])
+                        for i, eeg_data in enumerate(passive_eeg):
+                            sample = self._create_sample_dict(
+                                eeg_data=eeg_data,
+                                task_type='passive',
+                                participant_id=participant_id,
+                                gender=gender,
+                                age=age,
+                                sample_idx=i
+                            )
+                            yield sample
                     
             except Exception as e:
                 logger.error(f"Error loading {pickle_file}: {e}")
                 continue
-        
-        return samples
     
-    def _create_participant_samples(self, participant: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _create_sample_dict(self, eeg_data: np.ndarray, task_type: str, 
+                           participant_id: str, gender: int, age: float, 
+                           sample_idx: int) -> Dict[str, Any]:
         """
-        Create samples for a single participant.
+        Create a sample dictionary and apply transforms.
         
         Args:
-            participant: Participant data dictionary
+            eeg_data: EEG data array
+            task_type: Task type ('active' or 'passive')
+            participant_id: Participant ID
+            gender: Gender value
+            age: Age value
+            sample_idx: Sample index within participant
             
         Returns:
-            List of sample dictionaries for this participant
+            Dictionary containing sample data with transforms applied
         """
-        samples = []
-        
-        # Get participant metadata
-        participant_id = participant['participant_id']
-        gender = participant['gender']
-        age = participant['age']
-        
-        # Process active tasks
-        if self.task_type in ["active", "both"]:
-            active_eeg = participant.get('active_eeg', [])
-            
-            # Process list of arrays
-            for i, eeg_data in enumerate(active_eeg):
-                sample = {
-                    'eeg_data': eeg_data,  # Shape: (60, 200) for 1s or (60, 800) for 4s
-                    'task_type': 'active',
-                    'participant_id': participant_id,
-                    'gender': gender,
-                    'age': age,
-                    'sample_id': f"{participant_id}_active_{i}"
-                }
-                samples.append(sample)
-        
-        # Process passive tasks
-        if self.task_type in ["passive", "both"]:
-            passive_eeg = participant.get('passive_eeg', [])
-            
-            # Process list of arrays
-            for i, eeg_data in enumerate(passive_eeg):
-                sample = {
-                    'eeg_data': eeg_data,  # Shape: (60, 200) for 1s or (60, 800) for 4s
-                    'task_type': 'passive',
-                    'participant_id': participant_id,
-                    'gender': gender,
-                    'age': age,
-                    'sample_id': f"{participant_id}_passive_{i}"
-                }
-                samples.append(sample)
-        
-        return samples
-    
-    def __len__(self) -> int:
-        """Return the number of samples in the dataset."""
-        return len(self.samples)
-    
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        """
-        Get a sample from the dataset.
-        
-        Args:
-            idx: Index of the sample
-            
-        Returns:
-            Dictionary containing the sample data
-        """
-        if idx >= len(self.samples):
-            raise IndexError(f"Index {idx} out of range for dataset of size {len(self.samples)}")
-        
-        sample = self.samples[idx].copy()
-        
         # Convert EEG data to tensor
-        eeg_data = torch.FloatTensor(sample['eeg_data'])
+        eeg_tensor = torch.FloatTensor(eeg_data)
         
         # Apply transforms if provided
         if self.transform:
-            eeg_data = self.transform(eeg_data)
+            eeg_tensor = self.transform(eeg_tensor)
         
-        sample['eeg_data'] = eeg_data
+        # Create sample dict
+        sample = {
+            'eeg_data': eeg_tensor,
+            'task_type': task_type,
+            'participant_id': participant_id,
+            'gender': gender,
+            'age': age,
+            'sample_id': f"{participant_id}_{task_type}_{sample_idx}"
+        }
         
         # Apply individual transforms
         if self.gender_transform and 'gender' in sample:
@@ -187,94 +175,13 @@ class EEGDataset(Dataset):
         if self.age_transform and 'age' in sample:
             sample['age'] = self.age_transform(sample['age'])
         
+        # Apply combined transform if target_type is "combined"
+        # Note: Combined transform uses raw gender and age values before individual transforms
+        if self.target_type == "combined" and self.combined_transform:
+            # Apply combined transform
+            sample['combined'] = self.combined_transform(gender, age)
+        
         return sample
-
-    @classmethod
-    def _create_from_samples(cls, samples: List[Dict[str, Any]], pickle_dir: str, 
-                           task_type: str, transform: Optional[callable], 
-                           gender_transform: Optional[callable], age_transform: Optional[callable],
-                           combined_transform: Optional[callable], target_type: str) -> 'EEGDataset':
-        """
-        Create a dataset from pre-loaded samples (for cross-validation).
-        
-        Args:
-            samples: Pre-loaded sample data
-            pickle_dir: Directory containing pickle files
-            task_type: Type of tasks to include
-            transform: Optional transform to be applied on EEG data
-            gender_transform: Optional transform to be applied on gender targets
-            age_transform: Optional transform to be applied on age targets
-            combined_transform: Optional transform to be applied on combined targets (gender + age)
-            target_type: Type of target to return
-
-        Returns:
-            EEGDataset instance
-        """
-        # Create instance without calling __init__
-        instance = cls.__new__(cls)
-        
-        # Set attributes manually
-        instance.pickle_dir = Path(pickle_dir)
-        instance.task_type = task_type
-        instance.transform = transform
-        instance.gender_transform = gender_transform
-        instance.age_transform = age_transform
-        instance.combined_transform = combined_transform
-        instance.target_type = target_type
-        instance.samples = samples
-        
-        return instance
-    
-    @classmethod
-    def create_gender_classification_dataset(cls, pickle_dir: str, **kwargs):
-        """Create dataset for gender classification."""
-        return cls(
-            pickle_dir=pickle_dir,
-            gender_transform=gender_classification_transform,
-            target_type="gender",
-            **kwargs
-        )
-    
-    @classmethod
-    def create_age_classification_dataset(cls, pickle_dir: str, **kwargs):
-        """Create dataset for age classification."""
-        return cls(
-            pickle_dir=pickle_dir,
-            age_transform=age_classification_transform,
-            target_type="age",
-            **kwargs
-        )
-    
-    @classmethod
-    def create_age_regression_dataset(cls, pickle_dir: str, **kwargs):
-        """Create dataset for age regression."""
-        return cls(
-            pickle_dir=pickle_dir,
-            age_transform=age_regression_transform,
-            target_type="age",
-            **kwargs
-        )
-    
-    @classmethod
-    def create_combined_classification_dataset(cls, pickle_dir: str, **kwargs):
-        """Create dataset for combined gender+age classification."""
-        return cls(
-            pickle_dir=pickle_dir,
-            combined_transform=combined_gender_age_classification_transform,
-            target_type="combined",
-            **kwargs
-        )
-    
-    @classmethod
-    def create_multi_task_dataset(cls, pickle_dir: str, **kwargs):
-        """Create dataset for multi-task learning (both gender and age)."""
-        return cls(
-            pickle_dir=pickle_dir,
-            gender_transform=gender_classification_transform,
-            age_transform=age_regression_transform,
-            target_type="both",
-            **kwargs
-        )
 
 
 class EEGDataLoader:
@@ -285,33 +192,40 @@ class EEGDataLoader:
     @staticmethod
     def create_dataloader(dataset: EEGDataset,
                          batch_size: int = 32,
-                         shuffle: bool = True,
                          num_workers: int = 4,
                          pin_memory: bool = True,
-                         drop_last: bool = False) -> DataLoader:
+                         drop_last: bool = False,
+                         prefetch_factor: int = 2) -> DataLoader:
         """
-        Create a PyTorch DataLoader for the EEG dataset.
+        Create a PyTorch DataLoader for the EEG IterableDataset.
         
         Args:
-            dataset: EEGDataset instance
+            dataset: EEGDataset instance (IterableDataset)
             batch_size: Number of samples per batch
-            shuffle: Whether to shuffle the data
             num_workers: Number of worker processes for data loading
             pin_memory: Whether to pin memory for faster GPU transfer
             drop_last: Whether to drop the last incomplete batch
+            prefetch_factor: Number of batches to prefetch (only used when num_workers > 0)
             
         Returns:
             PyTorch DataLoader instance
         """
-        return DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            drop_last=drop_last,
-            collate_fn=EEGDataLoader.collate_fn
-        )
+        loader_kwargs = {
+            'dataset': dataset,
+            'batch_size': batch_size,
+            'num_workers': num_workers,
+            'pin_memory': pin_memory,
+            'drop_last': drop_last,
+            'collate_fn': EEGDataLoader.collate_fn
+        }
+        
+        # prefetch_factor only works with num_workers > 0
+        if num_workers > 0:
+            # Increase prefetch_factor for better GPU utilization
+            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 8)
+            loader_kwargs['persistent_workers'] = True  # Keep workers alive between epochs
+        
+        return DataLoader(**loader_kwargs)
     
     @staticmethod
     def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
@@ -396,19 +310,17 @@ class EEGDataLoader:
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
         
-        # Create full dataset with specified parameters
-        full_dataset = EEGDataset(
-            pickle_dir=pickle_dir, 
-            task_type=task_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            target_type=target_type
+        # Get unique participants by iterating through the dataset
+        participants = set()
+        temp_dataset = EEGDataset(
+            pickle_dir=pickle_dir,
+            task_type="both",  # Get all participants regardless of task_type
+            target_type="both"
         )
+        for sample in temp_dataset:
+            participants.add(sample['participant_id'])
         
-        # Get unique participants for splitting
-        participants = list(set(sample['participant_id'] for sample in full_dataset.samples))
+        participants = list(participants)
         np.random.shuffle(participants)
         
         # Split participants
@@ -420,65 +332,55 @@ class EEGDataLoader:
         val_participants = participants[n_train:n_train + n_val]
         test_participants = participants[n_train + n_val:]
         
-        # Create datasets for each split
-        train_samples = [s for s in full_dataset.samples if s['participant_id'] in train_participants]
-        val_samples = [s for s in full_dataset.samples if s['participant_id'] in val_participants]
-        test_samples = [s for s in full_dataset.samples if s['participant_id'] in test_participants]
-
-        # Shuffle samples within each split to ensure random ordering
-        np.random.shuffle(train_samples)
-        np.random.shuffle(val_samples)
-        np.random.shuffle(test_samples)
-        
-        # Create datasets using proper initialization
-        train_dataset = EEGDataset._create_from_samples(
-            samples=train_samples,
+        # Create datasets for each split with participant filtering
+        train_dataset = EEGDataset(
             pickle_dir=pickle_dir,
             task_type=task_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=train_participants
         )
         
-        val_dataset = EEGDataset._create_from_samples(
-            samples=val_samples,
+        val_dataset = EEGDataset(
             pickle_dir=pickle_dir,
             task_type=task_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=val_participants
         )
         
-        test_dataset = EEGDataset._create_from_samples(
-            samples=test_samples,
+        test_dataset = EEGDataset(
             pickle_dir=pickle_dir,
             task_type=task_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=test_participants
         )
         
         # Create data loaders
         train_loader = EEGDataLoader.create_dataloader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+            train_dataset, batch_size=batch_size, num_workers=num_workers
         )
         val_loader = EEGDataLoader.create_dataloader(
-            val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            val_dataset, batch_size=batch_size, num_workers=num_workers
         )
         test_loader = EEGDataLoader.create_dataloader(
-            test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            test_dataset, batch_size=batch_size, num_workers=num_workers
         )
         
         logger.info(f"Created data loaders:")
-        logger.info(f"  Train: {len(train_dataset)} samples from {len(train_participants)} participants")
-        logger.info(f"  Val: {len(val_dataset)} samples from {len(val_participants)} participants")
-        logger.info(f"  Test: {len(test_dataset)} samples from {len(test_participants)} participants")
+        logger.info(f"  Train: {len(train_participants)} participants")
+        logger.info(f"  Val: {len(val_participants)} participants")
+        logger.info(f"  Test: {len(test_participants)} participants")
         
         return train_loader, val_loader, test_loader
     
@@ -522,25 +424,16 @@ class EEGDataLoader:
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
         
-        # Create full dataset with specified parameters
-        full_dataset = EEGDataset(
-            pickle_dir=pickle_dir, 
-            task_type=task_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            target_type=target_type
-        )
-        
-        # Get unique participants and their stratification labels
-        participants = list(set(sample['participant_id'] for sample in full_dataset.samples))
+        # Get unique participants and their stratification labels by iterating through the dataset
         participant_data = {}
-        
-        for participant_id in participants:
-            participant_samples = [s for s in full_dataset.samples if s['participant_id'] == participant_id]
-            if participant_samples:
-                sample = participant_samples[0]  # Get first sample for metadata
+        temp_dataset = EEGDataset(
+            pickle_dir=pickle_dir,
+            task_type="both",  # Get all participants regardless of task_type
+            target_type="both"
+        )
+        for sample in temp_dataset:
+            participant_id = sample['participant_id']
+            if participant_id not in participant_data:
                 stratify_label = get_stratify_label(sample, stratify_by)
                 participant_data[participant_id] = stratify_label
         
@@ -569,62 +462,57 @@ class EEGDataLoader:
             train_participants = [train_val_participants[i] for i in train_indices]
             val_participants = [train_val_participants[i] for i in val_indices]
             
-            # Create datasets for this fold using proper initialization
-            train_samples = [s for s in full_dataset.samples if s['participant_id'] in train_participants]
-            val_samples = [s for s in full_dataset.samples if s['participant_id'] in val_participants]
-            test_samples = [s for s in full_dataset.samples if s['participant_id'] in test_participants]
-            
-            # Create dataset objects with proper initialization
-            train_dataset = EEGDataset._create_from_samples(
-                samples=train_samples,
+            # Create datasets for this fold with participant filtering
+            train_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=full_dataset.task_type,
-                transform=full_dataset.transform,
-                gender_transform=full_dataset.gender_transform,
-                age_transform=full_dataset.age_transform,
-                combined_transform=full_dataset.combined_transform,
-                target_type=full_dataset.target_type
+                task_type=task_type,
+                transform=transform,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                target_type=target_type,
+                participant_filter=train_participants
             )
             
-            val_dataset = EEGDataset._create_from_samples(
-                samples=val_samples,
+            val_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=full_dataset.task_type,
-                transform=full_dataset.transform,
-                gender_transform=full_dataset.gender_transform,
-                age_transform=full_dataset.age_transform,
-                combined_transform=full_dataset.combined_transform,
-                target_type=full_dataset.target_type
+                task_type=task_type,
+                transform=transform,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                target_type=target_type,
+                participant_filter=val_participants
             )
             
-            test_dataset = EEGDataset._create_from_samples(
-                samples=test_samples,
+            test_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=full_dataset.task_type,
-                transform=full_dataset.transform,
-                gender_transform=full_dataset.gender_transform,
-                age_transform=full_dataset.age_transform,
-                combined_transform=full_dataset.combined_transform,
-                target_type=full_dataset.target_type
+                task_type=task_type,
+                transform=transform,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                target_type=target_type,
+                participant_filter=test_participants
             )
             
             # Create data loaders
             train_loader = EEGDataLoader.create_dataloader(
-                train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+                train_dataset, batch_size=batch_size, num_workers=num_workers
             )
             val_loader = EEGDataLoader.create_dataloader(
-                val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+                val_dataset, batch_size=batch_size, num_workers=num_workers
             )
             test_loader = EEGDataLoader.create_dataloader(
-                test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+                test_dataset, batch_size=batch_size, num_workers=num_workers
             )
             
             fold_loaders.append((train_loader, val_loader, test_loader))
             
             logger.info(f"Fold {fold + 1}/{n_folds}:")
-            logger.info(f"  Train: {len(train_dataset)} samples from {len(train_participants)} participants")
-            logger.info(f"  Val: {len(val_dataset)} samples from {len(val_participants)} participants")
-            logger.info(f"  Test: {len(test_dataset)} samples from {len(test_participants)} participants")
+            logger.info(f"  Train: {len(train_participants)} participants")
+            logger.info(f"  Val: {len(val_participants)} participants")
+            logger.info(f"  Test: {len(test_participants)} participants")
         
         return fold_loaders
     
@@ -687,19 +575,17 @@ class EEGDataLoader:
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
         
-        # Create full dataset for both task types to get all participants
-        full_dataset = EEGDataset(
-            pickle_dir=pickle_dir, 
-            task_type="both",  # Load both to get all participants
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            target_type=target_type
+        # Get unique participants by iterating through the dataset
+        participants = set()
+        temp_dataset = EEGDataset(
+            pickle_dir=pickle_dir,
+            task_type="both",  # Get all participants regardless of task_type
+            target_type="both"
         )
+        for sample in temp_dataset:
+            participants.add(sample['participant_id'])
         
-        # Get unique participants
-        participants = list(set(sample['participant_id'] for sample in full_dataset.samples))
+        participants = list(participants)
         np.random.shuffle(participants)
         
         # Split participants
@@ -711,76 +597,56 @@ class EEGDataLoader:
         val_participants = participants[n_train:n_train + n_val]
         test_participants = participants[n_train + n_val:]
         
-        # Create training dataset (only train_task_type)
-        train_samples = [s for s in full_dataset.samples 
-                        if s['participant_id'] in train_participants 
-                        and s['task_type'] == train_task_type]
-        
-        # Create validation dataset (only val_test_task_type)
-        val_samples = [s for s in full_dataset.samples 
-                      if s['participant_id'] in val_participants 
-                      and s['task_type'] == val_test_task_type]
-        
-        # Create test dataset (only val_test_task_type)
-        test_samples = [s for s in full_dataset.samples 
-                       if s['participant_id'] in test_participants 
-                       and s['task_type'] == val_test_task_type]
-
-        # Shuffle samples within each split to ensure random ordering
-        np.random.shuffle(train_samples)
-        np.random.shuffle(val_samples)
-        np.random.shuffle(test_samples)
-        
-        # Create datasets
-        train_dataset = EEGDataset._create_from_samples(
-            samples=train_samples,
+        # Create datasets with correct task_type and participant filtering
+        train_dataset = EEGDataset(
             pickle_dir=pickle_dir,
-            task_type=train_task_type,
+            task_type=train_task_type,  # Only train_task_type
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=train_participants
         )
         
-        val_dataset = EEGDataset._create_from_samples(
-            samples=val_samples,
+        val_dataset = EEGDataset(
             pickle_dir=pickle_dir,
-            task_type=val_test_task_type,
+            task_type=val_test_task_type,  # Only val_test_task_type
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=val_participants
         )
         
-        test_dataset = EEGDataset._create_from_samples(
-            samples=test_samples,
+        test_dataset = EEGDataset(
             pickle_dir=pickle_dir,
-            task_type=val_test_task_type,
+            task_type=val_test_task_type,  # Only val_test_task_type
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
-            target_type=target_type
+            target_type=target_type,
+            participant_filter=test_participants
         )
         
         # Create data loaders
         train_loader = EEGDataLoader.create_dataloader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+            train_dataset, batch_size=batch_size, num_workers=num_workers
         )
         val_loader = EEGDataLoader.create_dataloader(
-            val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            val_dataset, batch_size=batch_size, num_workers=num_workers
         )
         test_loader = EEGDataLoader.create_dataloader(
-            test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            test_dataset, batch_size=batch_size, num_workers=num_workers
         )
         
         # Log statistics
         logger.info(f"Cross-task evaluation setup:")
-        logger.info(f"  Training: {len(train_dataset)} samples from {len(train_participants)} participants ({train_task_type} tasks)")
-        logger.info(f"  Validation: {len(val_dataset)} samples from {len(val_participants)} participants ({val_test_task_type} tasks)")
-        logger.info(f"  Test: {len(test_dataset)} samples from {len(test_participants)} participants ({val_test_task_type} tasks)")
+        logger.info(f"  Training: {len(train_participants)} participants ({train_task_type} tasks)")
+        logger.info(f"  Validation: {len(val_participants)} participants ({val_test_task_type} tasks)")
+        logger.info(f"  Test: {len(test_participants)} participants ({val_test_task_type} tasks)")
         logger.info(f"  No participant overlap between train and val/test sets")
         
         return train_loader, val_loader, test_loader
@@ -842,25 +708,16 @@ class EEGDataLoader:
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
         
-        # Create full dataset for both task types to get all participants
-        full_dataset = EEGDataset(
-            pickle_dir=pickle_dir, 
-            task_type="both",  # Load both to get all participants
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            target_type=target_type
-        )
-        
-        # Get unique participants and their stratification labels
-        participants = list(set(sample['participant_id'] for sample in full_dataset.samples))
+        # Get unique participants and their stratification labels by iterating through the dataset
         participant_data = {}
-        
-        for participant_id in participants:
-            participant_samples = [s for s in full_dataset.samples if s['participant_id'] == participant_id]
-            if participant_samples:
-                sample = participant_samples[0]  # Get first sample for metadata
+        temp_dataset = EEGDataset(
+            pickle_dir=pickle_dir,
+            task_type="both",  # Get all participants regardless of task_type
+            target_type="both"
+        )
+        for sample in temp_dataset:
+            participant_id = sample['participant_id']
+            if participant_id not in participant_data:
                 stratify_label = get_stratify_label(sample, stratify_by)
                 participant_data[participant_id] = stratify_label
         
@@ -889,72 +746,57 @@ class EEGDataLoader:
             train_participants = [train_val_participants[i] for i in train_indices]
             val_participants = [train_val_participants[i] for i in val_indices]
             
-            # Create training dataset (only train_task_type)
-            train_samples = [s for s in full_dataset.samples 
-                            if s['participant_id'] in train_participants 
-                            and s['task_type'] == train_task_type]
-            
-            # Create validation dataset (only val_test_task_type)
-            val_samples = [s for s in full_dataset.samples 
-                          if s['participant_id'] in val_participants 
-                          and s['task_type'] == val_test_task_type]
-            
-            # Create test dataset (only val_test_task_type)
-            test_samples = [s for s in full_dataset.samples 
-                           if s['participant_id'] in test_participants 
-                           and s['task_type'] == val_test_task_type]
-            
-            # Create datasets for this fold
-            train_dataset = EEGDataset._create_from_samples(
-                samples=train_samples,
+            # Create datasets for this fold with correct task_type and participant filtering
+            train_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=train_task_type,
+                task_type=train_task_type,  # Only train_task_type
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
                 combined_transform=combined_transform,
-                target_type=target_type
+                target_type=target_type,
+                participant_filter=train_participants
             )
             
-            val_dataset = EEGDataset._create_from_samples(
-                samples=val_samples,
+            val_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=val_test_task_type,
+                task_type=val_test_task_type,  # Only val_test_task_type
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
                 combined_transform=combined_transform,
-                target_type=target_type
+                target_type=target_type,
+                participant_filter=val_participants
             )
             
-            test_dataset = EEGDataset._create_from_samples(
-                samples=test_samples,
+            test_dataset = EEGDataset(
                 pickle_dir=pickle_dir,
-                task_type=val_test_task_type,
+                task_type=val_test_task_type,  # Only val_test_task_type
                 transform=transform,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
                 combined_transform=combined_transform,
-                target_type=target_type
+                target_type=target_type,
+                participant_filter=test_participants
             )
             
             # Create data loaders
             train_loader = EEGDataLoader.create_dataloader(
-                train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+                train_dataset, batch_size=batch_size, num_workers=num_workers
             )
             val_loader = EEGDataLoader.create_dataloader(
-                val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+                val_dataset, batch_size=batch_size, num_workers=num_workers
             )
             test_loader = EEGDataLoader.create_dataloader(
-                test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+                test_dataset, batch_size=batch_size, num_workers=num_workers
             )
             
             fold_loaders.append((train_loader, val_loader, test_loader))
             
             logger.info(f"Fold {fold + 1}/{n_folds} (Cross-task evaluation):")
-            logger.info(f"  Train: {len(train_dataset)} samples from {len(train_participants)} participants ({train_task_type} tasks)")
-            logger.info(f"  Val: {len(val_dataset)} samples from {len(val_participants)} participants ({val_test_task_type} tasks)")
-            logger.info(f"  Test: {len(test_dataset)} samples from {len(test_participants)} participants ({val_test_task_type} tasks)")
+            logger.info(f"  Train: {len(train_participants)} participants ({train_task_type} tasks)")
+            logger.info(f"  Val: {len(val_participants)} participants ({val_test_task_type} tasks)")
+            logger.info(f"  Test: {len(test_participants)} participants ({val_test_task_type} tasks)")
             logger.info(f"  No participant overlap between train and val/test sets")
         
         return fold_loaders
