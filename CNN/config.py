@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 class DataConfig:
     """Configuration for data loading and preprocessing."""
     pickle_dir: str = "path/to/pickle_dir"
-    segment_length: int = 200  # 200 for 1s, 800 for 4s
+    segment_length: int = None  # 200 for 1s, 800 for 4s
     
     # Data loading parameters
     batch_size: int = 128
@@ -129,6 +129,7 @@ class SystemConfig:
     log_dir: str = 'logs'
     device: str = 'auto'  # 'auto', 'cpu', 'cuda'
     verbose: bool = True
+    num_gpus: int = 2  # Number of GPUs to use for DataParallel (default: 2)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for serialization."""
@@ -138,5 +139,6 @@ class SystemConfig:
             'evaluation_dir': self.evaluation_dir,
             'log_dir': self.log_dir,
             'device': self.device,
-            'verbose': self.verbose
+            'verbose': self.verbose,
+            'num_gpus': self.num_gpus
         }
