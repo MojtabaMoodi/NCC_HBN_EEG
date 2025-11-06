@@ -5,10 +5,12 @@ EEG Data Preprocessing Script
 This script processes EEG data from the preprocessed_new directory structure:
 - Reads participant directories from multiple releases
 - Processes EEG data files (ccd = active task, sus = passive task)
-- Converts (2, 60, 240) EEG data to (60, 200) by dropping first 40 time points
+- Handles variable dimensions:
+  * (N, 60, 240): Drop first 40 time points, extract all N runs -> N runs of shape (60, 200)
+  * (N, 60, 200): Already correct shape, extract all N runs -> N runs of shape (60, 200)
 - Creates both 1-second and 4-second segments for different model requirements
 - Organizes data by task type and participant demographics
-- Creates pickle files for every 10 participants
+- Creates pickle files for every N participants (default: 1 participant per file for optimal loading)
 """
 
 import os
@@ -88,30 +90,56 @@ class EEGDataPreprocessor:
             logger.error(f"Error loading demographics for {participant_dir.name}: {e}")
             raise
     
-    def process_eeg_file(self, file_path: Path) -> Tuple[np.ndarray, np.ndarray]:
+    def process_eeg_file(self, file_path: Path) -> List[np.ndarray]:
         """
-        Process a single EEG file by dropping first 40 time points (0.2 seconds at 200 Hz).
+        Process a single EEG file and extract all runs.
+        
+        Handles different input shapes:
+        - (N, 60, 240): Drop first 40 time points, extract all N runs -> N runs of shape (60, 200)
+        - (N, 60, 200): Already correct shape, extract all N runs -> N runs of shape (60, 200)
         
         Args:
             file_path: Path to the .npy file
             
         Returns:
-            Tuple of two processed EEG data arrays (run1, run2), each with shape (60, 200)
+            List of processed EEG data arrays, each with shape (60, 200), or empty list if error
         """
         try:
             data = np.load(file_path)
-            if data.shape != (2, 60, 240):
-                logger.warning(f"Unexpected shape {data.shape} for file {file_path}")
-                return None, None
+            num_runs, num_channels, num_timepoints = data.shape
+            
+            # Validate expected dimensions
+            if num_channels != 60:
+                logger.warning(f"Unexpected number of channels {num_channels} (expected 60) for file {file_path}")
+                return []
+            
+            runs = []
+            
+            # Handle different time point lengths
+            if num_timepoints == 240:
+                # Standard case: drop first 40 time points (0.2 seconds at 200 Hz)
+                # Process all runs
+                for run_idx in range(num_runs):
+                    run_data = data[run_idx, :, 40:]  # Shape: (60, 200)
+                    runs.append(run_data)
+                logger.debug(f"Processed {num_runs} runs from {file_path.name} (dropped first 40 time points)")
                 
-            # Drop first 40 time points for both runs
-            run1_data = data[0, :, 40:]  # Shape: (60, 200) - First run
-            run2_data = data[1, :, 40:]  # Shape: (60, 200) - Second run
-            return run1_data, run2_data
+            elif num_timepoints == 200:
+                # Already correct shape, just extract all runs
+                for run_idx in range(num_runs):
+                    run_data = data[run_idx, :, :]  # Shape: (60, 200)
+                    runs.append(run_data)
+                logger.debug(f"Processed {num_runs} runs from {file_path.name} (already 200 time points)")
+                
+            else:
+                logger.warning(f"Unexpected time dimension {num_timepoints} (expected 200 or 240) for file {file_path}")
+                return []
+            
+            return runs
             
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}")
-            return None, None
+            return []
     
     def create_4s_segments(self, eeg_runs: List[np.ndarray]) -> List[np.ndarray]:
         """
@@ -172,36 +200,40 @@ class EEGDataPreprocessor:
         # Sort by trial number (extract number from filename for proper sorting)
         def get_trial_number(file_path):
             filename = file_path.stem
-            if filename.startswith("ccd_data_trial_"):
-                return int(filename.split("_")[-1])
-            elif filename.startswith("sus_data_trial_"):
-                return int(filename.split("_")[-1])
+            # Handle patterns like: ccd_data_trial_X, ccd_1_data_trial_X, sus_data_trial_X, sus_1_data_trial_X, sus_2_data_trial_X
+            if "_data_trial_" in filename:
+                # Extract trial number from end of filename (after "trial_")
+                trial_num_str = filename.split("_trial_")[-1]
+                try:
+                    return int(trial_num_str)
+                except ValueError:
+                    logger.warning(f"Could not extract trial number from {filename}, using 0")
+                    return 0
             else:
-                raise ValueError(f"Unknown file type: {filename}")
+                logger.warning(f"Unexpected filename pattern: {filename}, using 0 for sorting")
+                return 0
         
         npy_files.sort(key=get_trial_number)  # Sort by trial number
 
         for file_path in npy_files:
-            filename = file_path.stem  # e.g., "ccd_data_trial_0" or "sus_data_trial_0"
+            filename = file_path.stem  # e.g., "ccd_data_trial_0", "ccd_1_data_trial_0", "sus_data_trial_0", "sus_2_data_trial_0"
             
-            # Determine task type
+            # Determine task type - check if starts with "ccd" (with or without number) or "sus" (with or without number)
             if filename.startswith("ccd"):
                 task_type = "active"
             elif filename.startswith("sus"):
                 task_type = "passive"
             else:
-                logger.warning(f"Unknown file type: {filename}")
+                logger.warning(f"Unknown file type: {filename}, skipping")
                 continue
             
-            # Process EEG data
-            run1_data, run2_data = self.process_eeg_file(file_path)
-            if run1_data is not None and run2_data is not None:
+            # Process EEG data - now returns a list of runs
+            runs = self.process_eeg_file(file_path)
+            if runs:  # If we got any runs
                 if task_type == "active":
-                    active_eeg.append(run1_data)  # Add run1
-                    active_eeg.append(run2_data)  # Add run2
+                    active_eeg.extend(runs)  # Add all runs
                 else:  # passive
-                    passive_eeg.append(run1_data)  # Add run1
-                    passive_eeg.append(run2_data)  # Add run2
+                    passive_eeg.extend(runs)  # Add all runs
         
         # Create 4-second segments for both task types
         passive_eeg_4s = self.create_4s_segments(passive_eeg)
@@ -218,7 +250,7 @@ class EEGDataPreprocessor:
             'demographics': demographics
         }
     
-    def process_all_participants(self, batch_size: int = 10) -> None:
+    def process_all_participants(self, batch_size: int) -> None:
         """
         Process all participants from all releases and save in batches.
         
@@ -347,16 +379,18 @@ class EEGDataPreprocessor:
 def main():
     """Main function to run the preprocessing pipeline."""
     data_root = "/home/mojtabam/scratch/preprocessed_new"
-    output_dir_1s = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments"
-    output_dir_4s = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_4s_segments"
+    output_dir_1s = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments_v2"
+    output_dir_4s = "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_4s_segments_v2"
     
     # Create preprocessor
     preprocessor = EEGDataPreprocessor(data_root, output_dir_1s, output_dir_4s)
     
     # Process all participants in batches and save immediately
+    # Using batch_size=10 (10 participants per file)
     logger.info("Starting EEG data preprocessing...")
     logger.info(f"1-second segments will be saved to: {output_dir_1s}")
     logger.info(f"4-second segments will be saved to: {output_dir_4s}")
+    logger.info("Saving one participant per file for optimal data loading performance")
     preprocessor.process_all_participants(batch_size=10)
     
     logger.info("Preprocessing completed successfully!")
