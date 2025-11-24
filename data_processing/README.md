@@ -1,6 +1,6 @@
 # EEG Data Processing Pipeline
 
-This comprehensive guide covers the entire EEG data processing pipeline, from raw data preprocessing to model training with PyTorch. The system has been completely refactored to eliminate code duplication and provide a clean, maintainable architecture.
+This comprehensive guide covers the entire EEG data processing pipeline, from raw data preprocessing to model training with PyTorch. The system uses HDF5 format for efficient storage and streaming of large EEG datasets.
 
 ## Quick Start
 
@@ -9,25 +9,24 @@ This comprehensive guide covers the entire EEG data processing pipeline, from ra
 from eeg_data_preprocessing import EEGDataPreprocessor
 from eeg_dataset import EEGDataset, EEGDataLoader
 
-# 1. Preprocess data (creates both 1s and 4s segments)
+# 1. Preprocess data (creates HDF5 files with train/val/test splits)
 preprocessor = EEGDataPreprocessor(
     data_root="/path/to/preprocessed_new",
-    output_dir_1s="/path/to/1s_segments",
-    output_dir_4s="/path/to/4s_segments"
+    output_dir="/path/to/processed_eeg_data_hdf5"
 )
-participants = preprocessor.process_all_participants()
+participants = preprocessor.process_all_participants(n_jobs=64)  # Use all CPU cores
 
-# 2. Create dataset
+# 2. Create dataset from HDF5 file
 dataset = EEGDataset(
-    pickle_dir="/path/to/1s_segments",  # or "/path/to/4s_segments"
-    task_type="both"  # "active", "passive", or "both"
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",  # "active", "passive", or "both"
+    shuffle=True  # Shuffle for training
 )
 
 # 3. Create data loader
 dataloader = EEGDataLoader.create_dataloader(
     dataset=dataset,
     batch_size=32,
-    shuffle=True,
     num_workers=4
 )
 
@@ -45,6 +44,7 @@ for batch in dataloader:
 - PyTorch
 - NumPy
 - Pandas
+- h5py
 - scikit-learn
 
 ## Table of Contents
@@ -67,29 +67,32 @@ This pipeline processes EEG data from the preprocessed_new directory structure a
 - **Age Classification**: 3-class classification (<8.5, 8.5-12.5, >12.5 years)
 - **Age Regression**: Continuous age prediction with multiple normalization strategies
 - **Combined Classification**: Gender+age combinations (6 classes)
-- **Dual Segment Processing**: Creates both 1-second and 4-second segments
+- **HDF5 Storage**: Efficient storage with gzip compression for large datasets
+- **Streaming Data Loading**: Memory-efficient IterableDataset for large datasets
 - **Cross-Task Evaluation**: Train on one task type, test on another
-- **N-Fold Cross-Validation**: With stratification by gender, age, or both
+- **Participant-Level Filtering**: Flexible participant isolation or mixing for training
 
 ## Key Features
 
-- **Dual Segment Processing**: Automatically creates both 1s and 4s segments during preprocessing
+- **HDF5 Storage**: Efficient hierarchical storage with gzip compression
 - **Data Processing**: Converts (2, 60, 240) EEG data to (60, 200) or (60, 800) by concatenating runs
-- **Task Separation**: Separates active (ccd) and passive (sus) tasks
-- **Participant Batching**: Groups 10 participants per pickle file for efficient loading
+- **Task Separation**: Separates active (ccd) and passive (sus) tasks into separate groups
+- **Streaming Data Loading**: Memory-efficient IterableDataset for large datasets
 - **PyTorch Integration**: Full PyTorch Dataset and DataLoader support
-- **Flexible Splits**: Easy train/validation/test splitting by participants
-- **Cross-Validation**: N-fold cross-validation with stratification
+- **Pre-split Data**: Train/validation/test splits created during preprocessing
+- **Participant Metadata**: Each segment stores participant_id for flexible filtering
 - **Cross-Task Evaluation**: Train on one task type, test on another
-- **Participant Isolation**: Ensures no data leakage between splits
+- **Participant-Level Filtering**: Filter by participant IDs for flexible training strategies
+- **Multiprocessing**: Parallel preprocessing using all available CPU cores
 - **Type Safety**: Comprehensive type hints and validation
 
 ### Important Notes
-- The pipeline preserves participant-level splits to avoid data leakage
-- Each pickle file contains exactly 10 participants for efficient loading
-- The dataset supports filtering by task type (active/passive/both)
+- The pipeline creates pre-split HDF5 files (train/val/test) during preprocessing
+- Each EEG segment stores participant_id in metadata for participant-level filtering
+- The dataset supports filtering by task type (active/passive/both) and participant IDs
 - All EEG data is converted to PyTorch tensors automatically
-- Both 1-second and 4-second segments are created during preprocessing
+- Training data is shuffled by default to avoid participant-level batch correlations
+- Worker sharding is implemented for multiprocessing DataLoader workers
 
 ## Data Structure
 
@@ -109,18 +112,36 @@ preprocessed_new/
     └── ...
 ```
 
-### Output Data Structure
-Each pickle file contains 10 participants with the following structure:
-```python
-{
-    'participant_id': str,
-    'gender': float,  # 1.0 = male, 0.0 = female
-    'age': float,
-    'passive_eeg': [eeg_data_1, eeg_data_2, ...],  # List of (60, 200) or (60, 800) arrays
-    'active_eeg': [eeg_data_1, eeg_data_2, ...],   # List of (60, 200) or (60, 800) arrays
-    'demographics': {'age': float, 'gender': float}
-}
+### Output Data Structure (HDF5 Format)
+The preprocessing creates HDF5 files with the following structure:
+
 ```
+eeg_data_{split}_{segment_length}.h5  # e.g., eeg_data_train_1s.h5
+├── active/          (Group)
+│   ├── sample_XXXXXX (Dataset: EEG array, shape (60, 200) or (60, 800))
+│   └── metadata_XXXXXX (Group with attributes)
+│       ├── participant_id: str
+│       ├── gender: int (1 = male, 0 = female)
+│       ├── age: float
+│       ├── task_type: str ("active")
+│       └── task_number: int
+└── passive/         (Group)
+    ├── sample_XXXXXX (Dataset: EEG array, shape (60, 200) or (60, 800))
+    └── metadata_XXXXXX (Group with attributes)
+        ├── participant_id: str
+        ├── gender: int (1 = male, 0 = female)
+        ├── age: float
+        ├── task_type: str ("passive")
+        └── task_number: int
+
+File-level attributes:
+- split_name: str ("train", "val", or "test")
+- segment_length: str ("1s", "2s", or "4s")
+- num_participants: int
+- total_samples: int
+```
+
+Each sample is stored as a separate dataset with gzip compression for efficient storage.
 
 ## Data Preprocessing
 
@@ -139,9 +160,15 @@ Each pickle file contains 10 participants with the following structure:
    - Active tasks: `ccd_trial_{trial_num}_run{run_num}`
    - Passive tasks: `sus_trial_{trial_num}_run{run_num}`
 
-4. **Participant Batching**:
-   - Groups exactly 10 participants per pickle file
-   - Maintains participant-level isolation
+4. **HDF5 Storage**:
+   - Creates separate HDF5 files for train/val/test splits
+   - Stores segments with gzip compression
+   - Each segment includes participant_id in metadata
+   - Supports multiple segment lengths (1s, 2s, 4s)
+
+5. **Multiprocessing**:
+   - Parallel processing of participants using all available CPU cores
+   - Two-pass approach: first pass collects metadata, second pass saves to HDF5
 
 ### Preprocessing Usage
 ```python
@@ -150,71 +177,101 @@ from eeg_data_preprocessing import EEGDataPreprocessor
 # Initialize preprocessor
 preprocessor = EEGDataPreprocessor(
     data_root="/path/to/preprocessed_new",
-    output_dir_1s="/path/to/1s_segments",
-    output_dir_4s="/path/to/4s_segments"
+    output_dir="/path/to/processed_eeg_data_hdf5"
 )
 
-# Process all participants
-participants = preprocessor.process_all_participants()
+# Process all participants with multiprocessing
+# n_jobs=None uses all available CPU cores
+participants = preprocessor.process_all_participants(n_jobs=64)
 
-# The preprocessor automatically creates both 1s and 4s segments
+# Creates HDF5 files:
+# - eeg_data_train_1s.h5, eeg_data_val_1s.h5, eeg_data_test_1s.h5
+# - eeg_data_train_2s.h5, eeg_data_val_2s.h5, eeg_data_test_2s.h5
+# - eeg_data_train_4s.h5, eeg_data_val_4s.h5, eeg_data_test_4s.h5
 ```
 
 ## Dataset and DataLoader Classes
 
 ### EEGDataset Class
-The main dataset class for loading and processing EEG data.
+The main IterableDataset class for loading and processing EEG data from HDF5 files.
 
 ```python
 from eeg_dataset import EEGDataset
 
 # Basic usage
 dataset = EEGDataset(
-    pickle_dir="/path/to/pickles",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
     task_type="both",  # "active", "passive", or "both"
     target_type="both",  # "gender", "age", "both", "combined"
     transform=None,  # Optional input transform
     gender_transform=None,  # Optional gender target transform
     age_transform=None,  # Optional age target transform
-    combined_transform=None  # Optional combined target transform
+    combined_transform=None,  # Optional combined target transform
+    participant_filter=None,  # Optional list of participant IDs to include
+    shuffle=True,  # Shuffle samples (recommended for training)
+    random_seed=42  # Random seed for reproducibility
 )
 ```
 
 ### Specialized Dataset Creation
 ```python
+from target_transforms import (
+    gender_classification_transform,
+    age_classification_transform,
+    age_regression_transform,
+    combined_gender_age_classification_transform
+)
+
 # Gender classification dataset
-gender_dataset = EEGDataset.create_gender_classification_dataset(
-    pickle_dir="/path/to/pickles"
+gender_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",
+    target_type="gender",
+    gender_transform=gender_classification_transform
 )
 
 # Age classification dataset
-age_dataset = EEGDataset.create_age_classification_dataset(
-    pickle_dir="/path/to/pickles"
+age_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",
+    target_type="age",
+    age_transform=age_classification_transform
 )
 
 # Age regression dataset
-regression_dataset = EEGDataset.create_age_regression_dataset(
-    pickle_dir="/path/to/pickles"
+regression_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",
+    target_type="age",
+    age_transform=age_regression_transform
 )
 
 # Combined classification dataset
-combined_dataset = EEGDataset.create_combined_classification_dataset(
-    pickle_dir="/path/to/pickles"
+combined_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",
+    target_type="combined",
+    combined_transform=combined_gender_age_classification_transform
 )
 
-# Multi-task dataset
-multi_task_dataset = EEGDataset.create_multi_task_dataset(
-    pickle_dir="/path/to/pickles"
+# Multi-task dataset (separate heads for gender and age)
+multi_task_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    task_type="both",
+    target_type="both",
+    gender_transform=gender_classification_transform,
+    age_transform=age_classification_transform
 )
 ```
 
 ### Key Features
-- **PyTorch Integration**: Full PyTorch Dataset and DataLoader support
-- **Flexible Splits**: Easy train/validation/test splitting by participants
+- **PyTorch Integration**: Full PyTorch IterableDataset and DataLoader support
+- **Streaming Data Loading**: Memory-efficient loading of large datasets
 - **Custom Transforms**: Support for both input and target transforms
-- **Cross-Validation**: N-fold cross-validation with stratification
-- **Cross-Task Evaluation**: Train on one task type, test on another
-- **Participant Isolation**: Ensures no data leakage between splits
+- **Participant Filtering**: Filter by participant IDs for flexible training strategies
+- **Task Type Filtering**: Filter by task type (active/passive/both)
+- **Worker Sharding**: Automatic data distribution across DataLoader workers
+- **Shuffling**: Optional shuffling to avoid participant-level batch correlations
 
 ## Target Transforms
 
@@ -264,85 +321,83 @@ from target_transforms import (
 
 # Gender classification
 gender_dataset = EEGDataset(
-    pickle_dir="/path/to/pickles",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
     gender_transform=gender_classification_transform,
     target_type="gender"
 )
 
 # Age classification
 age_dataset = EEGDataset(
-    pickle_dir="/path/to/pickles",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
     age_transform=age_classification_transform,
     target_type="age"
 )
 
 # Age regression
 age_reg_dataset = EEGDataset(
-    pickle_dir="/path/to/pickles",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
     age_transform=age_regression_transform,
     target_type="age"
 )
 
 # Combined classification
 combined_dataset = EEGDataset(
-    pickle_dir="/path/to/pickles",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
     combined_transform=combined_gender_age_classification_transform,
     target_type="combined"
 )
 ```
 
-## Cross-Validation and Cross-Task Evaluation
-
-### Cross-Validation
-The system supports stratified cross-validation with multiple stratification options:
-
-```python
-from eeg_dataset import EEGDataLoader
-
-# 5-fold cross-validation with gender stratification
-fold_loaders = EEGDataLoader.create_cross_validation_loaders(
-    pickle_dir="/path/to/pickles",
-    n_folds=5,
-    stratify_by="gender",  # "gender", "age", or "both"
-    task_type="both",
-    target_type="both"
-)
-
-# Use the fold loaders
-for fold, (train_loader, val_loader, test_loader) in enumerate(fold_loaders):
-    print(f"Fold {fold + 1}:")
-    print(f"  Train batches: {len(train_loader)}")
-    print(f"  Val batches: {len(val_loader)}")
-    print(f"  Test batches: {len(test_loader)}")
-```
+## Cross-Task Evaluation
 
 ### Cross-Task Evaluation
-Train on one task type and test on another:
+Train on one task type and test on another by creating datasets with different task types:
 
 ```python
-# Train on active tasks, test on passive tasks
-train_loader, val_loader, test_loader = EEGDataLoader.create_cross_task_loaders(
-    pickle_dir="/path/to/pickles",
-    train_task_type="active",
-    val_test_task_type="passive",
-    task_type="both",
-    target_type="both"
+from eeg_dataset import EEGDataset, EEGDataLoader
+from pathlib import Path
+
+# Get HDF5 file paths
+hdf5_dir = Path("/path/to/processed_eeg_data_hdf5")
+train_file = hdf5_dir / "eeg_data_train_1s.h5"
+val_file = hdf5_dir / "eeg_data_val_1s.h5"
+test_file = hdf5_dir / "eeg_data_test_1s.h5"
+
+# Create datasets: train on active, test on passive
+train_dataset = EEGDataset(
+    hdf5_file=str(train_file),
+    task_type="active",  # Train on active tasks
+    shuffle=True
 )
+val_dataset = EEGDataset(
+    hdf5_file=str(val_file),
+    task_type="passive",  # Validate on passive tasks
+    shuffle=False
+)
+test_dataset = EEGDataset(
+    hdf5_file=str(test_file),
+    task_type="passive",  # Test on passive tasks
+    shuffle=False
+)
+
+# Create loaders
+train_loader = EEGDataLoader.create_dataloader(train_dataset, batch_size=32)
+val_loader = EEGDataLoader.create_dataloader(val_dataset, batch_size=32)
+test_loader = EEGDataLoader.create_dataloader(test_dataset, batch_size=32)
 ```
 
-### Cross-Task Cross-Validation
-Combine cross-validation with cross-task evaluation:
+### Participant-Level Filtering
+Filter by participant IDs for flexible training strategies (e.g., participant isolation):
 
 ```python
-# 5-fold cross-validation with cross-task evaluation
-fold_loaders = EEGDataLoader.create_cross_task_cross_validation_loaders(
-    pickle_dir="/path/to/pickles",
-    train_task_type="active",
-    val_test_task_type="passive",
-    n_folds=5,
-    stratify_by="gender",
-    task_type="both",
-    target_type="both"
+# Get list of participant IDs from train split
+# (You would extract this from the HDF5 file or maintain a separate list)
+
+# Train on specific participants
+train_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    participant_filter=["sub-NDARAC904DMU", "sub-NDARAB514MAJ"],  # Only these participants
+    shuffle=True
 )
 ```
 
@@ -354,52 +409,66 @@ from eeg_data_preprocessing import EEGDataPreprocessor
 from eeg_dataset import EEGDataset, EEGDataLoader
 from target_transforms import gender_classification_transform
 
-# 1. Preprocess data
+# 1. Preprocess data (creates HDF5 files with train/val/test splits)
 preprocessor = EEGDataPreprocessor(
     data_root="/path/to/preprocessed_new",
-    output_dir_1s="/path/to/1s_segments",
-    output_dir_4s="/path/to/4s_segments"
+    output_dir="/path/to/processed_eeg_data_hdf5"
 )
-participants = preprocessor.process_all_participants()
+participants = preprocessor.process_all_participants(n_jobs=64)
 
-# 2. Create dataset
-dataset = EEGDataset(
-    pickle_dir="/path/to/1s_segments",
-    task_type="both",
-    gender_transform=gender_classification_transform,
-    target_type="gender"
-)
-
-# 3. Create data loaders
+# 2. Create data loaders from pre-split HDF5 files
 train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
-    pickle_dir="/path/to/1s_segments",
+    hdf5_dir="/path/to/processed_eeg_data_hdf5",
+    segment_length="1s",
     task_type="both",
-    target_type="gender"
+    target_type="gender",
+    gender_transform=gender_classification_transform,
+    batch_size=32,
+    num_workers=4,
+    shuffle_train=True
 )
 
-# 4. Train model
+# 3. Train model
 for epoch in range(num_epochs):
     for batch in train_loader:
         eeg_data = batch['eeg_data']  # (batch_size, 60, 200)
         gender = batch['gender']      # (batch_size,)
+        participant_ids = batch['participant_ids']
         # ... training code ...
 ```
 
-### Cross-Validation Example
+### Task-Type-Specific Evaluation
+Evaluate model performance separately for active and passive tasks:
+
 ```python
-# 5-fold cross-validation
-fold_loaders = EEGDataLoader.create_cross_validation_loaders(
-    pickle_dir="/path/to/1s_segments",
-    n_folds=5,
-    stratify_by="gender",
-    task_type="both",
-    target_type="gender"
+from evaluator import EEGEvaluator
+
+# Create datasets for each task type
+active_test_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_test_1s.h5",
+    task_type="active",
+    shuffle=False
+)
+passive_test_dataset = EEGDataset(
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_test_1s.h5",
+    task_type="passive",
+    shuffle=False
 )
 
-# Train on each fold
-for fold, (train_loader, val_loader, test_loader) in enumerate(fold_loaders):
-    print(f"Training fold {fold + 1}")
-    # ... training code for this fold ...
+# Create loaders
+active_loader = EEGDataLoader.create_dataloader(active_test_dataset, batch_size=32)
+passive_loader = EEGDataLoader.create_dataloader(passive_test_dataset, batch_size=32)
+
+# Evaluate separately
+evaluator = EEGEvaluator()
+active_results = evaluator.evaluate_by_task_type(
+    model=model,
+    data_loaders={"active": active_loader}
+)
+passive_results = evaluator.evaluate_by_task_type(
+    model=model,
+    data_loaders={"passive": passive_loader}
+)
 ```
 
 ## File Structure
@@ -407,39 +476,53 @@ for fold, (train_loader, val_loader, test_loader) in enumerate(fold_loaders):
 ```
 EEG/data_processing/
 ├── eeg_data_preprocessing.py    # Main preprocessing pipeline
-├── eeg_dataset.py              # PyTorch Dataset and DataLoader classes
+├── eeg_dataset.py              # PyTorch IterableDataset and DataLoader classes
 ├── target_transforms.py        # Target transformation functions
 ├── constants.py                # Shared constants and utilities
-├── processed_eeg_data_1s_segments/  # 1-second segment pickle files
-├── processed_eeg_data_4s_segments/  # 4-second segment pickle files
+├── processed_eeg_data_hdf5/    # HDF5 files with train/val/test splits
+│   ├── eeg_data_train_1s.h5
+│   ├── eeg_data_val_1s.h5
+│   ├── eeg_data_test_1s.h5
+│   ├── eeg_data_train_2s.h5
+│   ├── eeg_data_val_2s.h5
+│   ├── eeg_data_test_2s.h5
+│   ├── eeg_data_train_4s.h5
+│   ├── eeg_data_val_4s.h5
+│   └── eeg_data_test_4s.h5
 └── README.md                   # This file
 ```
 
 ## Best Practices
 
 ### 1. Data Preprocessing
-- Always use the dual preprocessing to create both 1s and 4s segments
-- Verify data integrity after preprocessing
-- Use appropriate batch sizes for your memory constraints
+- Use multiprocessing (`n_jobs`) to speed up preprocessing on multi-core systems
+- Verify data integrity after preprocessing by checking HDF5 file attributes
+- The preprocessing creates pre-split train/val/test files automatically
 
 ### 2. Dataset Usage
-- Choose the appropriate segment length for your model (1s vs 4s)
-- Use stratified cross-validation for balanced evaluation
-- Ensure participant-level splits to avoid data leakage
+- Choose the appropriate segment length for your model (1s, 2s, or 4s)
+- Use `shuffle=True` for training data to avoid participant-level batch correlations
+- Use `shuffle=False` for validation and test data
+- Filter by participant IDs if you need participant-level isolation
 
-### 3. Cross-Validation
-- Use appropriate stratification based on your target variable
-- Consider the class distribution when choosing the number of folds
-- Validate that stratification is working correctly
+### 3. Data Loading
+- Use `num_workers > 0` for parallel data loading (worker sharding is automatic)
+- Set `pin_memory=True` for GPU training (default in `create_dataloader`)
+- Adjust batch size based on your GPU memory
 
-### 4. Performance
+### 4. Cross-Task Evaluation
+- Create separate datasets with different `task_type` parameters
+- Use the same HDF5 file but filter by task type at dataset level
+- Evaluate model performance separately for each task type
+
+### 5. Performance
 - Use appropriate batch sizes and number of workers
-- Consider memory constraints when loading large datasets
-- Use pin_memory=True for GPU training
+- HDF5 streaming is memory-efficient for large datasets
+- Worker sharding ensures no data duplication with `num_workers > 0`
 
-### 5. Reproducibility
-- Set random seeds for reproducible results
-- Use consistent train/val/test splits across experiments
+### 6. Reproducibility
+- Set `random_seed` for reproducible shuffling
+- Pre-split HDF5 files ensure consistent train/val/test splits
 - Document your preprocessing and evaluation procedures
 
 ## Troubleshooting
@@ -447,41 +530,44 @@ EEG/data_processing/
 ### Common Issues
 
 1. **Memory Issues**: Reduce batch size or number of workers
-2. **Stratification Errors**: Check that you have enough samples per class
-3. **Data Loading Errors**: Verify pickle file paths and structure
+2. **HDF5 File Not Found**: Verify the HDF5 file path and that preprocessing completed successfully
+3. **Data Loading Errors**: Verify HDF5 file structure and that groups (active/passive) exist
 4. **Transform Errors**: Ensure transforms match your target type
+5. **Worker Sharding Issues**: If using `num_workers > 0`, ensure worker sharding is working correctly
 
 ### Debugging Tips
 
-1. **Check Data Distribution**: Use dataset statistics to verify data loading
-2. **Validate Stratification**: Test cross-validation with small datasets first
+1. **Check HDF5 Structure**: Inspect HDF5 files using `h5py` to verify structure
+2. **Check Data Distribution**: Use dataset statistics to verify data loading
 3. **Monitor Memory Usage**: Use appropriate batch sizes for your hardware
 4. **Verify Transforms**: Test transforms on sample data before training
+5. **Test Worker Sharding**: Verify that samples are not duplicated when using multiple workers
 
 ## API Reference
 
 ### EEGDataPreprocessor
-- `__init__(data_root, output_dir_1s, output_dir_4s)`: Initialize preprocessor
-- `process_all_participants()`: Process all participants and create segments
-- `process_participant(participant_id)`: Process a single participant
+- `__init__(data_root, output_dir)`: Initialize preprocessor
+- `process_all_participants(n_jobs=None)`: Process all participants and create HDF5 files
+  - `n_jobs`: Number of parallel workers (None = use all CPU cores)
 
 ### EEGDataset
-- `__init__(pickle_dir, task_type, target_type, ...)`: Initialize dataset
-- `create_gender_classification_dataset(pickle_dir)`: Create gender classification dataset
-- `create_age_classification_dataset(pickle_dir)`: Create age classification dataset
-- `create_age_regression_dataset(pickle_dir)`: Create age regression dataset
-- `create_combined_classification_dataset(pickle_dir)`: Create combined classification dataset
-- `create_multi_task_dataset(pickle_dir)`: Create multi-task dataset
+- `__init__(hdf5_file, task_type, target_type, ...)`: Initialize IterableDataset
+  - `hdf5_file`: Path to HDF5 file (e.g., "eeg_data_train_1s.h5")
+  - `task_type`: "active", "passive", or "both"
+  - `target_type`: "gender", "age", "both", "combined"
+  - `participant_filter`: Optional list of participant IDs to include
+  - `shuffle`: Whether to shuffle samples (default: False)
+  - `random_seed`: Random seed for shuffling
 
 ### EEGDataLoader
-- `create_dataloader(dataset, batch_size, ...)`: Create PyTorch DataLoader
-- `create_train_val_test_loaders(pickle_dir, ...)`: Create train/val/test loaders
-- `create_cross_validation_loaders(pickle_dir, ...)`: Create cross-validation loaders
-- `create_cross_task_loaders(pickle_dir, ...)`: Create cross-task loaders
-- `create_cross_task_cross_validation_loaders(pickle_dir, ...)`: Create cross-task CV loaders
+- `create_dataloader(dataset, batch_size, num_workers, ...)`: Create PyTorch DataLoader
+  - Automatically handles worker sharding for `num_workers > 0`
+- `create_train_val_test_loaders(hdf5_dir, segment_length, ...)`: Create train/val/test loaders
+  - Loads from pre-split HDF5 files
+  - `shuffle_train`: Whether to shuffle training data (default: True)
 
 ### Target Transforms
-- `gender_classification_transform(gender)`: Convert gender to classification target
-- `age_classification_transform(age)`: Convert age to classification target
-- `age_regression_transform(age)`: Convert age to regression target
-- `combined_gender_age_classification_transform(gender, age)`: Convert to combined target
+- `gender_classification_transform(gender)`: Convert gender to classification target (0/1)
+- `age_classification_transform(age)`: Convert age to classification target (0/1/2)
+- `age_regression_transform(age)`: Convert age to regression target (normalized 0-1)
+- `combined_gender_age_classification_transform(gender, age)`: Convert to combined target (0-5)
