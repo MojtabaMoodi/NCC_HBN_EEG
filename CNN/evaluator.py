@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
+from collections import OrderedDict
 from sklearn.metrics import (
     accuracy_score, precision_recall_fscore_support, 
     confusion_matrix, classification_report, roc_auc_score
@@ -20,7 +21,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # For combined experiments, compute combined class from gender and age
-sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
+sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from constants import get_combined_class
 from utils import safe_json_dump, convert_numpy_types
 
@@ -93,10 +94,25 @@ class EEGEvaluator:
         self.model.eval()
     
     def _get_underlying_model(self):
-        """Get the underlying model, unwrapping DataParallel if needed."""
-        if isinstance(self.model, torch.nn.DataParallel):
-            return self.model.module
-        return self.model
+        """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
+        model = self.model
+        
+        # Recursively unwrap until we get to the base model
+        while True:
+            # Unwrap torch.compile wrapper (has _orig_mod attribute)
+            if hasattr(model, '_orig_mod'):
+                model = model._orig_mod
+                continue
+            
+            # Unwrap DataParallel wrapper
+            if isinstance(model, torch.nn.DataParallel):
+                model = model.module
+                continue
+            
+            # No more wrappers to unwrap
+            break
+        
+        return model
     
     def _get_default_class_names(self) -> List[str]:
         """Get default class names based on target type."""
@@ -292,6 +308,88 @@ class EEGEvaluator:
         results.evaluation_time = time.time() - start_time
         
         return results
+    
+    def evaluate_by_task_type(self, task_type_loaders: Dict[str, DataLoader]) -> Dict[str, EvaluationResults]:
+        """
+        Evaluate model separately on different task types (e.g., active vs passive).
+        
+        This method is useful when you train on all task types but want to evaluate
+        performance separately for each task type to understand task-specific performance.
+        
+        Example usage:
+            # Train on all task types
+            train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
+                hdf5_dir="processed_eeg_data_hdf5",
+                task_type="both"  # Train on both active and passive
+            )
+            
+            # ... train model ...
+            
+            # Evaluate separately on active and passive tasks
+            from eeg_dataset import EEGDataset, EEGDataLoader
+            from pathlib import Path
+            
+            # Get the test file path
+            hdf5_dir_path = Path("processed_eeg_data_hdf5")
+            train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+                hdf5_dir_path, segment_length="1s"
+            )
+            
+            # Create datasets for each task type
+            active_dataset = EEGDataset(hdf5_file=str(test_file), task_type="active")
+            passive_dataset = EEGDataset(hdf5_file=str(test_file), task_type="passive")
+            
+            # Create loaders
+            active_loader = EEGDataLoader.create_dataloader(active_dataset, batch_size=32)
+            passive_loader = EEGDataLoader.create_dataloader(passive_dataset, batch_size=32)
+            
+            # Evaluate separately
+            test_loaders_by_task = {'active': active_loader, 'passive': passive_loader}
+            results_by_task = evaluator.evaluate_by_task_type(test_loaders_by_task)
+            # Returns: {'active': EvaluationResults, 'passive': EvaluationResults}
+            
+            # Access results
+            active_accuracy = results_by_task['active'].metrics['accuracy']
+            passive_accuracy = results_by_task['passive'].metrics['accuracy']
+        
+        Args:
+            task_type_loaders: Dictionary mapping task type names to DataLoaders
+                             (e.g., {'active': active_loader, 'passive': passive_loader})
+        
+        Returns:
+            Dictionary mapping task type names to EvaluationResults
+            (e.g., {'active': EvaluationResults, 'passive': EvaluationResults})
+        """
+        results_by_task_type = {}
+        
+        for task_type, loader in task_type_loaders.items():
+            print(f"\n{'='*60}")
+            print(f"Evaluating on {task_type} tasks...")
+            print(f"{'='*60}")
+            
+            # Evaluate on this task type
+            results = self.evaluate(loader)
+            results_by_task_type[task_type] = results
+            
+            # Print summary
+            print(f"\n{task_type.upper()} Task Results:")
+            print(f"  Accuracy: {results.metrics['accuracy']:.4f}")
+            if 'f1_weighted' in results.metrics:
+                print(f"  F1-Score (weighted): {results.metrics['f1_weighted']:.4f}")
+            if 'roc_auc' in results.metrics and results.metrics['roc_auc'] is not None:
+                print(f"  ROC-AUC: {results.metrics['roc_auc']:.4f}")
+            print(f"  Number of samples: {len(results.predictions) if results.predictions else len(results.gender_predictions) if results.gender_predictions is not None else 0}")
+        
+        # Print comparison summary
+        if len(results_by_task_type) > 1:
+            print(f"\n{'='*60}")
+            print("Task Type Comparison:")
+            print(f"{'='*60}")
+            for task_type, results in results_by_task_type.items():
+                print(f"  {task_type.upper()}: Accuracy = {results.metrics['accuracy']:.4f}, "
+                      f"F1 = {results.metrics.get('f1_weighted', 'N/A'):.4f if isinstance(results.metrics.get('f1_weighted'), (int, float)) else 'N/A'}")
+        
+        return results_by_task_type
     
     def _compute_metrics(self, predictions: List[int], true_labels: List[int], 
                         probabilities: List[List[float]], class_names: Optional[List[str]] = None) -> Dict[str, Any]:

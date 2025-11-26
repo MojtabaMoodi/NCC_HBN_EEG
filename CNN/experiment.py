@@ -8,6 +8,7 @@ import os
 import sys
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
+from pathlib import Path
 import torch
 import numpy as np
 
@@ -18,8 +19,8 @@ from config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, Sy
 from utils import safe_json_dump, convert_numpy_types
 
 # Import data processing modules
-sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
-from eeg_dataset import EEGDataLoader
+sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
+from eeg_dataset import EEGDataset, EEGDataLoader
 from target_transforms import gender_classification_transform, age_classification_transform, combined_gender_age_classification_transform
 
 @dataclass
@@ -294,75 +295,93 @@ class Experiment:
             combined_transform = None
         
         # Handle different experiment types based on data config
+        # Note: Cross-validation and cross-task experiments are commented out
+        # Only standard train/val/test split with task_type="both" is used
         if data_config.use_cross_validation and data_config.train_task_type and data_config.val_test_task_type:
-            # Cross-task cross-validation experiments
-            print(f"Creating cross-task cross-validation loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
-            self.data_loaders = EEGDataLoader.create_cross_task_cross_validation_loaders(
-                pickle_dir=data_config.pickle_dir,
-                train_task_type=data_config.train_task_type,
-                val_test_task_type=data_config.val_test_task_type,
-                n_folds=data_config.n_folds,
-                batch_size=data_config.batch_size,
-                num_workers=data_config.num_workers,
-                random_seed=data_config.random_seed,
-                stratify_by=data_config.cv_strategy,
-                target_type=target_type,
-                gender_transform=gender_transform,
-                age_transform=age_transform,
-                combined_transform=combined_transform
-            )
-            self.is_cross_validation = True
+            # # Cross-task cross-validation experiments
+            # print(f"Creating cross-task cross-validation loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
+            # self.data_loaders = EEGDataLoader.create_cross_task_cross_validation_loaders(
+            #     pickle_dir=data_config.pickle_dir,
+            #     train_task_type=data_config.train_task_type,
+            #     val_test_task_type=data_config.val_test_task_type,
+            #     n_folds=data_config.n_folds,
+            #     batch_size=data_config.batch_size,
+            #     num_workers=data_config.num_workers,
+            #     random_seed=data_config.random_seed,
+            #     stratify_by=data_config.cv_strategy,
+            #     target_type=target_type,
+            #     gender_transform=gender_transform,
+            #     age_transform=age_transform,
+            #     combined_transform=combined_transform
+            # )
+            # self.is_cross_validation = True
+            
+            # Cross-task cross-validation experiments (commented out)
+            raise NotImplementedError("Cross-task cross-validation experiments are not currently supported")
             
         elif data_config.use_cross_validation:
-            # Standard cross-validation experiments
-            print(f"Creating cross-validation loaders for {target_type} classification")
-            self.data_loaders = EEGDataLoader.create_cross_validation_loaders(
-                pickle_dir=data_config.pickle_dir,
-                n_folds=data_config.n_folds,
-                batch_size=data_config.batch_size,
-                num_workers=data_config.num_workers,
-                random_seed=data_config.random_seed,
-                stratify_by=data_config.cv_strategy,
-                task_type=data_config.task_type,
-                target_type=target_type,
-                gender_transform=gender_transform,
-                age_transform=age_transform,
-                combined_transform=combined_transform
-            )
-            self.is_cross_validation = True
+            # # Standard cross-validation experiments
+            # print(f"Creating cross-validation loaders for {target_type} classification")
+            # self.data_loaders = EEGDataLoader.create_cross_validation_loaders(
+            #     pickle_dir=data_config.pickle_dir,
+            #     n_folds=data_config.n_folds,
+            #     batch_size=data_config.batch_size,
+            #     num_workers=data_config.num_workers,
+            #     random_seed=data_config.random_seed,
+            #     stratify_by=data_config.cv_strategy,
+            #     task_type=data_config.task_type,
+            #     target_type=target_type,
+            #     gender_transform=gender_transform,
+            #     age_transform=age_transform,
+            #     combined_transform=combined_transform
+            # )
+            # self.is_cross_validation = True
+
+            # Standard cross-validation experiments (commented out)
+            raise NotImplementedError("Cross-validation experiments are not currently supported")
             
         elif data_config.train_task_type and data_config.val_test_task_type:
-            # Cross-task experiments
-            print(f"Creating cross-task loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
-            self.data_loaders = EEGDataLoader.create_cross_task_loaders(
-                pickle_dir=data_config.pickle_dir,
-                train_task_type=data_config.train_task_type,
-                val_test_task_type=data_config.val_test_task_type,
-                batch_size=data_config.batch_size,
-                num_workers=data_config.num_workers,
-                random_seed=data_config.random_seed,
-                target_type=target_type,
-                gender_transform=gender_transform,
-                age_transform=age_transform,
-                combined_transform=combined_transform
-            )
-            self.is_cross_validation = False
+            # # Cross-task experiments
+            # print(f"Creating cross-task loaders: {data_config.train_task_type} -> {data_config.val_test_task_type}")
+            # self.data_loaders = EEGDataLoader.create_cross_task_loaders(
+            #     pickle_dir=data_config.pickle_dir,
+            #     train_task_type=data_config.train_task_type,
+            #     val_test_task_type=data_config.val_test_task_type,
+            #     batch_size=data_config.batch_size,
+            #     num_workers=data_config.num_workers,
+            #     random_seed=data_config.random_seed,
+            #     target_type=target_type,
+            #     gender_transform=gender_transform,
+            #     age_transform=age_transform,
+            #     combined_transform=combined_transform
+            # )
+            # self.is_cross_validation = False
+
+            # Cross-task experiments (commented out)
+            raise NotImplementedError("Cross-task experiments are not currently supported")
             
         else:
             # Standard train/val/test split experiments
-            print(f"Creating standard loaders for {target_type} classification")
+            # Train on both task types (task_type="both")
+            print(f"Creating standard loaders for {target_type} classification (train on both task types)")
+            segment_length_str = f"{data_config.segment_length // 200}s"  # Convert 200->1s, 800->4s
             self.data_loaders = EEGDataLoader.create_train_val_test_loaders(
-                pickle_dir=data_config.pickle_dir,
+                hdf5_dir=data_config.hdf5_dir,
+                segment_length=segment_length_str,
                 batch_size=data_config.batch_size,
                 num_workers=data_config.num_workers,
-                random_seed=data_config.random_seed,
-                task_type=data_config.task_type,
+                task_type=data_config.task_type,  # Should be "both"
                 target_type=target_type,
+                transform=None,
                 gender_transform=gender_transform,
                 age_transform=age_transform,
-                combined_transform=combined_transform
+                combined_transform=combined_transform,
+                shuffle_train=True,
+                random_seed=data_config.random_seed
             )
             self.is_cross_validation = False
+            # Store segment_length for later use in task-type-specific evaluation
+            self.segment_length_str = segment_length_str
 
     def run(self) -> ExperimentResult:
         """
@@ -444,6 +463,10 @@ class Experiment:
         
         # Add training metrics to result
         result.training_metrics = self.logger.get_training_metrics()
+        
+        # Add task-type-specific metrics if available
+        if hasattr(evaluation_results, 'task_type_metrics'):
+            result.metrics['task_type_metrics'] = evaluation_results.task_type_metrics
         
         return result
     
@@ -556,7 +579,7 @@ class Experiment:
         self.logger.save_training_metrics(self.config.name)
     
     def _evaluate(self) -> EvaluationResults:
-        """Evaluate the model."""
+        """Evaluate the model on overall test set and separately by task type."""
         self.logger.log_evaluation_start(self.config.model_type, self.config.target_type)
         
         # Load best model
@@ -564,14 +587,101 @@ class Experiment:
         if os.path.exists(checkpoint_path):
             self.evaluator.load_checkpoint(checkpoint_path)
         
-        # Evaluate on test set
+        # Evaluate on overall test set
         results = self.evaluator.evaluate(self.test_loader)
         
-        # Log and save results
+        # Log and save overall results
         self.logger.log_evaluation_success(results)
         self.logger.save_evaluation_results(results, self.config.name)
         
+        # Evaluate separately by task type (active and passive)
+        print(f"\nEvaluating separately by task type...")
+        task_type_results = self._evaluate_by_task_type()
+        
+        # Store task-type-specific metrics in results
+        results.task_type_metrics = {
+            task_type: task_results.metrics 
+            for task_type, task_results in task_type_results.items()
+        }
+        
+        # Log task-type-specific results
+        for task_type, task_results in task_type_results.items():
+            print(f"  {task_type.upper()} tasks: Accuracy = {task_results.metrics['accuracy']:.4f}, "
+                  f"F1-Score = {task_results.metrics['f1_weighted']:.4f}")
+        
         return results
+    
+    def _evaluate_by_task_type(self) -> Dict[str, EvaluationResults]:
+        """Evaluate model separately on active and passive tasks."""
+        
+        data_config = self.config.data_config
+        target_type = self.config.target_type
+        
+        # Select appropriate transforms based on target type
+        gender_transform = None
+        age_transform = None
+        combined_transform = None
+        
+        if target_type == 'gender':
+            gender_transform = gender_classification_transform
+        elif target_type == 'age':
+            age_transform = age_classification_transform
+        elif target_type == 'combined':
+            combined_transform = combined_gender_age_classification_transform
+        elif target_type == 'multi_output':
+            gender_transform = gender_classification_transform
+            age_transform = age_classification_transform
+        
+        # Get test file path
+        hdf5_dir_path = Path(data_config.hdf5_dir)
+        train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+            hdf5_dir_path, self.segment_length_str
+        )
+        
+        # Create datasets for each task type
+        active_dataset = EEGDataset(
+            hdf5_file=str(test_file),
+            task_type="active",
+            target_type=target_type,
+            gender_transform=gender_transform,
+            age_transform=age_transform,
+            combined_transform=combined_transform,
+            shuffle=False
+        )
+        passive_dataset = EEGDataset(
+            hdf5_file=str(test_file),
+            task_type="passive",
+            target_type=target_type,
+            gender_transform=gender_transform,
+            age_transform=age_transform,
+            combined_transform=combined_transform,
+            shuffle=False
+        )
+        
+        # Create loaders
+        active_loader = EEGDataLoader.create_dataloader(
+            active_dataset, 
+            batch_size=data_config.batch_size,
+            num_workers=data_config.num_workers
+        )
+        passive_loader = EEGDataLoader.create_dataloader(
+            passive_dataset,
+            batch_size=data_config.batch_size,
+            num_workers=data_config.num_workers
+        )
+        
+        # Evaluate separately
+        test_loaders_by_task = {'active': active_loader, 'passive': passive_loader}
+        results_by_task = self.evaluator.evaluate_by_task_type(test_loaders_by_task)
+        
+        # Save task-type-specific results
+        for task_type, task_results in results_by_task.items():
+            self.logger.save_evaluation_results(
+                task_results, 
+                f"{self.config.name}_task_{task_type}"
+            )
+        
+        return results_by_task
     
     def _get_checkpoint_path(self) -> str:
         """Get the path to the best model checkpoint."""

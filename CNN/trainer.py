@@ -21,7 +21,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # For combined experiments, compute combined class from gender and age
-sys.path.append('/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing')
+sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from constants import get_combined_class
 from utils import safe_json_dump, convert_numpy_types
 from config import TrainingConfig
@@ -53,9 +53,32 @@ class EEGTrainer:
             self.model = nn.DataParallel(model, device_ids=list(range(num_gpus_to_use)))
         self.model.to(self.device)
         
+        # Compile model for faster execution (PyTorch 2.0+)
+        # This can provide 10-30% speedup on modern GPUs
+        try:
+            if hasattr(torch, 'compile'):
+                print("Compiling model with torch.compile() for faster execution...")
+                self.model = torch.compile(self.model, mode='reduce-overhead')
+                print("✅ Model compiled successfully")
+        except Exception as e:
+            print(f"⚠️  Model compilation not available or failed: {e}")
+        
         # Setup training components
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate)
+        
+        # Use fused Adam optimizer if available (faster on modern GPUs)
+        try:
+            self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate, fused=True)
+            print("✅ Using fused Adam optimizer")
+        except TypeError:
+            # Fused optimizer not available, fall back to regular Adam
+            self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate)
+        
+        # Enable mixed precision training (AMP) for 1.5-2x speedup
+        self.use_amp = True
+        # Use new torch.amp API (PyTorch 2.0+)
+        self.scaler = torch.amp.GradScaler('cuda')
+        print("✅ Mixed precision training (AMP) enabled")
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode='min', factor=0.5, patience=10, verbose=True
         )
@@ -69,10 +92,25 @@ class EEGTrainer:
         self.best_epoch = 0
     
     def _get_underlying_model(self):
-        """Get the underlying model, unwrapping DataParallel if needed."""
-        if isinstance(self.model, nn.DataParallel):
-            return self.model.module
-        return self.model
+        """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
+        model = self.model
+        
+        # Recursively unwrap until we get to the base model
+        while True:
+            # Unwrap torch.compile wrapper (has _orig_mod attribute)
+            if hasattr(model, '_orig_mod'):
+                model = model._orig_mod
+                continue
+            
+            # Unwrap DataParallel wrapper
+            if isinstance(model, nn.DataParallel):
+                model = model.module
+                continue
+            
+            # No more wrappers to unwrap
+            break
+        
+        return model
     
     def train_epoch(self, train_loader: DataLoader) -> Tuple[float, float]:
         """Train for one epoch."""
@@ -83,57 +121,100 @@ class EEGTrainer:
         
         batch_start_time = time.time()
         num_batches = 0
+        first_batch_loaded = False
         for batch_idx, batch in enumerate(train_loader):
             num_batches = batch_idx + 1
+            if not first_batch_loaded:
+                elapsed = time.time() - batch_start_time
+                print(f"  ✅ First batch loaded! (took {elapsed:.1f}s)")
+                sys.stdout.flush()
+                first_batch_loaded = True
+                batch_start_time = time.time()  # Reset timer for batch processing
             if batch_idx % 1000 == 0 and batch_idx > 0:
                 elapsed = time.time() - batch_start_time
                 print(f"  Processed {batch_idx} batches, elapsed: {elapsed:.1f}s")
                 sys.stdout.flush()
             
-            inputs = batch['eeg_data'].to(self.device)
+            # Non-blocking transfer for faster data loading
+            inputs = batch['eeg_data'].to(self.device, non_blocking=True)
             
             # Handle multi_output case where we have separate gender and age keys
             if self.config.target_key == 'multi_output' and 'gender' in batch and 'age' in batch:
                 labels = {
-                    'gender': batch['gender'].to(self.device),
-                    'age': batch['age'].to(self.device)
+                    'gender': batch['gender'].to(self.device, non_blocking=True),
+                    'age': batch['age'].to(self.device, non_blocking=True)
                 }
             elif self.config.target_key == 'combined':
-                gender = batch['gender'].to(self.device)
-                age = batch['age'].to(self.device)
+                gender = batch['gender'].to(self.device, non_blocking=True)
+                age = batch['age'].to(self.device, non_blocking=True)
                 # For combined experiments, age should be classification (0, 1, 2), not regression
                 # Gender should also be classification (0, 1)
                 combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
                                               dtype=torch.long, device=self.device)
                 labels = combined_classes
             else:
-                labels = batch[self.config.target_key].to(self.device)
+                labels = batch[self.config.target_key].to(self.device, non_blocking=True)
             
             self.optimizer.zero_grad()
             
-            outputs = self.model(inputs)
-            
-            # Handle multi-output models
-            if isinstance(outputs, dict):
-                # Multi-output model (e.g., MultiOutputCNN)
-                gender_loss = self.criterion(outputs['gender'], labels['gender'])
-                age_loss = self.criterion(outputs['age'], labels['age'])
-                loss = gender_loss + age_loss  # Combined loss
+            # Mixed precision training (AMP)
+            if self.use_amp:
+                with torch.amp.autocast('cuda'):
+                    outputs = self.model(inputs)
+                    
+                    # Handle multi-output models
+                    if isinstance(outputs, dict):
+                        # Multi-output model (e.g., MultiOutputCNN)
+                        gender_loss = self.criterion(outputs['gender'], labels['gender'])
+                        age_loss = self.criterion(outputs['age'], labels['age'])
+                        loss = gender_loss + age_loss  # Combined loss
+                    else:
+                        # Single-output model (e.g., EEGCNN, CombinedCNN)
+                        loss = self.criterion(outputs, labels)
                 
-                # Calculate combined accuracy
-                _, gender_pred = torch.max(outputs['gender'].data, 1)
-                _, age_pred = torch.max(outputs['age'].data, 1)
-                gender_correct = (gender_pred == labels['gender']).sum().item()
-                age_correct = (age_pred == labels['age']).sum().item()
-                correct += (gender_correct + age_correct) / 2  # Average of both accuracies
+                # Calculate accuracy outside autocast (not needed for FP16, and avoids .data deprecation)
+                if isinstance(outputs, dict):
+                    # Multi-output model: get predicted class indices (argmax)
+                    gender_pred = torch.argmax(outputs['gender'], dim=1)
+                    age_pred = torch.argmax(outputs['age'], dim=1)
+                    gender_correct = (gender_pred == labels['gender']).sum().item()
+                    age_correct = (age_pred == labels['age']).sum().item()
+                    correct += (gender_correct + age_correct) / 2  # Average of both accuracies
+                else:
+                    # Single-output model: get predicted class indices (argmax)
+                    predicted = torch.argmax(outputs, dim=1)
+                    correct += (predicted == labels).sum().item()
+                
+                # Scale loss and backward pass for mixed precision
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
             else:
-                # Single-output model (e.g., EEGCNN, CombinedCNN)
-                loss = self.criterion(outputs, labels)
-                _, predicted = torch.max(outputs.data, 1)
-                correct += (predicted == labels).sum().item()
-            
-            loss.backward()
-            self.optimizer.step()
+                # Standard precision training
+                outputs = self.model(inputs)
+                
+                # Handle multi-output models
+                if isinstance(outputs, dict):
+                    # Multi-output model (e.g., MultiOutputCNN)
+                    gender_loss = self.criterion(outputs['gender'], labels['gender'])
+                    age_loss = self.criterion(outputs['age'], labels['age'])
+                    loss = gender_loss + age_loss  # Combined loss
+                    
+                    # Calculate combined accuracy: get predicted class indices (argmax)
+                    gender_pred = torch.argmax(outputs['gender'], dim=1)
+                    age_pred = torch.argmax(outputs['age'], dim=1)
+                    gender_correct = (gender_pred == labels['gender']).sum().item()
+                    age_correct = (age_pred == labels['age']).sum().item()
+                    correct += (gender_correct + age_correct) / 2  # Average of both accuracies
+                else:
+                    # Single-output model (e.g., EEGCNN, CombinedCNN)
+                    loss = self.criterion(outputs, labels)
+                    # Calculate accuracy: get predicted class indices (argmax)
+                    predicted = torch.argmax(outputs, dim=1)
+                    correct += (predicted == labels).sum().item()
+                
+                loss.backward()
+                self.optimizer.step()
             
             total_loss += loss.item()
             total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
@@ -154,27 +235,33 @@ class EEGTrainer:
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_loader):
                 num_batches = batch_idx + 1
-                inputs = batch['eeg_data'].to(self.device)
+                # Non-blocking transfer for faster data loading
+                inputs = batch['eeg_data'].to(self.device, non_blocking=True)
                 
                 # Handle multi_output case where we have separate gender and age keys
                 if self.config.target_key == 'multi_output' and 'gender' in batch and 'age' in batch:
                     labels = {
-                        'gender': batch['gender'].to(self.device),
-                        'age': batch['age'].to(self.device)
+                        'gender': batch['gender'].to(self.device, non_blocking=True),
+                        'age': batch['age'].to(self.device, non_blocking=True)
                     }
                 elif self.config.target_key == 'combined':
                     # For combined experiments, compute combined class from gender and age
-                    gender = batch['gender'].to(self.device)
-                    age = batch['age'].to(self.device)
+                    gender = batch['gender'].to(self.device, non_blocking=True)
+                    age = batch['age'].to(self.device, non_blocking=True)
                     # For combined experiments, age should be classification (0, 1, 2), not regression
                     # Gender should also be classification (0, 1)
                     combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
                                                   dtype=torch.long, device=self.device)
                     labels = combined_classes
                 else:
-                    labels = batch[self.config.target_key].to(self.device)
+                    labels = batch[self.config.target_key].to(self.device, non_blocking=True)
                 
-                outputs = self.model(inputs)
+                # Use mixed precision for validation too (faster, minimal accuracy impact)
+                if self.use_amp:
+                    with torch.amp.autocast('cuda'):
+                        outputs = self.model(inputs)
+                else:
+                    outputs = self.model(inputs)
                 
                 # Handle multi-output models
                 if isinstance(outputs, dict):
@@ -183,16 +270,17 @@ class EEGTrainer:
                     age_loss = self.criterion(outputs['age'], labels['age'])
                     loss = gender_loss + age_loss  # Combined loss
                     
-                    # Calculate combined accuracy
-                    _, gender_pred = torch.max(outputs['gender'].data, 1)
-                    _, age_pred = torch.max(outputs['age'].data, 1)
+                    # Calculate combined accuracy: get predicted class indices (argmax)
+                    gender_pred = torch.argmax(outputs['gender'], dim=1)
+                    age_pred = torch.argmax(outputs['age'], dim=1)
                     gender_correct = (gender_pred == labels['gender']).sum().item()
                     age_correct = (age_pred == labels['age']).sum().item()
                     correct += (gender_correct + age_correct) / 2  # Average of both accuracies
                 else:
                     # Single-output model (e.g., EEGCNN, CombinedCNN)
                     loss = self.criterion(outputs, labels)
-                    _, predicted = torch.max(outputs.data, 1)
+                    # Calculate accuracy: get predicted class indices (argmax)
+                    predicted = torch.argmax(outputs, dim=1)
                     correct += (predicted == labels).sum().item()
                 
                 total_loss += loss.item()

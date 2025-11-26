@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 @dataclass
 class DataConfig:
     """Configuration for data loading and preprocessing."""
-    pickle_dir: str = "path/to/pickle_dir"
+    hdf5_dir: str = "path/to/hdf5_dir"  # Changed from pickle_dir to hdf5_dir
     segment_length: int = None  # 200 for 1s, 800 for 4s
     
     # Data loading parameters
@@ -35,7 +35,7 @@ class DataConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for serialization."""
         return {
-            'pickle_dir': self.pickle_dir,
+            'hdf5_dir': self.hdf5_dir,
             'segment_length': self.segment_length,
             'batch_size': self.batch_size,
             'num_workers': self.num_workers,

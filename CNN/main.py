@@ -8,14 +8,16 @@ from config import SystemConfig, DataConfig, ModelConfig, TrainingConfig, Experi
 from experiment import run_experiments
 
 
-# Data paths and segment lengths
+# Data paths and segment lengths (HDF5 format)
 DATA_PATHS = {
-    '1s': "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments_v2",
-    '4s': "/home/mojtabam/projects/def-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_4s_segments_v2"
+    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
+    '2s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
+    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
 }
 
 SEGMENT_LENGTHS = {
     '1s': 200,  # 1 second = 200 samples at 200Hz
+    '2s': 400,  # 2 second = 400 samples at 200Hz
     '4s': 800   # 4 seconds = 800 samples at 200Hz
 }
 
@@ -26,35 +28,46 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
     Create DataConfig for a specific segment length.
     
     Args:
-        segment_length: '1s' or '4s'
-        batch_size: Batch size (if None, uses default: 256 for 1s, 128 for 4s)
+        segment_length: '1s', '2s', or '4s'
+        batch_size: Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)
         random_seed: Random seed
         
     Returns:
         DataConfig configured for the specified segment length
     """
     if segment_length not in DATA_PATHS:
-        raise ValueError(f"Invalid segment_length: {segment_length}. Must be '1s' or '4s'")
+        raise ValueError(f"Invalid segment_length: {segment_length}. Must be '1s', '2s', or '4s'")
     
-    # Use smaller batch size for 4s segments to avoid OOM (4x larger data)
+    # Use larger batch sizes for better GPU utilization and fewer iterations
+    # With 4 GPUs and L40S (48GB each), we have plenty of GPU memory
+    # But need to balance with CPU memory (spawn workers use more RAM)
     if batch_size is None:
-        batch_size = 256 if segment_length == '1s' else 128  # Increased: 256 for 1s, 128 for 4s
+        if segment_length == '1s':
+            batch_size = 384  # Reduced from 512 to prevent OOM with spawn workers
+        elif segment_length == '2s':
+            batch_size = 256  # Balanced for memory and performance
+        else:  # 4s
+            batch_size = 192  # Reduced to prevent OOM
     
     # Use num_workers based on segment length and number of GPUs
-    # For 1s: always use 4 workers for parallel loading
-    # For 4s: optimize for speed with more workers (since RES is low, we have memory headroom)
-    #   - With 2+ GPUs: use 3 workers per GPU for faster parallel loading
-    #   - With 1 GPU: use 4 workers for parallel loading (RES is only 2GB, plenty of room)
+    # Balanced to prevent OOM while maintaining good data loading performance
+    # With 'spawn' context, each worker uses significant memory (full Python env)
+    # So we need fewer workers than with 'fork' context
     if segment_length == '1s':
-        num_workers = 4
+        # 1s segments are smaller, but spawn workers use more memory
+        num_workers = max(8, 2 * num_gpus)  # 2 workers per GPU (reduced for spawn context)
+    elif segment_length == '2s':
+        # 2s: use fewer workers to prevent OOM (2s segments are larger)
+        num_workers = max(6, 2 * num_gpus)  # 2 workers per GPU
     else:  # 4s mode
+        # 4s segments are larger, use fewer workers to avoid memory issues
         if num_gpus >= 2:
-            num_workers = 3 * num_gpus  # 3 workers per GPU for better parallelization
+            num_workers = 2 * num_gpus  # 2 workers per GPU
         else:
             num_workers = 4  # Use 4 workers for faster loading with single GPU
     
     config = DataConfig(
-        pickle_dir=DATA_PATHS[segment_length],
+        hdf5_dir=DATA_PATHS[segment_length],
         segment_length=SEGMENT_LENGTHS[segment_length],
         batch_size=batch_size,
         random_seed=random_seed,
@@ -68,29 +81,32 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
                                             learning_rate: float = 0.001, batch_size: int = None,
                                             num_gpus: int = 1):
     """
-    Create all experiment types for a specific segment length.
+    Create baseline experiments for a specific segment length.
+    These experiments train on both task types and evaluate separately on active and passive tasks.
     
     Args:
-        segment_length: '1s' or '4s'
+        segment_length: '1s', '2s', or '4s'
         epochs: Number of training epochs
         learning_rate: Learning rate
-        batch_size: Batch size (if None, uses default: 256 for 1s, 128 for 4s)
+        batch_size: Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)
         
     Returns:
-        List of all experiment configurations
+        List of experiment configurations
     """
     experiments = []
 
     # Create base data config for this segment length
     # This will auto-select batch_size if None
     base_data_config = create_data_config_for_segment_length(segment_length, batch_size, random_seed=42, num_gpus=num_gpus)
+    # Set task_type to "both" to train on both active and passive tasks
+    base_data_config.task_type = "both"
     
-    # 1-2. Baseline experiments
+    # Baseline experiments: Train on both task types, evaluate separately on active and passive
     experiments.append(ExperimentConfig(
         name=f"gender_baseline_{segment_length}",
         model_type="gender_cnn",
         target_type="gender",
-        description=f"Gender classification baseline with {segment_length} segments",
+        description=f"Gender classification baseline with {segment_length} segments (train on both, evaluate separately)",
         data_config=base_data_config,
         model_config=ModelConfig(num_channels=60),
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="gender")
@@ -100,11 +116,14 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         name=f"age_baseline_{segment_length}",
         model_type="age_cnn",
         target_type="age",
-        description=f"Age classification baseline with {segment_length} segments",
+        description=f"Age classification baseline with {segment_length} segments (train on both, evaluate separately)",
         data_config=base_data_config,
         model_config=ModelConfig(num_channels=60),
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
     ))
+    
+    # Comment out all other experiments - only baseline experiments are used
+    """
     
     # 3-4. Cross-validation experiments
     gender_cv_config = create_data_config_for_segment_length(segment_length, batch_size, num_gpus=num_gpus)
@@ -336,6 +355,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
             model_config=ModelConfig(num_channels=60, num_classes=2),
             training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="multi_output")
         ))
+    """
 
     return experiments
 
@@ -343,12 +363,12 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
 def main():
     """Main function for running EEG classification experiments."""
     parser = argparse.ArgumentParser(description='EEG Classification Experiment Runner')
-    parser.add_argument('--mode', choices=['1s', '4s'], default='1s',
-                       help='EEG segment length: 1s (1-second segments) or 4s (4-second segments)')
+    parser.add_argument('--mode', choices=['1s', '2s', '4s'], default='1s',
+                       help='EEG segment length: 1s (1-second segments), 2s (2-second segments), or 4s (4-second segments)')
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=None, 
-                       help='Batch size (if None, uses default: 256 for 1s, 128 for 4s)')
+                       help='Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_gpus', type=int, default=2, help='Number of GPUs to use for DataParallel (default: 2)')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
@@ -371,7 +391,15 @@ def main():
     )
     
     # Determine actual batch size (auto-select if None)
-    actual_batch_size = args.batch_size if args.batch_size is not None else (256 if args.mode == '1s' else 128)
+    if args.batch_size is not None:
+        actual_batch_size = args.batch_size
+    else:
+        if args.mode == '1s':
+            actual_batch_size = 256
+        elif args.mode == '2s':
+            actual_batch_size = 192
+        else:  # 4s
+            actual_batch_size = 128
     
     # Adjust num_workers based on number of GPUs for 4s mode
     if args.mode == '4s':
