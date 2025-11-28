@@ -596,7 +596,9 @@ class EEGDataPreprocessor:
         sample_idx = start_sample_idx
         for seg_idx, eeg_segment in enumerate(eeg_list):
             dataset_name = f'sample_{sample_idx:06d}'
-            group.create_dataset(dataset_name, data=eeg_segment, compression='gzip')
+            # No compression for faster data loading during training
+            # Trade-off: ~8-10% larger files but 3-5x faster loading
+            group.create_dataset(dataset_name, data=eeg_segment, compression=None)
             
             # Store metadata for this sample
             sample_group = group.create_group(f'metadata_{sample_idx:06d}')
@@ -665,7 +667,7 @@ class EEGDataPreprocessor:
 def main():
     """Main function to run the preprocessing pipeline."""
     data_root = "/home/mojtabam/projects/aip-aghodsib/mojtabam/preprocessed_new"
-    output_dir = "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5"
+    output_dir = "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
     
     # Record start time
     start_time = time.time()

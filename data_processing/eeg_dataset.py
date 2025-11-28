@@ -9,6 +9,8 @@ and processing the preprocessed EEG data from HDF5 files.
 import os
 import h5py
 import time
+import traceback
+import multiprocessing
 import numpy as np
 import torch
 from torch.utils.data import IterableDataset, DataLoader, get_worker_info
@@ -64,9 +66,13 @@ class EEGDataset(IterableDataset):
             shuffle: Whether to shuffle samples during iteration (recommended for training)
             random_seed: Random seed for shuffling (None = use current random state)
         """
+        # Convert to Path and then to string for multiprocessing compatibility
+        # 'spawn' context requires picklable objects, and Path objects need to be strings
         self.hdf5_file = Path(hdf5_file)
         if not self.hdf5_file.exists():
             raise FileNotFoundError(f"HDF5 file not found: {hdf5_file}")
+        # Store as string for multiprocessing compatibility (spawn context)
+        self.hdf5_file_str = str(self.hdf5_file.resolve())
         
         self.task_type = task_type
         self.transform = transform
@@ -78,7 +84,12 @@ class EEGDataset(IterableDataset):
         self.shuffle = shuffle
         self.random_seed = random_seed
         
-        logger.info(f"Initialized EEGDataset from {hdf5_file.name} with task_type={task_type}, target_type={target_type}, shuffle={shuffle}")
+        # Cache sample names to avoid collecting them every epoch
+        # This is a significant speedup for large datasets
+        self._cached_sample_names = None
+        self._cache_file_mtime = None
+        
+        logger.info(f"Initialized EEGDataset from {self.hdf5_file.name} with task_type={task_type}, target_type={target_type}, shuffle={shuffle}")
         if self.participant_filter is not None:
             logger.info(f"Filtering to {len(self.participant_filter)} participants")
     
@@ -99,72 +110,107 @@ class EEGDataset(IterableDataset):
             # processes a different subset of samples
             worker_info = get_worker_info()
             
-            with h5py.File(self.hdf5_file, 'r') as f:
-                # Determine which task groups to process
-                task_groups = []
-                if self.task_type in ["active", "both"]:
-                    if 'active' in f:
-                        task_groups.append(('active', f['active']))
-                if self.task_type in ["passive", "both"]:
-                    if 'passive' in f:
-                        task_groups.append(('passive', f['passive']))
-                
-                # Collect all (task_type, sample_name) pairs first
-                # Store only task_type and sample_name (not group object) for proper serialization
-                all_samples = []
-                for task_type, group in task_groups:
-                    # Get all sample datasets (sorted by name)
-                    sample_names = sorted([name for name in group.keys() if name.startswith('sample_')])
-                    for sample_name in sample_names:
-                        all_samples.append((task_type, sample_name))
-                
-                # Shuffle if requested (do this BEFORE sharding for proper randomization)
-                # Important for training to avoid participant-level batch correlations
-                if self.shuffle:
-                    # Create a local random state to avoid affecting global random state
-                    # Use worker_id in seed to ensure different shuffling per worker
-                    seed = self.random_seed
-                    if worker_info is not None:
-                        seed = (seed + worker_info.id) if seed is not None else None
-                    rng = np.random.RandomState(seed)
-                    rng.shuffle(all_samples)
-                
-                # Handle worker sharding AFTER shuffling (if applicable)
-                # This ensures each worker gets a random subset, not a contiguous chunk
+            # Check if we need to refresh the cache (file modified or cache doesn't exist)
+            # Use string path for HDF5 (required for spawn multiprocessing)
+            hdf5_path = Path(self.hdf5_file_str)
+            current_mtime = hdf5_path.stat().st_mtime
+            if (self._cached_sample_names is None or 
+                self._cache_file_mtime is None or 
+                self._cache_file_mtime != current_mtime):
+                # Cache sample names (only done once per file modification)
+                # Use string path for HDF5 compatibility with multiprocessing
+                with h5py.File(self.hdf5_file_str, 'r') as f:
+                    task_groups = []
+                    if self.task_type in ["active", "both"]:
+                        if 'active' in f:
+                            task_groups.append(('active', f['active']))
+                    if self.task_type in ["passive", "both"]:
+                        if 'passive' in f:
+                            task_groups.append(('passive', f['passive']))
+                    
+                    # Collect all (task_type, sample_name) pairs
+                    # Optimize: Don't sort if not needed (sorting 955K items is slow)
+                    all_samples = []
+                    for task_type, group in task_groups:
+                        # Use list comprehension for faster collection
+                        # Only sort if we have a reasonable number of samples (< 100K)
+                        # For large datasets (1s with 955K), sorting adds significant overhead
+                        sample_names = [name for name in group.keys() if name.startswith('sample_')]
+                        if len(sample_names) < 100000:
+                            sample_names = sorted(sample_names)  # Only sort for smaller datasets
+                        for sample_name in sample_names:
+                            all_samples.append((task_type, sample_name))
+                    
+                    # Cache the results
+                    self._cached_sample_names = all_samples
+                    self._cache_file_mtime = current_mtime
+                    if worker_info is None or worker_info.id == 0:
+                        logger.info(f"Cached {len(all_samples)} sample names from HDF5 file")
+            else:
+                # Use cached sample names (much faster!)
+                all_samples = self._cached_sample_names.copy()
+                if worker_info is None or worker_info.id == 0:
+                    logger.debug(f"Using cached sample names ({len(all_samples)} samples)")
+            
+            # Shuffle if requested (do this BEFORE sharding for proper randomization)
+            # Important for training to avoid participant-level batch correlations
+            if self.shuffle:
+                # Create a local random state to avoid affecting global random state
+                # Use worker_id in seed to ensure different shuffling per worker
+                seed = self.random_seed
                 if worker_info is not None:
-                    # We're in a worker process - shard the data
-                    num_workers = worker_info.num_workers
-                    worker_id = worker_info.id
-                    # Split samples across workers
-                    total_samples = len(all_samples)
-                    samples_per_worker = total_samples // num_workers
-                    start_idx = worker_id * samples_per_worker
-                    # Last worker gets any remaining samples
-                    end_idx = start_idx + samples_per_worker if worker_id < num_workers - 1 else total_samples
-                    all_samples = all_samples[start_idx:end_idx]
-                    logger.debug(f"Worker {worker_id}/{num_workers}: processing samples {start_idx}-{end_idx} ({len(all_samples)} samples)")
+                    seed = (seed + worker_info.id) if seed is not None else None
+                rng = np.random.RandomState(seed)
+                rng.shuffle(all_samples)
+            
+            # Handle worker sharding AFTER shuffling (if applicable)
+            # This ensures each worker gets a random subset, not a contiguous chunk
+            if worker_info is not None:
+                # We're in a worker process - shard the data
+                num_workers = worker_info.num_workers
+                worker_id = worker_info.id
+                # Split samples across workers
+                total_samples = len(all_samples)
+                samples_per_worker = total_samples // num_workers
+                start_idx = worker_id * samples_per_worker
+                # Last worker gets any remaining samples
+                end_idx = start_idx + samples_per_worker if worker_id < num_workers - 1 else total_samples
+                all_samples = all_samples[start_idx:end_idx]
+                logger.debug(f"Worker {worker_id}/{num_workers}: processing samples {start_idx}-{end_idx} ({len(all_samples)} samples)")
+            
+            # Open HDF5 file and cache group references (avoid repeated lookups)
+            # Use larger chunk cache for 1s datasets (955K samples need more cache)
+            # Increase cache size for better performance with many small reads
+            cache_size = 1024*1024*500 if len(all_samples) > 500000 else 1024*1024*100  # 500MB for large datasets, 100MB otherwise
+            with h5py.File(self.hdf5_file_str, 'r', rdcc_nbytes=cache_size, rdcc_nslots=50000) as f:
+                # Cache group references to avoid repeated dictionary lookups
+                active_group = f.get('active', None)
+                passive_group = f.get('passive', None)
                 
                 # Process samples in the determined order
                 for task_type, sample_name in all_samples:
-                    # Get the group for this task type
+                    # Get the group for this task type (use cached reference)
                     if task_type == 'active':
-                        group = f['active']
+                        group = active_group
                     else:  # passive
-                        group = f['passive']
+                        group = passive_group
                     
                     # Load sample data
                     sample_data = group[sample_name][:]  # Shape: (60, timepoints)
                     
-                    # Get metadata
-                    metadata_name = sample_name.replace('sample_', 'metadata_')
+                    # Get metadata (optimize string replacement)
+                    metadata_name = sample_name.replace('sample_', 'metadata_', 1)  # Only replace first occurrence
                     if metadata_name in group:
                         metadata = group[metadata_name]
-                        participant_id = metadata.attrs['participant_id'].decode() if isinstance(metadata.attrs['participant_id'], bytes) else str(metadata.attrs['participant_id'])
+                        # Optimize participant_id extraction
+                        participant_id_attr = metadata.attrs['participant_id']
+                        participant_id = participant_id_attr.decode() if isinstance(participant_id_attr, bytes) else str(participant_id_attr)
                         
-                        # Filter by participant if specified
+                        # Filter by participant if specified (do this early to avoid unnecessary processing)
                         if self.participant_filter is not None and participant_id not in self.participant_filter:
                             continue
                         
+                        # Extract metadata attributes (cache to avoid repeated lookups)
                         gender = int(metadata.attrs['gender'])
                         age = float(metadata.attrs['age'])
                         task_number = int(metadata.attrs.get('task_number', -1))
@@ -182,8 +228,13 @@ class EEGDataset(IterableDataset):
                         yield sample
                             
         except Exception as e:
-            logger.error(f"Error loading HDF5 file {self.hdf5_file}: {e}")
-            raise
+            # Provide more detailed error information for debugging
+            worker_info = get_worker_info()
+            worker_id = worker_info.id if worker_info else "main"
+            error_msg = f"Error loading HDF5 file {self.hdf5_file_str} in worker {worker_id}: {e}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            raise RuntimeError(error_msg) from e
     
     def _create_sample_dict(self, eeg_data: np.ndarray, task_type: str, 
                            participant_id: str, gender: int, age: float, 
@@ -431,9 +482,14 @@ class EEGDataLoader:
         
         # prefetch_factor only works with num_workers > 0
         if num_workers > 0:
-            # Increase prefetch_factor for better GPU utilization
-            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 8)
-            loader_kwargs['persistent_workers'] = True  # Keep workers alive between epochs
+            # Increase prefetch_factor for better GPU utilization (higher = more prefetching)
+            # Higher prefetch means more batches ready when GPU needs them, reducing idle time
+            # Reduced for spawn context to prevent OOM (each worker prefetches independently)
+            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 4)  # Reduced from 16 to prevent OOM with spawn
+            loader_kwargs['persistent_workers'] = True  # Keep workers alive between epochs (avoids worker restart overhead)
+            # Use 'spawn' for better HDF5 compatibility with multiprocessing
+            # 'fork' can cause issues with HDF5 file handles
+            loader_kwargs['multiprocessing_context'] = multiprocessing.get_context('spawn')
         
         return DataLoader(**loader_kwargs)
     

@@ -9,7 +9,7 @@ and factory functions for creating dataset-specific transforms.
 
 import torch
 import numpy as np
-from typing import Union, Callable, Any, List, Dict
+from typing import Union, Callable, Any, List, Dict, Tuple
 from constants import (
     AGE_CLASS_1_MAX, AGE_CLASS_2_MAX, DEFAULT_MIN_AGE, DEFAULT_MAX_AGE,
     get_age_class, get_gender_class, get_combined_class, validate_gender
@@ -156,18 +156,14 @@ def create_age_regression_transform(ages: List[Union[float, int]]) -> Callable:
         ages: List of age values from the dataset
         
     Returns:
-        Age regression transform function with dataset-specific normalization
+        Age regression transform (picklable AgeRegressionTransform instance)
     """
     _validate_age_list(ages)
     min_age = min(ages)
     max_age = max(ages)
     
-    def age_regression_transform_with_range(age: Union[float, int]) -> torch.Tensor:
-        """Age regression transform with dataset-specific range."""
-        normalized_age = (age - min_age) / (max_age - min_age)
-        return torch.tensor(max(0.0, min(1.0, normalized_age)))
-    
-    return age_regression_transform_with_range
+    # Use picklable class instead of closure for multiprocessing compatibility
+    return AgeRegressionTransform(min_age, max_age)
 
 def create_age_standardized_regression_transform(ages: List[Union[float, int]]) -> Callable:
     """
@@ -221,11 +217,94 @@ def create_age_binned_regression_transform(ages: List[Union[float, int]]) -> Cal
     
     return age_binned_regression_transform_with_range
 
+class AgeRegressionTransform:
+    """
+    Picklable age regression transform class for multiprocessing compatibility.
+    This class can be used instead of closures to ensure compatibility with
+    DataLoader multiprocessing (spawn context).
+    """
+    def __init__(self, min_age: float, max_age: float):
+        self.min_age = min_age
+        self.max_age = max_age
+    
+    def __call__(self, age: Union[float, int]) -> torch.Tensor:
+        """Age regression transform with dataset-specific range."""
+        normalized_age = (age - self.min_age) / (self.max_age - self.min_age)
+        return torch.tensor(max(0.0, min(1.0, normalized_age)))
+
 # Dataset integration functions
 def create_age_regression_transform_from_dataset(dataset) -> Callable:
     """Create age regression transform from EEGDataset."""
     ages = _extract_ages_from_dataset(dataset)
     return create_age_regression_transform(ages)
+
+def compute_age_range_from_hdf5(hdf5_file_path: str) -> Tuple[float, float]:
+    """
+    Compute age min/max from an HDF5 file by reading metadata.
+    
+    Important: For regression normalization, this should be called on the TRAINING file only.
+    The computed min/max should then be used for normalizing all splits (train/val/test)
+    to avoid data leakage. Never compute min/max from validation or test data.
+    
+    Args:
+        hdf5_file_path: Path to HDF5 file (should be training file for proper normalization)
+        
+    Returns:
+        Tuple of (min_age, max_age)
+    """
+    import h5py
+    from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+    
+    ages = []
+    try:
+        with h5py.File(hdf5_file_path, 'r') as f:
+            # Check for file-level attributes first
+            if 'age_min' in f.attrs and 'age_max' in f.attrs:
+                min_age = float(f.attrs['age_min'])
+                max_age = float(f.attrs['age_max'])
+                return min_age, max_age
+            
+            # Otherwise, iterate through metadata to collect ages
+            for task_group_name in ['active', 'passive']:
+                if task_group_name in f:
+                    task_group = f[task_group_name]
+                    for key in task_group.keys():
+                        if key.startswith('metadata_'):
+                            metadata = task_group[key]
+                            if 'age' in metadata.attrs:
+                                age = float(metadata.attrs['age'])
+                                ages.append(age)
+        
+        if ages:
+            min_age = float(min(ages))
+            max_age = float(max(ages))
+            return min_age, max_age
+        else:
+            return DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+    except Exception as e:
+        print(f"⚠️  Error computing age range from {hdf5_file_path}: {e}, using defaults")
+        return DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+
+def create_age_regression_transform_from_hdf5(hdf5_file_path: str) -> Tuple[Callable, float, float]:
+    """
+    Create age regression transform from HDF5 file.
+    
+    Important: This should be called on the TRAINING file only. The computed min/max
+    will be used to normalize all data splits (train/val/test) to prevent data leakage.
+    
+    Args:
+        hdf5_file_path: Path to HDF5 file (MUST be training file for proper normalization)
+        
+    Returns:
+        Tuple of (transform_function, min_age, max_age)
+        The transform_function is a picklable AgeRegressionTransform instance
+    """
+    min_age, max_age = compute_age_range_from_hdf5(hdf5_file_path)
+    
+    # Return a picklable class instance instead of a closure
+    transform = AgeRegressionTransform(min_age, max_age)
+    
+    return transform, min_age, max_age
 
 def create_age_standardized_regression_transform_from_dataset(dataset) -> Callable:
     """Create age standardized regression transform from EEGDataset."""
