@@ -10,7 +10,10 @@ from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from pathlib import Path
 import torch
+from torch import tensor
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from models import ModelFactory
 from trainer import EEGTrainer
@@ -21,7 +24,14 @@ from utils import safe_json_dump, convert_numpy_types
 # Import data processing modules
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from eeg_dataset import EEGDataset, EEGDataLoader
-from target_transforms import gender_classification_transform, age_classification_transform, combined_gender_age_classification_transform
+from target_transforms import (
+    gender_classification_transform, 
+    age_classification_transform, 
+    combined_gender_age_classification_transform,
+    create_age_regression_transform_from_hdf5,
+    AgeRegressionTransform
+)
+
 
 @dataclass
 class ExperimentResult:
@@ -127,8 +137,18 @@ class ExperimentLogger:
     def log_evaluation_success(self, results):
         """Log successful evaluation completion."""
         print(f"✅ Evaluation completed")
-        print(f"   Accuracy: {results.metrics['accuracy']:.4f}")
-        print(f"   F1-Score: {results.metrics['f1_weighted']:.4f}")
+        # Check if this is a regression task (has 'mae' instead of 'accuracy')
+        if 'mae' in results.metrics:
+            print(f"   MAE: {results.metrics['mae']:.4f} years")
+            print(f"   RMSE: {results.metrics['rmse']:.4f} years")
+            print(f"   R²: {results.metrics['r2']:.4f}")
+        else:
+            acc = results.metrics.get('accuracy')
+            f1 = results.metrics.get('f1_weighted')
+            acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+            f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+            print(f"   Accuracy: {acc_str}")
+            print(f"   F1-Score: {f1_str}")
         print(f"   Evaluation time: {results.evaluation_time:.2f}s")
     
     def save_evaluation_results(self, results, experiment_name: str):
@@ -169,16 +189,16 @@ class ExperimentLogger:
             })
         safe_json_dump(predictions_data, predictions_file)
         
-        # Save confusion matrix plot
-        self._plot_confusion_matrix(results, eval_dir)
+        # Save confusion matrix plot (only for classification tasks)
+        # Regression tasks don't have confusion matrices
+        if 'confusion_matrix' in results.metrics:
+            self._plot_confusion_matrix(results, eval_dir)
         
         print(f"   Evaluation results saved to: {eval_dir}")
     
     def _plot_confusion_matrix(self, results, save_dir: str):
         """Plot and save confusion matrix."""
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        
+        # This method is only called when 'confusion_matrix' exists in results.metrics
         cm = np.array(results.metrics['confusion_matrix'])
         
         plt.figure(figsize=(8, 6))
@@ -200,7 +220,21 @@ class ExperimentLogger:
         print(f"   Training time: {result.training_time:.2f}s")
         print(f"   Evaluation time: {result.evaluation_time:.2f}s")
         if result.metrics:
-            print(f"   Accuracy: {result.metrics.get('accuracy', 'N/A'):.4f}")
+            # Check if this is a regression task (has 'mae' instead of 'accuracy')
+            if 'mae' in result.metrics:
+                mae = result.metrics.get('mae')
+                rmse = result.metrics.get('rmse')
+                r2 = result.metrics.get('r2')
+                mae_str = f"{mae:.4f} years" if isinstance(mae, (int, float)) else "N/A"
+                rmse_str = f"{rmse:.4f} years" if isinstance(rmse, (int, float)) else "N/A"
+                r2_str = f"{r2:.4f}" if isinstance(r2, (int, float)) else "N/A"
+                print(f"   MAE: {mae_str}")
+                print(f"   RMSE: {rmse_str}")
+                print(f"   R²: {r2_str}")
+            else:
+                acc = result.metrics.get('accuracy')
+                acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                print(f"   Accuracy: {acc_str}")
     
     def log_experiment_failure(self, result: ExperimentResult):
         """Log failed experiment."""
@@ -263,10 +297,22 @@ class Experiment:
         
         # Create trainer
         num_gpus = self.system_config.num_gpus if self.system_config else 2
-        self.trainer = EEGTrainer(self.model, self.config.training_config, self.config.name, num_gpus=num_gpus)
+        # Pass age range to trainer for displaying MAE in years (for regression tasks)
+        age_min = getattr(self, '_age_min', None)
+        age_max = getattr(self, '_age_max', None)
+        self.trainer = EEGTrainer(self.model, self.config.training_config, self.config.name, 
+                                 num_gpus=num_gpus, age_min=age_min, age_max=age_max)
         
         # Create evaluator
-        self.evaluator = EEGEvaluator(self.model, self.config.target_type)
+        # Determine prediction_type from training config
+        prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
+        
+        # Pass age min/max to evaluator if available (for regression)
+        age_min = getattr(self, '_age_min', None)
+        age_max = getattr(self, '_age_max', None)
+        self.evaluator = EEGEvaluator(self.model, self.config.target_type, 
+                                     prediction_type=prediction_type,
+                                     age_min=age_min, age_max=age_max)
         
         print(f"✅ Experiment setup complete")
     
@@ -285,7 +331,26 @@ class Experiment:
         if target_type == 'gender':
             gender_transform = gender_classification_transform
         elif target_type == 'age':
-            age_transform = age_classification_transform
+            # Check if this is a regression task
+            prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
+            if prediction_type == 'regression':
+                # Get train file path to compute age range
+                # IMPORTANT: Only use training data to compute min/max to avoid data leakage
+                # The same min/max will be used for normalizing train/val/test data
+                hdf5_dir_path = Path(data_config.hdf5_dir)
+                segment_length_str = f"{data_config.segment_length // 200}s"
+                train_file, _, _ = EEGDataLoader._get_hdf5_file_paths(hdf5_dir_path, segment_length_str)
+                
+                # Create transform with dataset-specific min/max from TRAINING data only
+                age_transform, age_min, age_max = create_age_regression_transform_from_hdf5(str(train_file))
+                
+                # Store age range for evaluator to use (same values for train/val/test)
+                self._age_min = age_min
+                self._age_max = age_max
+                print(f"📊 Using training data age range for regression normalization: min={age_min:.2f}, max={age_max:.2f} years")
+                print(f"   (This range will be used for all splits to avoid data leakage)")
+            else:
+                age_transform = age_classification_transform
         elif target_type == 'combined':
             combined_transform = combined_gender_age_classification_transform
         elif target_type == 'multi_output':
@@ -606,8 +671,14 @@ class Experiment:
         
         # Log task-type-specific results
         for task_type, task_results in task_type_results.items():
-            print(f"  {task_type.upper()} tasks: Accuracy = {task_results.metrics['accuracy']:.4f}, "
-                  f"F1-Score = {task_results.metrics['f1_weighted']:.4f}")
+            # Display appropriate metrics based on prediction type
+            if hasattr(self.config.training_config, 'prediction_type') and self.config.training_config.prediction_type == 'regression':
+                print(f"  {task_type.upper()} tasks: MAE = {task_results.metrics['mae']:.4f} years, "
+                      f"RMSE = {task_results.metrics['rmse']:.4f} years, "
+                      f"R² = {task_results.metrics['r2']:.4f}")
+            else:
+                print(f"  {task_type.upper()} tasks: Accuracy = {task_results.metrics['accuracy']:.4f}, "
+                      f"F1-Score = {task_results.metrics['f1_weighted']:.4f}")
         
         return results
     
@@ -625,7 +696,22 @@ class Experiment:
         if target_type == 'gender':
             gender_transform = gender_classification_transform
         elif target_type == 'age':
-            age_transform = age_classification_transform
+            # Check if this is a regression task
+            prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
+            if prediction_type == 'regression':
+                # For task-type-specific evaluation, use the same age range computed during setup
+                # This should always be set in _create_data_loaders() for regression tasks
+                if not hasattr(self, '_age_min') or not hasattr(self, '_age_max'):
+                    raise ValueError(
+                        "age_min and age_max must be set for age regression tasks. "
+                        "This should happen automatically in _create_data_loaders(). "
+                        "If you see this error, there's a bug in the experiment setup."
+                    )
+                # Use the age range computed from TRAINING data during data loader creation
+                # Create a picklable transform class instance for multiprocessing compatibility
+                age_transform = AgeRegressionTransform(self._age_min, self._age_max)
+            else:
+                age_transform = age_classification_transform
         elif target_type == 'combined':
             combined_transform = combined_gender_age_classification_transform
         elif target_type == 'multi_output':
@@ -847,21 +933,57 @@ def _generate_comparison_report(successful_results: List[ExperimentResult], resu
     safe_json_dump(convert_numpy_types(comparison), comparison_file)
     
     # Print comparison with description column
+    # Determine if we're comparing regression or classification models
+    is_regression = any('mae' in model_info for model_info in comparison['models'])
+    
     print("\n" + "="*120)
     print("MODEL COMPARISON")
     print("="*120)
-    print(f"{'Model':<20} {'Target':<10} {'Accuracy':<10} {'F1-Score':<10} {'Time (s)':<10} {'Description':<50}")
-    print("-"*120)
     
-    for model_info in comparison['models']:
-        description = model_info.get('description', 'Unknown experiment')
-        # Truncate description if too long
-        if len(description) > 47:
-            description = description[:44] + "..."
+    if is_regression:
+        print(f"{'Model':<20} {'Target':<10} {'MAE (years)':<15} {'RMSE (years)':<15} {'R²':<10} {'Time (s)':<10} {'Description':<50}")
+        print("-"*120)
         
-        print(f"{model_info['name']:<20} {model_info['target_type']:<10} "
-              f"{model_info['accuracy']:<10.4f} {model_info['f1_weighted']:<10.4f} "
-              f"{model_info['evaluation_time']:<10.2f} {description:<50}")
+        for model_info in comparison['models']:
+            description = model_info.get('description', 'Unknown experiment')
+            # Truncate description if too long
+            if len(description) > 47:
+                description = description[:44] + "..."
+            
+            mae = model_info.get('mae', None)
+            rmse = model_info.get('rmse', None)
+            r2 = model_info.get('r2', None)
+            
+            mae_str = f"{mae:.4f}" if mae is not None else "N/A"
+            rmse_str = f"{rmse:.4f}" if rmse is not None else "N/A"
+            r2_str = f"{r2:.4f}" if r2 is not None else "N/A"
+            print(f"{model_info['name']:<20} {model_info['target_type']:<10} "
+                  f"{mae_str:<15} {rmse_str:<15} {r2_str:<10} "
+                  f"{model_info['evaluation_time']:<10.2f} {description:<50}")
+        
+        best_metric = comparison.get('best_mae', None)
+        metric_name = 'MAE'
+    else:
+        print(f"{'Model':<20} {'Target':<10} {'Accuracy':<10} {'F1-Score':<10} {'Time (s)':<10} {'Description':<50}")
+        print("-"*120)
+        
+        for model_info in comparison['models']:
+            description = model_info.get('description', 'Unknown experiment')
+            # Truncate description if too long
+            if len(description) > 47:
+                description = description[:44] + "..."
+            
+            acc = model_info.get('accuracy', None)
+            f1 = model_info.get('f1_weighted', None)
+            acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+            f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+            print(f"{model_info['name']:<20} {model_info['target_type']:<10} "
+                  f"{acc_str:<10} {f1_str:<10} "
+                  f"{model_info['evaluation_time']:<10.2f} {description:<50}")
+        
+        best_metric = comparison.get('best_accuracy', None)
+        metric_name = 'Accuracy'
     
-    print(f"\nBest Model: {comparison['best_model']} (Accuracy: {comparison['best_accuracy']:.4f})")
+    best_metric_str = f"{best_metric:.4f}" if best_metric is not None else "N/A"
+    print(f"\nBest Model: {comparison['best_model']} ({metric_name}: {best_metric_str})")
     print("="*120)

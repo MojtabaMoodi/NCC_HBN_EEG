@@ -29,7 +29,7 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
     
     Args:
         segment_length: '1s', '2s', or '4s'
-        batch_size: Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)
+        batch_size: Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)
         random_seed: Random seed
         
     Returns:
@@ -43,7 +43,8 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
     # But need to balance with CPU memory (spawn workers use more RAM)
     if batch_size is None:
         if segment_length == '1s':
-            batch_size = 384  # Reduced from 512 to prevent OOM with spawn workers
+            batch_size = 6144  # Maximum batch size to minimize number of batches and HDF5 I/O operations
+            # With 955K samples, this gives ~155 batches per epoch (vs 233 with 4096)
         elif segment_length == '2s':
             batch_size = 256  # Balanced for memory and performance
         else:  # 4s
@@ -54,8 +55,11 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
     # With 'spawn' context, each worker uses significant memory (full Python env)
     # So we need fewer workers than with 'fork' context
     if segment_length == '1s':
-        # 1s segments are smaller, but spawn workers use more memory
-        num_workers = max(8, 2 * num_gpus)  # 2 workers per GPU (reduced for spawn context)
+        # 1s has many more samples (955K vs 308K for 4s)
+        # With maximum batch size (6144), we have very few batches, so many workers help
+        # without causing excessive HDF5 file contention
+        # With 64GB RAM, we can support more workers (each worker uses ~1-2GB with spawn context)
+        num_workers = max(24, 6 * num_gpus)  # Use 24 workers minimum, or 6 per GPU (optimized for 64GB RAM)
     elif segment_length == '2s':
         # 2s: use fewer workers to prevent OOM (2s segments are larger)
         num_workers = max(6, 2 * num_gpus)  # 2 workers per GPU
@@ -88,7 +92,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         segment_length: '1s', '2s', or '4s'
         epochs: Number of training epochs
         learning_rate: Learning rate
-        batch_size: Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)
+        batch_size: Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)
         
     Returns:
         List of experiment configurations
@@ -112,14 +116,26 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="gender")
     ))
     
+    # Age classification experiment
     experiments.append(ExperimentConfig(
-        name=f"age_baseline_{segment_length}",
+        name=f"age_classification_{segment_length}",
         model_type="age_cnn",
         target_type="age",
         description=f"Age classification baseline with {segment_length} segments (train on both, evaluate separately)",
         data_config=base_data_config,
         model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age")
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age", prediction_type="classification")
+    ))
+    
+    # Age regression experiment
+    experiments.append(ExperimentConfig(
+        name=f"age_regression_{segment_length}",
+        model_type="age_regression_cnn",
+        target_type="age",
+        description=f"Age regression baseline with {segment_length} segments (train on both, evaluate separately)",
+        data_config=base_data_config,
+        model_config=ModelConfig(num_channels=60, num_classes=1),  # Regression outputs 1 value
+        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age", prediction_type="regression")
     ))
     
     # Comment out all other experiments - only baseline experiments are used
@@ -395,7 +411,7 @@ def main():
         actual_batch_size = args.batch_size
     else:
         if args.mode == '1s':
-            actual_batch_size = 256
+            actual_batch_size = 512  # Increased to reduce I/O operations
         elif args.mode == '2s':
             actual_batch_size = 192
         else:  # 4s

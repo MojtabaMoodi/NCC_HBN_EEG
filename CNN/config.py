@@ -78,6 +78,7 @@ class TrainingConfig:
     save_every: int = 5
     checkpoint_dir: str = 'checkpoints'
     target_key: str = 'gender'  # 'gender' or 'age'
+    prediction_type: str = 'classification'  # 'classification' or 'regression'
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for serialization."""
@@ -88,7 +89,8 @@ class TrainingConfig:
             'min_delta': self.min_delta,
             'save_every': self.save_every,
             'checkpoint_dir': self.checkpoint_dir,
-            'target_key': self.target_key
+            'target_key': self.target_key,
+            'prediction_type': self.prediction_type
         }
 
 @dataclass
@@ -110,11 +112,15 @@ class ExperimentConfig:
         if self.training_config is None:
             self.training_config = TrainingConfig(target_key=self.target_type)
         
-        # Set num_classes based on target_type
+        # Set num_classes based on target_type and prediction_type
         if self.target_type == 'gender':
             self.model_config.num_classes = 2
         elif self.target_type == 'age':
-            self.model_config.num_classes = 3
+            # Check if this is a regression task
+            if hasattr(self.training_config, 'prediction_type') and self.training_config.prediction_type == 'regression':
+                self.model_config.num_classes = 1  # Regression outputs 1 value
+            else:
+                self.model_config.num_classes = 3  # Classification has 3 classes
         elif self.target_type == 'combined':
             self.model_config.num_classes = 6  # 2 genders × 3 age groups = 6 classes
         elif self.target_type == 'multi_output':

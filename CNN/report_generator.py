@@ -82,9 +82,40 @@ class ReportGenerator:
                         f.write(f"Gender Head - F1-Score: {gender_metrics['f1_weighted']:.4f}\n")
                         f.write(f"Age Head - Accuracy: {age_metrics['accuracy']:.4f}\n")
                         f.write(f"Age Head - F1-Score: {age_metrics['f1_weighted']:.4f}\n")
+                    elif 'mae' in result.metrics:
+                        # Regression task
+                        f.write(f"MAE: {result.metrics['mae']:.4f} years\n")
+                        f.write(f"RMSE: {result.metrics['rmse']:.4f} years\n")
+                        f.write(f"R²: {result.metrics['r2']:.4f}\n")
                     else:
-                        f.write(f"Accuracy: {result.metrics['accuracy']:.4f}\n")
-                        f.write(f"F1-Score: {result.metrics['f1_weighted']:.4f}\n")
+                        # Classification task
+                        acc = result.metrics.get('accuracy')
+                        f1 = result.metrics.get('f1_weighted')
+                        acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                        f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+                        f.write(f"Combined Accuracy: {acc_str}\n")
+                        f.write(f"F1-Score: {f1_str}\n")
+                        
+                        # Add task-specific accuracies if available
+                        if 'task_type_metrics' in result.metrics:
+                            task_metrics = result.metrics['task_type_metrics']
+                            if 'active' in task_metrics and 'passive' in task_metrics:
+                                active_acc = task_metrics['active'].get('accuracy')
+                                passive_acc = task_metrics['passive'].get('accuracy')
+                                active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                                passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                                f.write(f"Active Task Accuracy: {active_acc_str}\n")
+                                f.write(f"Passive Task Accuracy: {passive_acc_str}\n")
+                                # Note: Combined accuracy is a weighted average based on sample counts, not a simple average
+                                f.write(f"  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)\n")
+                            elif 'active' in task_metrics:
+                                active_acc = task_metrics['active'].get('accuracy')
+                                active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                                f.write(f"Active Task Accuracy: {active_acc_str}\n")
+                            elif 'passive' in task_metrics:
+                                passive_acc = task_metrics['passive'].get('accuracy')
+                                passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                                f.write(f"Passive Task Accuracy: {passive_acc_str}\n")
                     
                     f.write(f"Training Time: {result.total_time:.2f}s\n")
             
@@ -167,13 +198,56 @@ class ReportGenerator:
             <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
         </div>
 """
-                else:
+                elif 'mae' in metrics:
+                    # Regression task
                     html_content += f"""
         <div class="metrics">
-            <div class="metric"><strong>Accuracy:</strong> {metrics['accuracy']:.4f}</div>
-            <div class="metric"><strong>Precision:</strong> {metrics['precision_weighted']:.4f}</div>
-            <div class="metric"><strong>Recall:</strong> {metrics['recall_weighted']:.4f}</div>
-            <div class="metric"><strong>F1-Score:</strong> {metrics['f1_weighted']:.4f}</div>
+            <div class="metric"><strong>MAE:</strong> {metrics['mae']:.4f} years</div>
+            <div class="metric"><strong>RMSE:</strong> {metrics['rmse']:.4f} years</div>
+            <div class="metric"><strong>R²:</strong> {metrics['r2']:.4f}</div>
+            <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
+        </div>
+"""
+                else:
+                    # Classification task
+                    acc = metrics.get('accuracy')
+                    prec = metrics.get('precision_weighted')
+                    rec = metrics.get('recall_weighted')
+                    f1 = metrics.get('f1_weighted')
+                    acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                    prec_str = f"{prec:.4f}" if isinstance(prec, (int, float)) else "N/A"
+                    rec_str = f"{rec:.4f}" if isinstance(rec, (int, float)) else "N/A"
+                    f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+                    
+                    # Build accuracy section with task-specific metrics
+                    accuracy_html = f"<div class=\"metric\"><strong>Combined Accuracy:</strong> {acc_str}</div>"
+                    
+                    # Add task-specific accuracies if available
+                    if 'task_type_metrics' in metrics:
+                        task_metrics = metrics['task_type_metrics']
+                        if 'active' in task_metrics and 'passive' in task_metrics:
+                            active_acc = task_metrics['active'].get('accuracy')
+                            passive_acc = task_metrics['passive'].get('accuracy')
+                            active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                            passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str}</div>"
+                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str}</div>"
+                            accuracy_html += f"<div class=\"metric\" style=\"font-size: 0.9em; color: #666;\"><em>Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2</em></div>"
+                        elif 'active' in task_metrics:
+                            active_acc = task_metrics['active'].get('accuracy')
+                            active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str}</div>"
+                        elif 'passive' in task_metrics:
+                            passive_acc = task_metrics['passive'].get('accuracy')
+                            passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str}</div>"
+                    
+                    html_content += f"""
+        <div class="metrics">
+            {accuracy_html}
+            <div class="metric"><strong>Precision:</strong> {prec_str}</div>
+            <div class="metric"><strong>Recall:</strong> {rec_str}</div>
+            <div class="metric"><strong>F1-Score:</strong> {f1_str}</div>
             <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
         </div>
 """
@@ -223,22 +297,55 @@ class ReportGenerator:
             <td>{result.total_time:.2f}</td>
         </tr>
 """
-                    else:
-                        # Single-output: show both columns but use same values
+                    elif 'mae' in metrics:
+                        # Regression task
                         html_content += f"""
         <tr>
             <td>{result.experiment_name}</td>
             <td>{result.model_type}</td>
             <td>{result.target_type}</td>
-            <td>{metrics['accuracy']:.4f}</td>
-            <td>{metrics['accuracy']:.4f}</td>
-            <td>{metrics['f1_weighted']:.4f}</td>
-            <td>{metrics['f1_weighted']:.4f}</td>
+            <td>{metrics['mae']:.4f} years</td>
+            <td>{metrics['rmse']:.4f} years</td>
+            <td>{metrics['r2']:.4f}</td>
+            <td>N/A</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                    else:
+                        # Single-output classification: show both columns but use same values
+                        html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{f"{metrics.get('accuracy'):.4f}" if isinstance(metrics.get('accuracy'), (int, float)) else "N/A"}</td>
+            <td>{f"{metrics.get('accuracy'):.4f}" if isinstance(metrics.get('accuracy'), (int, float)) else "N/A"}</td>
+            <td>{f"{metrics.get('f1_weighted'):.4f}" if isinstance(metrics.get('f1_weighted'), (int, float)) else "N/A"}</td>
+            <td>{f"{metrics.get('f1_weighted'):.4f}" if isinstance(metrics.get('f1_weighted'), (int, float)) else "N/A"}</td>
             <td>{result.total_time:.2f}</td>
         </tr>
 """
             else:
-                html_content += """
+                # Check if any experiments have task-specific metrics to determine table headers
+                has_task_metrics = any('task_type_metrics' in r.metrics for r in successful if r.success)
+                
+                if has_task_metrics:
+                    html_content += """
+    <h2>Model Comparison</h2>
+    <table>
+        <tr>
+            <th>Experiment</th>
+            <th>Model</th>
+            <th>Target</th>
+            <th>Combined Accuracy</th>
+            <th>Active Accuracy</th>
+            <th>Passive Accuracy</th>
+            <th>F1-Score</th>
+            <th>Training Time (s)</th>
+        </tr>
+"""
+                else:
+                    html_content += """
     <h2>Model Comparison</h2>
     <table>
         <tr>
@@ -253,13 +360,50 @@ class ReportGenerator:
                 
                 for result in successful:
                     metrics = result.metrics
-                    html_content += f"""
+                    # Check if this is a regression task
+                    if 'mae' in metrics:
+                        html_content += f"""
         <tr>
             <td>{result.experiment_name}</td>
             <td>{result.model_type}</td>
             <td>{result.target_type}</td>
-            <td>{metrics['accuracy']:.4f}</td>
-            <td>{metrics['f1_weighted']:.4f}</td>
+            <td>{metrics['mae']:.4f} years</td>
+            <td>{metrics['r2']:.4f}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                    else:
+                        acc = metrics.get('accuracy')
+                        f1 = metrics.get('f1_weighted')
+                        acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                        f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+                        
+                        if has_task_metrics and 'task_type_metrics' in metrics:
+                            task_metrics = metrics['task_type_metrics']
+                            active_acc = task_metrics.get('active', {}).get('accuracy')
+                            passive_acc = task_metrics.get('passive', {}).get('accuracy')
+                            active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                            passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                            html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{acc_str}</td>
+            <td>{active_acc_str}</td>
+            <td>{passive_acc_str}</td>
+            <td>{f1_str}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                        else:
+                            html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{acc_str}</td>
+            <td>{f1_str}</td>
             <td>{result.total_time:.2f}</td>
         </tr>
 """
@@ -312,8 +456,13 @@ class ReportGenerator:
                 if result.target_type == 'multi_output' and 'gender_head' in result.metrics:
                     gender_accs.append(result.metrics['gender_head']['accuracy'])
                     age_accs.append(result.metrics['age_head']['accuracy'])
+                elif 'mae' in result.metrics:
+                    # Regression task - use MAE (inverted for plotting, lower is better)
+                    # For plotting purposes, we'll use 1/MAE normalized to [0,1] range
+                    # Or just skip regression tasks in accuracy plots
+                    pass  # Skip regression tasks in accuracy plots
                 else:
-                    single_accs.append(result.metrics['accuracy'])
+                    single_accs.append(result.metrics.get('accuracy', 0))
                     single_exps.append(result.experiment_name)
             
             # Plot multi-output experiments
@@ -364,28 +513,44 @@ class ReportGenerator:
                                ha='center', va='bottom', fontsize=8)
             else:
                 # Fallback to single output plotting (shouldn't happen, but just in case)
-                accuracies = [r.metrics['accuracy'] for r in successful_results]
+                # Filter to only classification experiments (skip regression)
+                classification_results = [r for r in successful_results if 'accuracy' in r.metrics]
+                if not classification_results:
+                    # No classification experiments to plot
+                    plt.close()
+                    return
+                
+                experiments_filtered = [r.experiment_name for r in classification_results]
+                accuracies = [r.metrics.get('accuracy', 0) for r in classification_results]
                 fig, ax = plt.subplots(figsize=(12, 6))
-                bars = ax.bar(range(len(experiments)), accuracies, color='skyblue', alpha=0.7)
+                bars = ax.bar(range(len(experiments_filtered)), accuracies, color='skyblue', alpha=0.7)
                 ax.set_xlabel('Experiment', fontsize=12)
                 ax.set_ylabel('Accuracy', fontsize=12)
-                ax.set_title('Model Accuracy Comparison', fontsize=16, fontweight='bold')
-                ax.set_xticks(range(len(experiments)))
-                ax.set_xticklabels(experiments, rotation=45, ha='right')
+                ax.set_title('Model Accuracy Comparison (Classification Only)', fontsize=16, fontweight='bold')
+                ax.set_xticks(range(len(experiments_filtered)))
+                ax.set_xticklabels(experiments_filtered, rotation=45, ha='right')
                 ax.set_ylim(0, 1)
                 for bar, acc in zip(bars, accuracies):
                     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
                            f'{acc:.3f}', ha='center', va='bottom')
         else:
             # Original single-output plotting
-            accuracies = [r.metrics['accuracy'] for r in successful_results]
+            # Filter to only classification experiments (skip regression which has 'mae' instead of 'accuracy')
+            classification_results = [r for r in successful_results if 'accuracy' in r.metrics]
+            if not classification_results:
+                # No classification experiments to plot
+                plt.close()
+                return
+            
+            experiments_filtered = [r.experiment_name for r in classification_results]
+            accuracies = [r.metrics.get('accuracy', 0) for r in classification_results]
             fig, ax = plt.subplots(figsize=(12, 6))
-            bars = ax.bar(range(len(experiments)), accuracies, color='skyblue', alpha=0.7)
+            bars = ax.bar(range(len(experiments_filtered)), accuracies, color='skyblue', alpha=0.7)
             ax.set_xlabel('Experiment', fontsize=12)
             ax.set_ylabel('Accuracy', fontsize=12)
-            ax.set_title('Model Accuracy Comparison', fontsize=16, fontweight='bold')
-            ax.set_xticks(range(len(experiments)))
-            ax.set_xticklabels(experiments, rotation=45, ha='right')
+            ax.set_title('Model Accuracy Comparison (Classification Only)', fontsize=16, fontweight='bold')
+            ax.set_xticks(range(len(experiments_filtered)))
+            ax.set_xticklabels(experiments_filtered, rotation=45, ha='right')
             ax.set_ylim(0, 1)
             
             # Add value labels on bars
@@ -433,24 +598,50 @@ class ReportGenerator:
         # Create subplots
         fig, axes = plt.subplots(1, 2, figsize=(15, 6))
         
-        # Accuracy by target type
+        # Accuracy by target type (skip regression tasks)
         targets = list(target_groups.keys())
-        accuracies = [max([r.metrics['accuracy'] 
-                          for r in target_groups[target]]) for target in targets]
+        accuracies = []
+        valid_targets = []
+        for target in targets:
+            # Only include targets that have accuracy metrics (classification tasks)
+            target_accs = [r.metrics.get('accuracy', 0) 
+                          for r in target_groups[target] 
+                          if 'accuracy' in r.metrics]
+            if target_accs:
+                accuracies.append(max(target_accs))
+                valid_targets.append(target)
         
-        axes[0].bar(targets, accuracies, color=['skyblue', 'lightcoral'], alpha=0.7)
-        axes[0].set_title('Best Accuracy by Target Type', fontweight='bold')
-        axes[0].set_ylabel('Accuracy')
-        axes[0].set_ylim(0, 1)
+        if valid_targets:
+            axes[0].bar(valid_targets, accuracies, color=['skyblue', 'lightcoral'], alpha=0.7)
+            axes[0].set_title('Best Accuracy by Target Type', fontweight='bold')
+            axes[0].set_ylabel('Accuracy')
+            axes[0].set_ylim(0, 1)
+        else:
+            axes[0].text(0.5, 0.5, 'No classification tasks to display', 
+                        ha='center', va='center', transform=axes[0].transAxes)
+            axes[0].set_title('Best Accuracy by Target Type', fontweight='bold')
         
-        # F1-score by target type
-        f1_scores = [max([r.metrics['f1_weighted'] 
-                         for r in target_groups[target]]) for target in targets]
+        # F1-score by target type (skip regression tasks)
+        f1_scores = []
+        valid_targets_f1 = []
+        for target in targets:
+            # Only include targets that have f1_weighted metrics (classification tasks)
+            target_f1s = [r.metrics.get('f1_weighted', 0) 
+                         for r in target_groups[target] 
+                         if 'f1_weighted' in r.metrics]
+            if target_f1s:
+                f1_scores.append(max(target_f1s))
+                valid_targets_f1.append(target)
         
-        axes[1].bar(targets, f1_scores, color=['skyblue', 'lightcoral'], alpha=0.7)
-        axes[1].set_title('Best F1-Score by Target Type', fontweight='bold')
-        axes[1].set_ylabel('F1-Score')
-        axes[1].set_ylim(0, 1)
+        if valid_targets_f1:
+            axes[1].bar(valid_targets_f1, f1_scores, color=['skyblue', 'lightcoral'], alpha=0.7)
+            axes[1].set_title('Best F1-Score by Target Type', fontweight='bold')
+            axes[1].set_ylabel('F1-Score')
+            axes[1].set_ylim(0, 1)
+        else:
+            axes[1].text(0.5, 0.5, 'No classification tasks to display', 
+                        ha='center', va='center', transform=axes[1].transAxes)
+            axes[1].set_title('Best F1-Score by Target Type', fontweight='bold')
         
         plt.tight_layout()
         plt.savefig(os.path.join(self.output_dir, 'performance_by_target.png'), 
@@ -495,18 +686,43 @@ class ReportGenerator:
                     'training_time': result.total_time,
                     'evaluation_time': result.evaluation_time
                 })
-            else:
+            elif 'mae' in metrics:
+                # Regression task
                 data.append({
                     'experiment_name': result.experiment_name,
                     'model_type': result.model_type,
                     'target_type': result.target_type,
-                    'accuracy': metrics['accuracy'],
-                    'precision_weighted': metrics['precision_weighted'],
-                    'recall_weighted': metrics['recall_weighted'],
-                    'f1_weighted': metrics['f1_weighted'],
+                    'mae': metrics.get('mae', None),
+                    'rmse': metrics.get('rmse', None),
+                    'r2': metrics.get('r2', None),
+                    'mae_normalized': metrics.get('mae_normalized', None),
                     'training_time': result.total_time,
                     'evaluation_time': result.evaluation_time
                 })
+            else:
+                # Classification task
+                row = {
+                    'experiment_name': result.experiment_name,
+                    'model_type': result.model_type,
+                    'target_type': result.target_type,
+                    'combined_accuracy': metrics.get('accuracy', None),
+                    'precision_weighted': metrics.get('precision_weighted', None),
+                    'recall_weighted': metrics.get('recall_weighted', None),
+                    'f1_weighted': metrics.get('f1_weighted', None),
+                    'training_time': result.total_time,
+                    'evaluation_time': result.evaluation_time
+                }
+                
+                # Add task-specific accuracies if available
+                if 'task_type_metrics' in metrics:
+                    task_metrics = metrics['task_type_metrics']
+                    row['active_accuracy'] = task_metrics.get('active', {}).get('accuracy', None)
+                    row['passive_accuracy'] = task_metrics.get('passive', {}).get('accuracy', None)
+                else:
+                    row['active_accuracy'] = None
+                    row['passive_accuracy'] = None
+                
+                data.append(row)
         
         # Create DataFrame and save
         df = pd.DataFrame(data)

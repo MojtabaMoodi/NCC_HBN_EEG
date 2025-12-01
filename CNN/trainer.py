@@ -20,9 +20,7 @@ from models import BaseEEGCNN
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# For combined experiments, compute combined class from gender and age
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
-from constants import get_combined_class
 from utils import safe_json_dump, convert_numpy_types
 from config import TrainingConfig
 
@@ -34,10 +32,14 @@ class EEGTrainer:
     """
     
     def __init__(self, model: BaseEEGCNN, config: TrainingConfig, 
-                 experiment_name: str = None, num_gpus: int = 2):
+                 experiment_name: str = None, num_gpus: int = 2,
+                 age_min: float = None, age_max: float = None):
         self.model = model
         self.config = config
         self.experiment_name = experiment_name or f"{model.__class__.__name__}_{int(time.time())}"
+        # Store age range for displaying MAE in years (for regression tasks)
+        self.age_min = age_min
+        self.age_max = age_max
         
         # Setup device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,7 +66,12 @@ class EEGTrainer:
             print(f"⚠️  Model compilation not available or failed: {e}")
         
         # Setup training components
-        self.criterion = nn.CrossEntropyLoss()
+        # Use MSE loss for regression, CrossEntropyLoss for classification
+        self.is_regression = hasattr(config, 'prediction_type') and config.prediction_type == 'regression'
+        if self.is_regression:
+            self.criterion = nn.MSELoss()
+        else:
+            self.criterion = nn.CrossEntropyLoss()
         
         # Use fused Adam optimizer if available (faster on modern GPUs)
         try:
@@ -149,11 +156,22 @@ class EEGTrainer:
                 age = batch['age'].to(self.device, non_blocking=True)
                 # For combined experiments, age should be classification (0, 1, 2), not regression
                 # Gender should also be classification (0, 1)
-                combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
-                                              dtype=torch.long, device=self.device)
+                # Optimized: Use vectorized operations instead of Python list comprehension
+                # Convert to int tensors (gender: 0/1, age: 0/1/2)
+                gender_int = gender.long()  # Already 0 or 1
+                age_int = age.long()  # Already 0, 1, or 2
+                # Combined class = gender * 3 + age (vectorized)
+                combined_classes = gender_int * 3 + age_int
                 labels = combined_classes
             else:
                 labels = batch[self.config.target_key].to(self.device, non_blocking=True)
+                # For regression, ensure labels are float and have correct shape
+                if self.is_regression:
+                    if labels.dtype != torch.float32:
+                        labels = labels.float()
+                    # Reshape if needed: (batch_size,) -> (batch_size, 1)
+                    if labels.dim() == 1:
+                        labels = labels.unsqueeze(1)
             
             self.optimizer.zero_grad()
             
@@ -169,10 +187,10 @@ class EEGTrainer:
                         age_loss = self.criterion(outputs['age'], labels['age'])
                         loss = gender_loss + age_loss  # Combined loss
                     else:
-                        # Single-output model (e.g., EEGCNN, CombinedCNN)
+                        # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
                         loss = self.criterion(outputs, labels)
                 
-                # Calculate accuracy outside autocast (not needed for FP16, and avoids .data deprecation)
+                # Calculate metrics outside autocast
                 if isinstance(outputs, dict):
                     # Multi-output model: get predicted class indices (argmax)
                     gender_pred = torch.argmax(outputs['gender'], dim=1)
@@ -181,9 +199,16 @@ class EEGTrainer:
                     age_correct = (age_pred == labels['age']).sum().item()
                     correct += (gender_correct + age_correct) / 2  # Average of both accuracies
                 else:
-                    # Single-output model: get predicted class indices (argmax)
-                    predicted = torch.argmax(outputs, dim=1)
-                    correct += (predicted == labels).sum().item()
+                    # Single-output model
+                    if self.is_regression:
+                        # For regression: accumulate sum of absolute errors
+                        # We'll divide by total later to get overall MAE
+                        sum_absolute_errors = torch.abs(outputs - labels).sum().item()
+                        correct += sum_absolute_errors
+                    else:
+                        # For classification: calculate accuracy
+                        predicted = torch.argmax(outputs, dim=1)
+                        correct += (predicted == labels).sum().item()
                 
                 # Scale loss and backward pass for mixed precision
                 self.scaler.scale(loss).backward()
@@ -207,11 +232,17 @@ class EEGTrainer:
                     age_correct = (age_pred == labels['age']).sum().item()
                     correct += (gender_correct + age_correct) / 2  # Average of both accuracies
                 else:
-                    # Single-output model (e.g., EEGCNN, CombinedCNN)
+                    # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
                     loss = self.criterion(outputs, labels)
-                    # Calculate accuracy: get predicted class indices (argmax)
-                    predicted = torch.argmax(outputs, dim=1)
-                    correct += (predicted == labels).sum().item()
+                    if self.is_regression:
+                        # For regression: accumulate sum of absolute errors
+                        # We'll divide by total later to get overall MAE
+                        sum_absolute_errors = torch.abs(outputs - labels).sum().item()
+                        correct += sum_absolute_errors
+                    else:
+                        # For classification: calculate accuracy
+                        predicted = torch.argmax(outputs, dim=1)
+                        correct += (predicted == labels).sum().item()
                 
                 loss.backward()
                 self.optimizer.step()
@@ -221,8 +252,12 @@ class EEGTrainer:
         
         # Use num_batches instead of len(train_loader) since IterableDataset doesn't support __len__()
         avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        accuracy = correct / total if total > 0 else 0.0
-        return avg_loss, accuracy
+        
+        # Calculate metric based on task type
+        # For regression: correct = sum(|outputs - labels|) across all batches, so correct/total = overall MAE
+        # For classification: correct = sum(correct_predictions), so correct/total = accuracy
+        metric = correct / total if total > 0 else 0.0
+        return avg_loss, metric
     
     def validate_epoch(self, val_loader: DataLoader) -> Tuple[float, float]:
         """Validate for one epoch."""
@@ -250,11 +285,21 @@ class EEGTrainer:
                     age = batch['age'].to(self.device, non_blocking=True)
                     # For combined experiments, age should be classification (0, 1, 2), not regression
                     # Gender should also be classification (0, 1)
-                    combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
-                                                  dtype=torch.long, device=self.device)
+                    # Optimized: Use vectorized operations instead of Python list comprehension
+                    gender_int = gender.long()  # Already 0 or 1
+                    age_int = age.long()  # Already 0, 1, or 2
+                    # Combined class = gender * 3 + age (vectorized)
+                    combined_classes = gender_int * 3 + age_int
                     labels = combined_classes
                 else:
                     labels = batch[self.config.target_key].to(self.device, non_blocking=True)
+                    # For regression, ensure labels are float and have correct shape
+                    if self.is_regression:
+                        if labels.dtype != torch.float32:
+                            labels = labels.float()
+                        # Reshape if needed: (batch_size,) -> (batch_size, 1)
+                        if labels.dim() == 1:
+                            labels = labels.unsqueeze(1)
                 
                 # Use mixed precision for validation too (faster, minimal accuracy impact)
                 if self.use_amp:
@@ -277,19 +322,29 @@ class EEGTrainer:
                     age_correct = (age_pred == labels['age']).sum().item()
                     correct += (gender_correct + age_correct) / 2  # Average of both accuracies
                 else:
-                    # Single-output model (e.g., EEGCNN, CombinedCNN)
+                    # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
                     loss = self.criterion(outputs, labels)
-                    # Calculate accuracy: get predicted class indices (argmax)
-                    predicted = torch.argmax(outputs, dim=1)
-                    correct += (predicted == labels).sum().item()
+                    if self.is_regression:
+                        # For regression: accumulate sum of absolute errors
+                        # We'll divide by total later to get overall MAE
+                        sum_absolute_errors = torch.abs(outputs - labels).sum().item()
+                        correct += sum_absolute_errors
+                    else:
+                        # For classification: calculate accuracy
+                        predicted = torch.argmax(outputs, dim=1)
+                        correct += (predicted == labels).sum().item()
                 
                 total_loss += loss.item()
                 total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
         # Use num_batches instead of len(val_loader) since IterableDataset doesn't support __len__()
         avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        accuracy = correct / total if total > 0 else 0.0
-        return avg_loss, accuracy
+        
+        # Calculate metric based on task type
+        # For regression: correct = sum(|outputs - labels|) across all batches, so correct/total = overall MAE
+        # For classification: correct = sum(correct_predictions), so correct/total = accuracy
+        metric = correct / total if total > 0 else 0.0
+        return avg_loss, metric
     
     def save_checkpoint(self, epoch: int, is_best: bool = False, experiment_results_dir: str = None):
         """Save model checkpoint."""
@@ -373,10 +428,19 @@ class EEGTrainer:
             if progress_callback:
                 progress_callback(epoch, self.config.epochs, train_loss, val_loss, train_acc, val_acc, current_lr, epoch_time)
             else:
-                print(f"Epoch {epoch+1:3d}/{self.config.epochs} | "
-                    f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                    f"Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f} | "
-                    f"LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
+                # For regression, convert normalized MAE to years if age range is available
+                if self.is_regression and self.age_min is not None and self.age_max is not None:
+                    age_range = self.age_max - self.age_min
+                    train_mae_years = train_acc * age_range
+                    val_mae_years = val_acc * age_range
+                    print(f"  → Epoch {epoch+1:3d}/{self.config.epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                        f"Train MAE: {train_mae_years:.2f} years ({train_acc:.4f} norm) | Val MAE: {val_mae_years:.2f} years ({val_acc:.4f} norm) | "
+                        f"LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
+                else:
+                    print(f"  → Epoch {epoch+1:3d}/{self.config.epochs} | "
+                        f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                        f"Train {'MAE' if self.is_regression else 'Acc'}: {train_acc:.4f} | Val {'MAE' if self.is_regression else 'Acc'}: {val_acc:.4f} | "
+                        f"LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
             
             # Check for improvement
             if val_loss < self.best_val_loss - self.config.min_delta:
@@ -434,12 +498,29 @@ def load_checkpoint(checkpoint_path: str, model: BaseEEGCNN,
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     state_dict = checkpoint['model_state_dict']
     
-    # Handle DataParallel checkpoints: handle 'module.' prefix mismatch
-    has_module_prefix = any(k.startswith('module.') for k in state_dict.keys())
+    # Handle torch.compile and DataParallel wrappers in checkpoint
+    # Checkpoint may have keys like: "_orig_mod.module.conv_layers.0.weight"
+    # We need to strip both "_orig_mod." and "module." prefixes to get to the base model
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        # Strip torch.compile wrapper prefix (_orig_mod.)
+        if k.startswith('_orig_mod.'):
+            k = k[10:]  # Remove '_orig_mod.' prefix (10 characters)
+        
+        # Strip DataParallel wrapper prefix (module.)
+        if k.startswith('module.'):
+            k = k[7:]  # Remove 'module.' prefix (7 characters)
+        
+        new_state_dict[k] = v
+    
+    state_dict = new_state_dict
+    
+    # Handle DataParallel wrapper mismatch if model is currently wrapped
     model_is_wrapped = isinstance(model, nn.DataParallel)
+    has_module_prefix = any(k.startswith('module.') for k in state_dict.keys())
     
     if has_module_prefix and not model_is_wrapped:
         # State dict has 'module.' prefix but model is not wrapped - strip prefix

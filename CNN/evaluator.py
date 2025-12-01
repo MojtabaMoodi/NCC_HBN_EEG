@@ -13,16 +13,16 @@ from torch.utils.data import DataLoader
 from collections import OrderedDict
 from sklearn.metrics import (
     accuracy_score, precision_recall_fscore_support, 
-    confusion_matrix, classification_report, roc_auc_score
+    confusion_matrix, classification_report, roc_auc_score,
+    mean_absolute_error, mean_squared_error, r2_score
 )
 
 from models import BaseEEGCNN
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# For combined experiments, compute combined class from gender and age
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
-from constants import get_combined_class
+from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
 from utils import safe_json_dump, convert_numpy_types
 
 class EvaluationResults:
@@ -83,15 +83,30 @@ class EEGEvaluator:
     """
     
     def __init__(self, model: BaseEEGCNN, target_type: str, 
-                 class_names: Optional[List[str]] = None):
+                 class_names: Optional[List[str]] = None, prediction_type: str = 'classification',
+                 age_min: Optional[float] = None, age_max: Optional[float] = None):
         self.model = model
         self.target_type = target_type
+        self.prediction_type = prediction_type  # 'classification' or 'regression'
         self.class_names = class_names or self._get_default_class_names()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Move model to device
         self.model.to(self.device)
         self.model.eval()
+        
+        # Age normalization parameters for denormalization (required for regression)
+        # These should be computed from TRAINING data only and passed during initialization
+        # to avoid data leakage
+        if prediction_type == 'regression' and target_type == 'age':
+            if age_min is None or age_max is None:
+                raise ValueError(
+                    "age_min and age_max must be provided for age regression tasks. "
+                    "These should be computed from TRAINING data only to avoid data leakage. "
+                    "Use create_age_regression_transform_from_hdf5() on the training HDF5 file."
+                )
+        self.age_min = age_min
+        self.age_max = age_max
     
     def _get_underlying_model(self):
         """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
@@ -176,8 +191,11 @@ class EEGEvaluator:
                     age = batch['age'].to(self.device)
                     # For combined experiments, age should be classification (0, 1, 2), not regression
                     # Gender should also be classification (0, 1)
-                    combined_classes = torch.tensor([get_combined_class(g.item(), a.item()) for g, a in zip(gender, age)], 
-                                                  dtype=torch.long, device=self.device)
+                    # Optimized: Use vectorized operations instead of Python list comprehension
+                    gender_int = gender.long()  # Already 0 or 1
+                    age_int = age.long()  # Already 0, 1, or 2
+                    # Combined class = gender * 3 + age (vectorized)
+                    combined_classes = gender_int * 3 + age_int
                     labels = combined_classes
                 else:
                     labels = batch[self.target_type].to(self.device)
@@ -222,13 +240,31 @@ class EEGEvaluator:
                     # Use gender_predictions and age_predictions separately instead
                     
                 else:
-                    # Single-output model (e.g., EEGCNN, CombinedCNN)
-                    probabilities = torch.softmax(outputs, dim=1)
-                    _, predicted = torch.max(outputs, 1)
-                    
-                    all_predictions.extend(predicted.cpu().numpy())
-                    all_true_labels.extend(labels.cpu().numpy())
-                    all_probabilities.extend(probabilities.cpu().numpy())
+                    # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
+                    if self.prediction_type == 'regression':
+                        # For regression: outputs are already in [0, 1] range
+                        # Reshape if needed: (batch_size, 1) -> (batch_size,)
+                        if outputs.dim() > 1 and outputs.size(1) == 1:
+                            outputs = outputs.squeeze(1)
+                        if labels.dim() > 1 and labels.size(1) == 1:
+                            labels = labels.squeeze(1)
+                        # Ensure labels are float
+                        if labels.dtype != torch.float32:
+                            labels = labels.float()
+                        
+                        # Store normalized predictions and labels
+                        all_predictions.extend(outputs.cpu().numpy())
+                        all_true_labels.extend(labels.cpu().numpy())
+                        # For regression, we don't use probabilities
+                        all_probabilities.extend([[p] for p in outputs.cpu().numpy()])  # Dummy probabilities for compatibility
+                    else:
+                        # For classification: use softmax and argmax
+                        probabilities = torch.softmax(outputs, dim=1)
+                        _, predicted = torch.max(outputs, 1)
+                        
+                        all_predictions.extend(predicted.cpu().numpy())
+                        all_true_labels.extend(labels.cpu().numpy())
+                        all_probabilities.extend(probabilities.cpu().numpy())
         
         # Add predictions to results (only for single-output models)
         # For multi-output models, predictions are stored separately in gender_predictions and age_predictions
@@ -301,8 +337,14 @@ class EEGEvaluator:
             results.metrics['age_head'] = results.age_metrics
         else:
             # Single-output model or combined model - compute metrics normally
-            metrics = self._compute_metrics(all_predictions, all_true_labels, all_probabilities)
-            results.add_metrics(metrics)
+            if self.prediction_type == 'regression':
+                results.add_metrics(self._compute_regression_metrics(
+                    all_predictions,
+                    all_true_labels
+                ))
+            else:
+                metrics = self._compute_metrics(all_predictions, all_true_labels, all_probabilities)
+                results.add_metrics(metrics)
         
         # Set evaluation time
         results.evaluation_time = time.time() - start_time
@@ -373,11 +415,19 @@ class EEGEvaluator:
             
             # Print summary
             print(f"\n{task_type.upper()} Task Results:")
-            print(f"  Accuracy: {results.metrics['accuracy']:.4f}")
-            if 'f1_weighted' in results.metrics:
-                print(f"  F1-Score (weighted): {results.metrics['f1_weighted']:.4f}")
-            if 'roc_auc' in results.metrics and results.metrics['roc_auc'] is not None:
-                print(f"  ROC-AUC: {results.metrics['roc_auc']:.4f}")
+            # Check if this is a regression task (has 'mae' instead of 'accuracy')
+            if 'mae' in results.metrics:
+                print(f"  MAE: {results.metrics['mae']:.4f} years")
+                print(f"  RMSE: {results.metrics['rmse']:.4f} years")
+                print(f"  R²: {results.metrics['r2']:.4f}")
+            else:
+                acc = results.metrics.get('accuracy')
+                acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                print(f"  Accuracy: {acc_str}")
+                if 'f1_weighted' in results.metrics:
+                    print(f"  F1-Score (weighted): {results.metrics['f1_weighted']:.4f}")
+                if 'roc_auc' in results.metrics and results.metrics['roc_auc'] is not None:
+                    print(f"  ROC-AUC: {results.metrics['roc_auc']:.4f}")
             print(f"  Number of samples: {len(results.predictions) if results.predictions else len(results.gender_predictions) if results.gender_predictions is not None else 0}")
         
         # Print comparison summary
@@ -386,14 +436,23 @@ class EEGEvaluator:
             print("Task Type Comparison:")
             print(f"{'='*60}")
             for task_type, results in results_by_task_type.items():
-                print(f"  {task_type.upper()}: Accuracy = {results.metrics['accuracy']:.4f}, "
-                      f"F1 = {results.metrics.get('f1_weighted', 'N/A'):.4f if isinstance(results.metrics.get('f1_weighted'), (int, float)) else 'N/A'}")
+                # Check if this is a regression task (has 'mae' instead of 'accuracy')
+                if 'mae' in results.metrics:
+                    print(f"  {task_type.upper()}: MAE = {results.metrics['mae']:.4f} years, "
+                          f"RMSE = {results.metrics['rmse']:.4f} years, "
+                          f"R² = {results.metrics['r2']:.4f}")
+                else:
+                    acc = results.metrics.get('accuracy')
+                    f1 = results.metrics.get('f1_weighted')
+                    acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                    f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+                    print(f"  {task_type.upper()}: Accuracy = {acc_str}, F1 = {f1_str}")
         
         return results_by_task_type
     
     def _compute_metrics(self, predictions: List[int], true_labels: List[int], 
                         probabilities: List[List[float]], class_names: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Compute comprehensive evaluation metrics."""
+        """Compute comprehensive evaluation metrics for classification."""
         predictions = np.array(predictions)
         true_labels = np.array(true_labels)
         probabilities = np.array(probabilities)
@@ -450,6 +509,39 @@ class EEGEvaluator:
             'classification_report': class_report
         }
     
+    def _compute_regression_metrics(self, predictions: List[float], true_labels: List[float]) -> Dict[str, Any]:
+        """Compute comprehensive evaluation metrics for regression."""
+        predictions = np.array(predictions)
+        true_labels = np.array(true_labels)
+        
+        # Denormalize predictions and labels back to actual age values
+        # Both are in [0, 1] range, need to convert back to [age_min, age_max]
+        pred_age = predictions * (self.age_max - self.age_min) + self.age_min
+        true_age = true_labels * (self.age_max - self.age_min) + self.age_min
+        
+        # Compute regression metrics
+        mae = mean_absolute_error(true_age, pred_age)
+        mse = mean_squared_error(true_age, pred_age)
+        rmse = np.sqrt(mse)
+        r2 = r2_score(true_age, pred_age)
+        
+        # Also compute metrics on normalized values for comparison
+        mae_norm = mean_absolute_error(true_labels, predictions)
+        mse_norm = mean_squared_error(true_labels, predictions)
+        rmse_norm = np.sqrt(mse_norm)
+        
+        return {
+            'mae': float(mae),  # Mean Absolute Error in years
+            'mse': float(mse),  # Mean Squared Error in years²
+            'rmse': float(rmse),  # Root Mean Squared Error in years
+            'r2': float(r2),  # R² score
+            'mae_normalized': float(mae_norm),  # MAE on normalized [0, 1] values
+            'mse_normalized': float(mse_norm),  # MSE on normalized [0, 1] values
+            'rmse_normalized': float(rmse_norm),  # RMSE on normalized [0, 1] values
+            'age_min': float(self.age_min),
+            'age_max': float(self.age_max)
+        }
+    
 
 def compare_models(results_list: List[EvaluationResults]) -> Dict[str, Any]:
     """
@@ -467,24 +559,52 @@ def compare_models(results_list: List[EvaluationResults]) -> Dict[str, Any]:
         'best_model': None
     }
     
-    best_accuracy = 0
-    best_model_name = None
+    # Determine if we're comparing regression or classification models
+    is_regression = any('mae' in r.metrics for r in results_list)
+    
+    if is_regression:
+        # For regression: use MAE (lower is better)
+        best_metric = float('inf')
+        best_model_name = None
+        metric_key = 'mae'
+    else:
+        # For classification: use accuracy (higher is better)
+        best_metric = 0
+        best_model_name = None
+        metric_key = 'accuracy'
     
     for results in results_list:
-        model_info = {
-            'name': results.model_name,
-            'target_type': results.target_type,
-            'accuracy': results.metrics['accuracy'],
-            'f1_weighted': results.metrics['f1_weighted'],
-            'evaluation_time': results.evaluation_time
-        }
-        comparison['models'].append(model_info)
+        if is_regression:
+            model_info = {
+                'name': results.model_name,
+                'target_type': results.target_type,
+                'mae': results.metrics.get('mae', None),
+                'rmse': results.metrics.get('rmse', None),
+                'r2': results.metrics.get('r2', None),
+                'evaluation_time': results.evaluation_time
+            }
+            # For regression, lower MAE is better
+            current_metric = results.metrics.get('mae', float('inf'))
+            if current_metric < best_metric:
+                best_metric = current_metric
+                best_model_name = results.model_name
+        else:
+            model_info = {
+                'name': results.model_name,
+                'target_type': results.target_type,
+                'accuracy': results.metrics.get('accuracy', None),
+                'f1_weighted': results.metrics.get('f1_weighted', None),
+                'evaluation_time': results.evaluation_time
+            }
+            # For classification, higher accuracy is better
+            current_metric = results.metrics.get('accuracy', 0)
+            if current_metric > best_metric:
+                best_metric = current_metric
+                best_model_name = results.model_name
         
-        if results.metrics['accuracy'] > best_accuracy:
-            best_accuracy = results.metrics['accuracy']
-            best_model_name = results.model_name
+        comparison['models'].append(model_info)
     
     comparison['best_model'] = best_model_name
-    comparison['best_accuracy'] = best_accuracy
+    comparison[f'best_{metric_key}'] = best_metric
     
     return comparison
