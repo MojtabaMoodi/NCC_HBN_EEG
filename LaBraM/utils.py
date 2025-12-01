@@ -15,6 +15,7 @@ import math
 import time
 import json
 import glob
+import warnings
 from collections import defaultdict, deque
 import datetime
 import numpy as np
@@ -32,11 +33,50 @@ from tensorboardX import SummaryWriter
 from data_processor.dataset import ShockDataset
 import pickle
 from scipy.signal import resample
-from pyhealth.metrics import binary_metrics_fn, multiclass_metrics_fn
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import confusion_matrix
 from scipy.stats import pearsonr
+
+# CRITICAL: Patch sklearn BEFORE importing pyhealth, otherwise pyhealth caches old reference
+_original_confusion_matrix = confusion_matrix
+
+def _patch_confusion_matrix(y_true, y_pred, labels=None, **kwargs):
+    """
+    Patch sklearn's confusion_matrix to automatically infer labels.
+    
+    This prevents warnings when not all classes are present in y_true or y_pred.
+    The fix ensures sklearn always has complete label information.
+    """
+    if labels is None:
+        # Convert to numpy arrays and flatten to handle all input types
+        y_true_arr = np.asarray(y_true).flatten()
+        y_pred_arr = np.asarray(y_pred).flatten() if len(y_pred) > 0 else np.array([])
+        
+        # Get all unique labels from both y_true and y_pred
+        all_labels = np.unique(np.concatenate([y_true_arr, y_pred_arr])) if len(y_pred_arr) > 0 else np.unique(y_true_arr)
+        if len(all_labels) > 0:
+            labels = np.sort(all_labels)
+        else:
+            labels = None
+    return _original_confusion_matrix(y_true, y_pred, labels=labels, **kwargs)
+
+# Apply patch to sklearn BEFORE pyhealth imports it
+import sklearn.metrics
+import sklearn.metrics._classification
+sklearn.metrics.confusion_matrix = _patch_confusion_matrix
+sklearn.metrics._classification.confusion_matrix = _patch_confusion_matrix
+
+# NOW import pyhealth (it will use our patched sklearn)
+from pyhealth.metrics import binary_metrics_fn, multiclass_metrics_fn
+
+from labram_dataset import (
+        prepare_labram_dataset,
+        prepare_labram_cross_validation_datasets,
+        prepare_labram_cross_task_datasets,
+        prepare_labram_cross_task_cross_validation_datasets
+    )
 
 
 standard_1020 = [
@@ -184,15 +224,33 @@ class MetricLogger(object):
         end = time.time()
         iter_time = SmoothedValue(fmt='{avg:.4f}')
         data_time = SmoothedValue(fmt='{avg:.4f}')
-        space_fmt = ':' + str(len(str(len(iterable)))) + 'd'
-        log_msg = [
-            header,
-            '[{0' + space_fmt + '}/{1}]',
-            'eta: {eta}',
-            '{meters}',
-            'time: {time}',
-            'data: {data}'
-        ]
+        
+        # Try to get length for IterableDataset compatibility
+        try:
+            total_len = len(iterable)
+            has_length = True
+            space_fmt = ':' + str(len(str(total_len))) + 'd'
+            log_msg = [
+                header,
+                '[{0' + space_fmt + '}/{1}]',
+                'eta: {eta}',
+                '{meters}',
+                'time: {time}',
+                'data: {data}'
+            ]
+        except (TypeError, AttributeError):
+            # IterableDataset doesn't support __len__()
+            has_length = False
+            space_fmt = ':6d'  # Use fixed width for unknown length
+            log_msg = [
+                header,
+                '[{0' + space_fmt + '}/?]',
+                'eta: {eta}',
+                '{meters}',
+                'time: {time}',
+                'data: {data}'
+            ]
+        
         if torch.cuda.is_available():
             log_msg.append('max mem: {memory:.0f}')
         log_msg = self.delimiter.join(log_msg)
@@ -201,26 +259,46 @@ class MetricLogger(object):
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)
-            if i % print_freq == 0 or i == len(iterable) - 1:
-                eta_seconds = iter_time.global_avg * (len(iterable) - i)
-                eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-                if torch.cuda.is_available():
-                    print(log_msg.format(
-                        i, len(iterable), eta=eta_string,
-                        meters=str(self),
-                        time=str(iter_time), data=str(data_time),
-                        memory=torch.cuda.max_memory_allocated() / MB))
-                else:
-                    print(log_msg.format(
-                        i, len(iterable), eta=eta_string,
-                        meters=str(self),
-                        time=str(iter_time), data=str(data_time)))
+            if has_length:
+                if i % print_freq == 0 or i == total_len - 1:
+                    eta_seconds = iter_time.global_avg * (total_len - i)
+                    eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
+                    if torch.cuda.is_available():
+                        print(log_msg.format(
+                            i, total_len, eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time),
+                            memory=torch.cuda.max_memory_allocated() / MB))
+                    else:
+                        print(log_msg.format(
+                            i, total_len, eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time)))
+            else:
+                # IterableDataset: log every print_freq steps without ETA calculation
+                if i % print_freq == 0:
+                    # For IterableDataset, log_msg format is '[{0}/?]' so only pass i
+                    if torch.cuda.is_available():
+                        print(log_msg.format(
+                            i, eta='?',
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time),
+                            memory=torch.cuda.max_memory_allocated() / MB))
+                    else:
+                        print(log_msg.format(
+                            i, eta='?',
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time)))
             i += 1
             end = time.time()
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print('{} Total time: {} ({:.4f} s / it)'.format(
-            header, total_time_str, total_time / len(iterable)))
+        if has_length:
+            print('{} Total time: {} ({:.4f} s / it)'.format(
+                header, total_time_str, total_time / total_len))
+        else:
+            print('{} Total time: {} ({:.4f} s / it)'.format(
+                header, total_time_str, total_time / i if i > 0 else 0))
 
 
 class TensorboardLogger(object):
@@ -574,38 +652,37 @@ def cosine_scheduler(base_value, final_value, epochs, niter_per_ep, warmup_epoch
 
 def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler, model_ema=None, optimizer_disc=None, save_ckpt_freq=1):
     output_dir = Path(args.output_dir)
-    epoch_name = str(epoch)
-
+    
     if not getattr(args, 'enable_deepspeed', False):
-        checkpoint_paths = [output_dir / 'checkpoint.pth']
-        if epoch == 'best':
-            checkpoint_paths = [output_dir / ('checkpoint-%s.pth' % epoch_name),]
-        elif (epoch + 1) % save_ckpt_freq == 0:
-            checkpoint_paths.append(output_dir / ('checkpoint-%s.pth' % epoch_name))
-
-        for checkpoint_path in checkpoint_paths:
-            to_save = {
-                'model': model_without_ddp.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'epoch': epoch,
-                # 'scaler': loss_scaler.state_dict(),
-                'args': args,
-            }
-            if loss_scaler is not None:
-                to_save['scaler'] = loss_scaler.state_dict()
-
-            if model_ema is not None:
-                to_save['model_ema'] = get_state_dict(model_ema)
-                
-            if optimizer_disc is not None:
-                to_save['optimizer_disc'] = optimizer_disc.state_dict()
-
-            save_on_master(to_save, checkpoint_path)
+        # Only save checkpoint-best.pth, skip all other periodic checkpoints
+        if epoch != 'best':
+            return  # Skip all periodic checkpoint saving
+        
+        # Save only the best model checkpoint
+        checkpoint_path = output_dir / 'checkpoint-best.pth'
+        
+        # Lightweight checkpoint - minimal info needed for inference
+        to_save = {
+            'model': model_without_ddp.state_dict(),
+            'epoch': epoch,
+            # Only save minimal args needed for inference, not full args object
+            'nb_classes': args.nb_classes,
+            'model_name': args.model,
+            'dataset': getattr(args, 'dataset', None),
+        }
+        # Save EMA if available (inference often uses EMA)
+        if model_ema is not None:
+            to_save['model_ema'] = get_state_dict(model_ema)
+        
+        save_on_master(to_save, checkpoint_path)
     else:
+        # For deepspeed, also only save best model
+        if epoch != 'best':
+            return
         client_state = {'epoch': epoch}
         if model_ema is not None:
             client_state['model_ema'] = get_state_dict(model_ema)
-        model.save_checkpoint(save_dir=args.output_dir, tag="checkpoint-%s" % epoch_name, client_state=client_state)           
+        model.save_checkpoint(save_dir=args.output_dir, tag="checkpoint-best", client_state=client_state)           
 
 def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, model_ema=None, optimizer_disc=None):
     output_dir = Path(args.output_dir)
@@ -783,6 +860,68 @@ def prepare_TUEV_dataset(root):
     return train_dataset, test_dataset, val_dataset
 
 
+# Generic dataset preparation function for our custom datasets
+def prepare_custom_dataset(dataset_type, root, **kwargs):
+    """
+    Generic function to prepare custom datasets using labram_dataset.py
+    
+    Args:
+        dataset_type: Type of dataset ("age", "gender", "combined", "multi_output")
+        root: Path to the data directory
+        **kwargs: Additional arguments passed to the appropriate labram_dataset function
+        
+    Returns:
+        Dataset(s) based on the experiment type
+    """
+    
+    # Determine experiment type based on function name or kwargs
+    if 'n_folds' in kwargs and 'train_task_type' in kwargs:
+        # Cross-task cross-validation
+        result = prepare_labram_cross_task_cross_validation_datasets(
+            dataset_type=dataset_type,
+            pickle_dir=root,
+            **kwargs
+        )
+        print(f"{dataset_type.title()} cross-task cross-validation dataset loaded: {kwargs.get('n_folds', 5)} folds, train on {kwargs.get('train_task_type', 'active')}, test on {kwargs.get('val_test_task_type', 'passive')}")
+        
+    elif 'n_folds' in kwargs:
+        # Cross-validation only
+        result = prepare_labram_cross_validation_datasets(
+            dataset_type=dataset_type,
+            pickle_dir=root,
+            **kwargs
+        )
+        print(f"{dataset_type.title()} cross-validation dataset loaded: {kwargs.get('n_folds', 5)} folds")
+        
+    elif 'train_task_type' in kwargs:
+        # Cross-task only
+        result = prepare_labram_cross_task_datasets(
+            dataset_type=dataset_type,
+            pickle_dir=root,
+            **kwargs
+        )
+        print(f"{dataset_type.title()} cross-task dataset loaded: train on {kwargs.get('train_task_type', 'active')}, test on {kwargs.get('val_test_task_type', 'passive')}")
+        
+    else:
+        # Basic dataset
+        result = prepare_labram_dataset(
+            dataset_type=dataset_type,
+            pickle_dir=root,
+            **kwargs
+        )
+        train_dataset, val_dataset, test_dataset = result
+        
+        # Diagnostic: Count samples in train dataset (for IterableDataset, this is approximate)
+        print(f"{dataset_type.title()} baseline dataset loaded")
+        print(f"  Task type: {kwargs.get('task_type', 'both')}")
+        print(f"  Train/Val/Test split: {kwargs.get('train_ratio', 0.7):.1f}/{kwargs.get('val_ratio', 0.15):.1f}/{kwargs.get('test_ratio', 0.15):.1f}")
+        print(f"  Random seed: {kwargs.get('random_seed', 42)}")
+        print(f"  Note: IterableDataset size is unknown until iteration")
+        print(f"  ⚠️  If sample count differs significantly from CNN, check participant splits and data duplication")
+    
+    return result
+
+
 def prepare_TUAB_dataset(root):
     # set random seed
     seed = 12345
@@ -804,6 +943,10 @@ def prepare_TUAB_dataset(root):
 
 
 def get_metrics(output, target, metrics, is_binary, threshold=0.5):
+    # Ensure inputs are numpy arrays with correct dtype for sklearn
+    output = np.array(output)
+    target = np.array(target).astype(np.int64) if not is_binary else np.array(target)
+    
     if is_binary:
         if 'roc_auc' not in metrics or sum(target) * (len(target) - sum(target)) != 0:  # to prevent all 0 or all 1 and raise the AUROC error
             results = binary_metrics_fn(
@@ -820,7 +963,12 @@ def get_metrics(output, target, metrics, is_binary, threshold=0.5):
                 "roc_auc": 0.0,
             }
     else:
-        results = multiclass_metrics_fn(
-            target, output, metrics=metrics
-        )
+        # Suppress sklearn warnings during per-batch evaluation
+        # Warnings occur because batches don't contain all classes (expected behavior)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='.*y_pred contains classes not in y_true.*')
+            warnings.filterwarnings('ignore', message=".*A single label was found.*")
+            results = multiclass_metrics_fn(
+                target, output, metrics=metrics
+            )
     return results

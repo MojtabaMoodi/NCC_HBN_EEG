@@ -1,0 +1,66 @@
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_baseline_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_baseline_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_passive_to_active_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_passive_to_active_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_active_to_passive_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_active_to_passive_4s.sh
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cv_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cv_gender_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_cv_active_to_passive_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_cv_active_to_passive_gender_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_cv_passive_to_active_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_multi_output_cross_task_cv_passive_to_active_gender_stratified_4s.sh
+
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM
+
+
+
+
+
+
+#conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_baseline_1s.sh
+#conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_baseline_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_active_to_passive_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_active_to_passive_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_passive_to_active_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_passive_to_active_4s.sh
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cv_age_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cv_age_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_cv_active_to_passive_age_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_cv_active_to_passive_age_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_cv_passive_to_active_age_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_age_cross_task_cv_passive_to_active_age_stratified_4s.sh
+
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_baseline_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_baseline_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_active_to_passive_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_active_to_passive_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_passive_to_active_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_passive_to_active_4s.sh
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cv_combined_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cv_combined_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_cv_active_to_passive_combined_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_cv_active_to_passive_combined_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_cv_passive_to_active_combined_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_combined_cross_task_cv_passive_to_active_combined_stratified_4s.sh
+
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_baseline_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_baseline_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_active_to_passive_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_active_to_passive_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_passive_to_active_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_passive_to_active_4s.sh
+
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cv_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cv_gender_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_cv_active_to_passive_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_cv_active_to_passive_gender_stratified_4s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_cv_passive_to_active_gender_stratified_1s.sh
+conda deactivate && conda activate labram && cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/ && ./runs/run_gender_cross_task_cv_passive_to_active_gender_stratified_4s.sh

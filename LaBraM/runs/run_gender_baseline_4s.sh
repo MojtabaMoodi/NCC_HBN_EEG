@@ -1,0 +1,104 @@
+#!/bin/bash
+# LaBraM Fine-tuning Script for gender_baseline (4s segments)
+# Generated automatically - do not edit manually
+
+# Set environment variables for single GPU training (no distributed)
+# Unset any existing distributed variables to avoid conflicts
+unset RANK
+unset WORLD_SIZE
+unset LOCAL_RANK
+unset MASTER_ADDR
+unset MASTER_PORT
+unset SLURM_PROCID
+
+# Dataset configuration
+DATASET="gender_baseline"
+NB_CLASSES=1
+
+# LaBraM fine-tuning hyperparameters (from paper)
+# Note: Batch size automatically adjusted based on segment length and dataset type:
+#   - 1024 for baseline experiments (1s) - increased from 512
+#   - 128 for cross-task CV (1s, eval uses 1.5x = 192) - increased from 64
+#   - 256 for 4s segments - increased from 128
+#   - 16 for cross-task CV with 4s segments (eval uses 1.5x = 24) - increased from 8
+EPOCHS=50
+BATCH_SIZE=256
+LEARNING_RATE=0.0005
+WEIGHT_DECAY=0.05
+WARMUP_EPOCHS=5
+MIN_LR=1e-5
+DROP_PATH=0.1
+SMOOTHING=0.0
+LAYER_DECAY=0.65
+CLIP_GRAD=3.0
+LAYER_SCALE_INIT_VALUE=0.1
+MODEL_EMA_DECAY=0.996
+
+# Data configuration
+SEGMENT_LENGTH="4s"
+
+# Model configuration
+MODEL="labram_base_patch200_200"
+PRETRAINED_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth"
+
+# Output configuration
+OUTPUT_DIR="./outputs/${DATASET}_${SEGMENT_LENGTH}"
+LOG_DIR="./logs/${DATASET}_${SEGMENT_LENGTH}"
+
+# Create output directories
+mkdir -p "${OUTPUT_DIR}"
+mkdir -p "${LOG_DIR}"
+
+echo "=========================================="
+echo "LaBraM Fine-tuning for gender_baseline"
+echo "=========================================="
+echo "Dataset: $DATASET"
+echo "Segment Length: $SEGMENT_LENGTH"
+echo "Output Dir: $OUTPUT_DIR"
+echo "Model: $MODEL"
+echo "Batch Size: $BATCH_SIZE"
+echo "Epochs: $EPOCHS"
+echo "Learning Rate: $LEARNING_RATE"
+echo "=========================================="
+
+# Change to LaBraM directory
+cd "$(dirname "$0")/.."
+
+# Run the fine-tuning (handles CV automatically)
+python run_class_finetuning.py \
+    --model $MODEL \
+    --finetune $PRETRAINED_PATH \
+    --dataset $DATASET \
+    --nb_classes $NB_CLASSES \
+    --epochs $EPOCHS \
+    --batch_size $BATCH_SIZE \
+    --lr $LEARNING_RATE \
+    --weight_decay $WEIGHT_DECAY \
+    --warmup_epochs $WARMUP_EPOCHS \
+    --min_lr $MIN_LR \
+    --drop_path $DROP_PATH \
+    --smoothing $SMOOTHING \
+    --segment_length $SEGMENT_LENGTH \
+    --output_dir $OUTPUT_DIR \
+    --log_dir $LOG_DIR \
+    --abs_pos_emb \
+    --qkv_bias \
+    --use_mean_pooling \
+    --layer_decay $LAYER_DECAY \
+    --layer_scale_init_value $LAYER_SCALE_INIT_VALUE \
+    --opt_betas 0.9 0.98 \
+    --opt_eps 1e-8 \
+    --momentum 0.9 \
+    --clip_grad $CLIP_GRAD \
+    --model_ema \
+    --model_ema_decay $MODEL_EMA_DECAY \
+    --save_ckpt \
+    --auto_resume \
+    --seed 42 \
+    --pin_mem \
+    --num_workers 10
+
+echo "=========================================="
+echo "Fine-tuning completed for gender_baseline"
+echo "Results saved to: $OUTPUT_DIR"
+echo "Logs saved to: $LOG_DIR"

@@ -265,10 +265,11 @@ class NeuralTransformer(nn.Module):
                  num_heads=10, mlp_ratio=4., qkv_bias=False, qk_norm=None, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False,
-                 use_mean_pooling=True, init_scale=0.001, **kwargs):
+                 use_mean_pooling=True, init_scale=0.001, multi_output=False, **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+        self.multi_output = multi_output
 
         # To identify whether it is neural tokenizer or neural decoder. 
         # For the neural decoder, use linear projection (PatchEmbed) to project codebook dimension to hidden dimension.
@@ -298,7 +299,16 @@ class NeuralTransformer(nn.Module):
             for i in range(depth)])
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
-        self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+        
+        # Create heads based on mode
+        if multi_output:
+            self.gender_head = nn.Linear(embed_dim, 2)  # 2 classes for gender
+            self.age_head = nn.Linear(embed_dim, 3)     # 3 classes for age
+            self.head = None  # Not used in multi-output mode
+        else:
+            self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+            self.gender_head = None
+            self.age_head = None
 
         if self.pos_embed is not None:
             trunc_normal_(self.pos_embed, std=.02)
@@ -306,12 +316,24 @@ class NeuralTransformer(nn.Module):
             trunc_normal_(self.time_embed, std=.02)
         trunc_normal_(self.cls_token, std=.02)
         # trunc_normal_(self.mask_token, std=.02)
-        if isinstance(self.head, nn.Linear):
+        
+        # Initialize head weights
+        if self.multi_output:
+            trunc_normal_(self.gender_head.weight, std=.02)
+            trunc_normal_(self.age_head.weight, std=.02)
+        elif isinstance(self.head, nn.Linear):
             trunc_normal_(self.head.weight, std=.02)
+        
         self.apply(self._init_weights)
         self.fix_init_weight()
 
-        if isinstance(self.head, nn.Linear):
+        # Scale head weights
+        if self.multi_output:
+            self.gender_head.weight.data.mul_(init_scale)
+            self.gender_head.bias.data.mul_(init_scale)
+            self.age_head.weight.data.mul_(init_scale)
+            self.age_head.bias.data.mul_(init_scale)
+        elif isinstance(self.head, nn.Linear):
             self.head.weight.data.mul_(init_scale)
             self.head.bias.data.mul_(init_scale)
 
@@ -340,9 +362,11 @@ class NeuralTransformer(nn.Module):
         return {'pos_embed', 'cls_token', 'time_embed'}
 
     def get_classifier(self):
-        return self.head
+        return self.head if not self.multi_output else {'gender': self.gender_head, 'age': self.age_head}
 
     def reset_classifier(self, num_classes, global_pool=''):
+        if self.multi_output:
+            raise ValueError("Cannot reset classifier for multi-output model. Use separate heads.")
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
@@ -393,8 +417,10 @@ class NeuralTransformer(nn.Module):
         For example, for an EEG sample of 4 seconds with 64 electrodes, x will be [batch size, 64, 4, 200]
         '''
         x = self.forward_features(x, input_chans=input_chans, return_patch_tokens=return_patch_tokens, return_all_tokens=return_all_tokens, **kwargs)
-        x = self.head(x)
-        return x
+        if self.multi_output:
+            return {'gender': self.gender_head(x), 'age': self.age_head(x)}
+        else:
+            return self.head(x)
 
     def forward_intermediate(self, x, layer_id=12, norm_output=False):
         x = self.patch_embed(x)

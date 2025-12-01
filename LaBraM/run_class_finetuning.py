@@ -32,6 +32,15 @@ import utils
 from scipy import interpolate
 import modeling_finetune
 
+# Import dataset configuration from dedicated module
+from dataset_config import (
+    CUSTOM_DATASET_CONFIGS,
+    get_dataset_config,
+    get_dataset_type_and_params,
+    get_data_path,
+    DATA_PATHS
+)
+
 def get_args():
     parser = argparse.ArgumentParser('LaBraM fine-tuning and evaluation script for EEG classification', add_help=False)
     parser.add_argument('--batch_size', default=64, type=int)
@@ -172,7 +181,13 @@ def get_args():
 
     parser.add_argument('--enable_deepspeed', action='store_true', default=False)
     parser.add_argument('--dataset', default='TUAB', type=str,
-                        help='dataset: TUAB | TUEV')
+                        help='dataset: TUAB | TUEV | AGE | GENDER | COMBINED | MULTI_OUTPUT | AGE_CV_GENDER_STRATIFIED | GENDER_CROSS_TASK_ACTIVE_TO_PASSIVE | etc.')
+    
+    parser.add_argument('--segment_length', default='1s', type=str, choices=['1s', '4s'],
+                        help='Segment length: 1s or 4s (only for custom datasets)')
+    
+    parser.add_argument('--data_path', default=None, type=str,
+                        help='Path to data directory (auto-detected if not provided)')
 
     known_args, _ = parser.parse_known_args()
 
@@ -191,6 +206,9 @@ def get_args():
     return parser.parse_args(), ds_init
 
 def get_models(args):
+    # Detect multi-output mode from dataset type
+    is_multi_output = args.dataset.startswith('multi_output') if hasattr(args, 'dataset') else False
+    
     model = create_model(
         args.model,
         pretrained=False,
@@ -205,10 +223,20 @@ def get_models(args):
         use_abs_pos_emb=args.abs_pos_emb,
         init_values=args.layer_scale_init_value,
         qkv_bias=args.qkv_bias,
+        multi_output=is_multi_output,  # Enable multi-output mode
     )
 
     return model
 
+
+# Constants for our custom datasets
+CHANNEL_NAMES = [
+    'FP1', 'FP2', 'F7', 'F3', 'FZ', 'F4', 'F8', 'F1', 'F2', 'F5', 'F6', 'F9', 'F10', 
+    'AF3', 'AF4', 'AF7', 'AF8', 'AFZ', 'FC1', 'FC2', 'FC3', 'FC4', 'FC5', 'FC6', 
+    'FT7', 'FT8', 'T7', 'T8', 'T9', 'T10', 'P7', 'P3', 'PZ', 'P4', 'P8', 'P1', 'P2', 
+    'P5', 'P6', 'PO3', 'PO4', 'PO7', 'PO8', 'POZ', 'OZ', 'O1', 'O2', 'C3', 'C4', 
+    'C1', 'C2', 'C5', 'C6', 'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CPZ'
+]
 
 def get_dataset(args):
     if args.dataset == 'TUAB':
@@ -225,16 +253,86 @@ def get_dataset(args):
         ch_names = [name.split(' ')[-1].split('-')[0] for name in ch_names]
         args.nb_classes = 6
         metrics = ["accuracy", "balanced_accuracy", "cohen_kappa", "f1_weighted"]
+    
+    # Handle our custom datasets using direct prepare_custom_dataset calls
+    elif args.dataset in CUSTOM_DATASET_CONFIGS:
+        # Get dataset configuration dynamically
+        config = get_dataset_config(args.dataset)
+        args.nb_classes = config['nb_classes']
+        metrics = config['metrics']
+        
+        # Get channel names (all our custom datasets use standard 10-20 channels)
+        ch_names = CHANNEL_NAMES
+        
+        # Determine data path
+        if args.data_path is not None:
+            data_path = args.data_path
+        else:
+            # Auto-detect based on segment length for custom datasets
+            if hasattr(args, 'segment_length'):
+                data_path = get_data_path(args.segment_length)
+            else:
+                # Default to 1s segments
+                data_path = get_data_path('1s')
+        
+        # Extract dataset type and parameters from dataset name
+        dataset_type, kwargs = get_dataset_type_and_params(args.dataset)
+        
+        # Call prepare_custom_dataset directly
+        result = utils.prepare_custom_dataset(dataset_type, data_path, **kwargs)
+        
+        # Handle different return types
+        if isinstance(result, tuple) and len(result) == 3:
+            # Basic datasets return (train, test, val)
+            train_dataset, test_dataset, val_dataset = result
+            cv_folds = None  # Not a CV dataset
+        elif isinstance(result, list):
+            # Cross-validation datasets return list of folds
+            cv_folds = result  # Store all folds for later processing
+            train_dataset, val_dataset, test_dataset = result[0]  # Use first for setup
+        else:
+            raise ValueError(f"Unexpected return type from prepare_custom_dataset: {type(result)}")
+    else:
+        cv_folds = None
+        raise ValueError(f"Unknown dataset: {args.dataset}")
+    
+    # Check if this is a CV experiment and store it in args
+    args.is_cross_validation = cv_folds is not None
+    args.cv_folds = cv_folds
+    
     return train_dataset, test_dataset, val_dataset, ch_names, metrics
 
 
-def main(args, ds_init):
+def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
+    """
+    Train a single fold of cross-validation or a regular experiment.
+    
+    Args:
+        args: Command line arguments
+        ds_init: DeepSpeed initialization function (if enabled)
+        cv_fold_idx: Index of the current fold (None for regular experiments)
+        cv_datasets: List of CV fold datasets (None for regular experiments)
+    
+    Returns:
+        Dictionary with metrics for this fold
+    """
     utils.init_distributed_mode(args)
 
     if ds_init is not None:
         utils.create_ds_config(args)
 
     print(args)
+    
+    # Handle CV fold-specific output directory
+    original_output_dir = getattr(args, 'output_dir', './outputs')
+    if cv_fold_idx is not None:
+        args.output_dir = os.path.join(original_output_dir, f"fold_{cv_fold_idx + 1}")
+        os.makedirs(args.output_dir, exist_ok=True)
+        print(f"Training fold {cv_fold_idx + 1} of {len(cv_datasets)}")
+    else:
+        # For non-CV experiments, create output directory if it doesn't exist
+        if args.output_dir:
+            os.makedirs(args.output_dir, exist_ok=True)
 
     device = torch.device(args.device)
 
@@ -249,38 +347,31 @@ def main(args, ds_init):
     # dataset_train, dataset_test, dataset_val: follows the standard format of torch.utils.data.Dataset.
     # ch_names: list of strings, channel names of the dataset. It should be in capital letters.
     # metrics: list of strings, the metrics you want to use. We utilize PyHealth to implement it.
-    dataset_train, dataset_test, dataset_val, ch_names, metrics = get_dataset(args)
-
-    if args.disable_eval_during_finetuning:
-        dataset_val = None
-        dataset_test = None
-
-    if True:  # args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-        print("Sampler_train = %s" % str(sampler_train))
-        if args.dist_eval:
-            if len(dataset_val) % num_tasks != 0:
-                print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
-                      'This will slightly alter validation results as extra duplicate entries are added to achieve '
-                      'equal num of samples per-process.')
-            sampler_val = torch.utils.data.DistributedSampler(
-                dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
-            if type(dataset_test) == list:
-                sampler_test = [torch.utils.data.DistributedSampler(
-                    dataset, num_replicas=num_tasks, rank=global_rank, shuffle=False) for dataset in dataset_test]
-            else:
-                sampler_test = torch.utils.data.DistributedSampler(
-                    dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=False)
-        else:
-            sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-            sampler_test = torch.utils.data.SequentialSampler(dataset_test)
+    
+    # Load datasets - use CV fold if provided
+    if cv_datasets is not None and cv_fold_idx is not None:
+        train_dataset, val_dataset, test_dataset = cv_datasets[cv_fold_idx]
+        # Get channel names and metrics from the base configuration
+        dataset_config = get_dataset_config(args.dataset)
+        ch_names = CHANNEL_NAMES  # All custom datasets use the same channels
+        metrics = dataset_config['metrics']
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        dataset_train, dataset_test, dataset_val, ch_names, metrics = get_dataset(args)
+        train_dataset, val_dataset, test_dataset = dataset_train, dataset_val, dataset_test
+
+
+    # Note: IterableDataset doesn't support samplers (DistributedSampler, RandomSampler, etc.)
+    # DataLoader will iterate through the dataset directly without a sampler
+    # For distributed training with IterableDataset, sharding should be handled within the dataset
+    num_tasks = utils.get_world_size()
+    global_rank = utils.get_rank()
+    print(f"Using IterableDataset - DataLoader will iterate directly (no sampler)")
+    print(f"Distributed training: {num_tasks} tasks, rank {global_rank}")
+    
+    # Set samplers to None for IterableDataset
+    sampler_train = None
+    sampler_val = None
+    sampler_test = None
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
@@ -288,33 +379,34 @@ def main(args, ds_init):
     else:
         log_writer = None
 
+    # IterableDataset doesn't support samplers - DataLoader iterates directly
     data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
+        train_dataset,  # No sampler for IterableDataset
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
         drop_last=True,
     )
 
-    if dataset_val is not None:
+    if val_dataset is not None:
         data_loader_val = torch.utils.data.DataLoader(
-            dataset_val, sampler=sampler_val,
+            val_dataset,  # No sampler for IterableDataset
             batch_size=int(1.5 * args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
             drop_last=False
         )
-        if type(dataset_test) == list:
+        if type(test_dataset) == list:
             data_loader_test = [torch.utils.data.DataLoader(
-                dataset, sampler=sampler,
+                dataset,  # No sampler for IterableDataset
                 batch_size=int(1.5 * args.batch_size),
                 num_workers=args.num_workers,
                 pin_memory=args.pin_mem,
                 drop_last=False
-            ) for dataset, sampler in zip(dataset_test, sampler_test)]
+            ) for dataset in test_dataset]
         else:
             data_loader_test = torch.utils.data.DataLoader(
-                dataset_test, sampler=sampler_test,
+                test_dataset,  # No sampler for IterableDataset
                 batch_size=int(1.5 * args.batch_size),
                 num_workers=args.num_workers,
                 pin_memory=args.pin_mem,
@@ -358,10 +450,20 @@ def main(args, ds_init):
             checkpoint_model = new_dict
 
         state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
+        # Remove head weights that don't match (single or multi-output)
+        head_keys_to_remove = []
+        if model.multi_output:
+            for k in ['gender_head.weight', 'gender_head.bias', 'age_head.weight', 'age_head.bias']:
+                if k in checkpoint_model and (k not in state_dict or checkpoint_model[k].shape != state_dict[k].shape):
+                    head_keys_to_remove.append(k)
+        else:
+            for k in ['head.weight', 'head.bias']:
+                if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                    head_keys_to_remove.append(k)
+        
+        for k in head_keys_to_remove:
+            print(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint_model[k]
 
         all_keys = list(checkpoint_model.keys())
         for key in all_keys:
@@ -389,12 +491,17 @@ def main(args, ds_init):
     print('number of params:', n_parameters)
 
     total_batch_size = args.batch_size * args.update_freq * utils.get_world_size()
-    num_training_steps_per_epoch = len(dataset_train) // total_batch_size
+    # Note: IterableDataset doesn't support __len__(), so we can't calculate exact steps per epoch
+    # We'll use a large placeholder value for LR scheduling, and let the training loop naturally
+    # exhaust the iterator. The actual steps will be determined during the first epoch.
+    # Using a large value (100000) ensures the LR schedule covers all possible steps.
+    num_training_steps_per_epoch = 100000  # Large placeholder for LR scheduling - iterator will naturally exhaust
     print("LR = %.8f" % args.lr)
     print("Batch size = %d" % total_batch_size)
     print("Update frequent = %d" % args.update_freq)
-    print("Number of training examples = %d" % len(dataset_train))
-    print("Number of training training per epoch = %d" % num_training_steps_per_epoch)
+    print("Number of training examples = Unknown (IterableDataset)")
+    print("Number of training steps per epoch = Determined during training (IterableDataset)")
+    print("Note: LR schedule uses placeholder value - actual steps determined by iterator exhaustion")
 
     num_layers = model_without_ddp.get_num_layers()
     if args.layer_decay < 1.0:
@@ -473,7 +580,9 @@ def main(args, ds_init):
     max_accuracy_test = 0.0
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
+            # Note: IterableDataset doesn't use samplers, so no set_epoch needed
+            # For IterableDataset, each epoch naturally starts from the beginning
+            pass
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
         train_stats = train_one_epoch(
@@ -485,6 +594,9 @@ def main(args, ds_init):
             ch_names=ch_names, is_binary=args.nb_classes == 1
         )
         
+        # Get current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+        
         if args.output_dir and args.save_ckpt:
             utils.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
@@ -492,17 +604,29 @@ def main(args, ds_init):
             
         if data_loader_val is not None:
             val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
-            print(f"Accuracy of the network on the {len(dataset_val)} val EEG: {val_stats['accuracy']:.2f}%")
             test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
-            print(f"Accuracy of the network on the {len(dataset_test)} test EEG: {test_stats['accuracy']:.2f}%")
+            
+            # Print epoch summary in a clear format (matching CNN format)
+            train_loss = train_stats.get('loss', 0.0)
+            train_acc = train_stats.get('class_acc', 0.0) * 100  # Convert to percentage
+            val_loss = val_stats.get('loss', 0.0)
+            val_acc = val_stats.get('accuracy', 0.0) * 100  # Convert to percentage
+            print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
+                  f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                  f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
+                  f"LR: {current_lr:.6f}")
             
             if max_accuracy < val_stats["accuracy"]:
                 max_accuracy = val_stats["accuracy"]
+                max_accuracy_test = test_stats["accuracy"]
+                
+                # Clear GPU cache before saving to avoid OOM
+                torch.cuda.empty_cache()
+                
                 if args.output_dir and args.save_ckpt:
                     utils.save_model(
                         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                         loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
-                max_accuracy_test = test_stats["accuracy"]
 
             print(f'Max accuracy val: {max_accuracy:.2f}%, max accuracy test: {max_accuracy_test:.2f}%')
             if log_writer is not None:
@@ -556,6 +680,107 @@ def main(args, ds_init):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    
+    # Save final model even if checkpoint saving was disabled
+    if args.output_dir and not args.save_ckpt:
+        # Save final epoch model as checkpoint-best.pth for easy loading
+        final_checkpoint_path = Path(args.output_dir) / 'checkpoint-best.pth'
+        print(f"\nSaving final model to {final_checkpoint_path}")
+        torch.save({
+            'model': model_without_ddp.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'epoch': args.epochs - 1,
+            'args': args,
+        }, final_checkpoint_path)
+        if model_ema is not None:
+            torch.save({
+                'model': model_ema.module.state_dict(),
+            }, Path(args.output_dir) / 'checkpoint-ema-best.pth')
+    
+    # Return final metrics
+    final_metrics = {
+        'val_accuracy': max_accuracy,
+        'test_accuracy': max_accuracy_test,
+    }
+    
+    # Restore original output directory
+    args.output_dir = original_output_dir
+    
+    return final_metrics
+
+
+def main(args, ds_init):
+    """Main function that handles both regular and CV experiments."""
+    
+    # Pre-load datasets to check if this is a CV experiment
+    if args.dataset in CUSTOM_DATASET_CONFIGS:
+        # Get dataset configuration dynamically
+        config = get_dataset_config(args.dataset)
+        args.nb_classes = config['nb_classes']
+        
+        # Determine data path
+        if args.data_path is not None:
+            data_path = args.data_path
+        else:
+            if hasattr(args, 'segment_length'):
+                data_path = get_data_path(args.segment_length)
+            else:
+                data_path = get_data_path('1s')
+        
+        # Extract dataset type and parameters from dataset name
+        dataset_type, kwargs = get_dataset_type_and_params(args.dataset)
+        
+        # Check if this is a CV experiment by calling prepare_custom_dataset early
+        # This will load all folds into memory, so we know if it's CV
+        try:
+            result = utils.prepare_custom_dataset(dataset_type, data_path, **kwargs)
+            
+            # Determine if CV
+            if isinstance(result, list):
+                args.is_cross_validation = True
+                args.cv_folds = result
+                print(f"Detected CV experiment: {len(result)} folds")
+            else:
+                args.is_cross_validation = False
+                args.cv_folds = None
+        except Exception as e:
+            print(f"Warning: Could not preload dataset: {e}")
+            args.is_cross_validation = False
+            args.cv_folds = None
+    else:
+        args.is_cross_validation = False
+        args.cv_folds = None
+    
+    # Check if this is a CV experiment
+    if args.is_cross_validation and args.cv_folds:
+        print(f"Running {len(args.cv_folds)}-fold cross-validation...")
+        
+        # Run each fold
+        all_metrics = []
+        for fold_idx in range(len(args.cv_folds)):
+            print(f"\n{'='*80}")
+            print(f"Training fold {fold_idx + 1}/{len(args.cv_folds)}")
+            print(f"{'='*80}")
+            
+            metrics = train_single_fold(args, ds_init, cv_fold_idx=fold_idx, cv_datasets=args.cv_folds)
+            all_metrics.append(metrics)
+        
+        # Calculate and print average metrics
+        avg_val_acc = np.mean([m['val_accuracy'] for m in all_metrics])
+        avg_test_acc = np.mean([m['test_accuracy'] for m in all_metrics])
+        std_val_acc = np.std([m['val_accuracy'] for m in all_metrics])
+        std_test_acc = np.std([m['test_accuracy'] for m in all_metrics])
+        
+        print(f"\n{'='*80}")
+        print("Cross-Validation Summary")
+        print(f"{'='*80}")
+        print(f"Average Validation Accuracy: {avg_val_acc:.2f}% ± {std_val_acc:.2f}%")
+        print(f"Average Test Accuracy: {avg_test_acc:.2f}% ± {std_test_acc:.2f}%")
+        print(f"{'='*80}")
+        
+    else:
+        # Regular experiment - single fold
+        train_single_fold(args, ds_init)
 
 
 if __name__ == '__main__':
