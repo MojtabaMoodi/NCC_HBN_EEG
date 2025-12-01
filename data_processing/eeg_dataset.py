@@ -120,26 +120,69 @@ class EEGDataset(IterableDataset):
                 # Cache sample names (only done once per file modification)
                 # Use string path for HDF5 compatibility with multiprocessing
                 with h5py.File(self.hdf5_file_str, 'r') as f:
-                    task_groups = []
-                    if self.task_type in ["active", "both"]:
-                        if 'active' in f:
-                            task_groups.append(('active', f['active']))
-                    if self.task_type in ["passive", "both"]:
-                        if 'passive' in f:
-                            task_groups.append(('passive', f['passive']))
+                    # Get total_samples from file attributes (fast, no B-tree traversal)
+                    total_samples = f.attrs.get('total_samples', 0)
                     
-                    # Collect all (task_type, sample_name) pairs
-                    # Optimize: Don't sort if not needed (sorting 955K items is slow)
-                    all_samples = []
-                    for task_type, group in task_groups:
-                        # Use list comprehension for faster collection
-                        # Only sort if we have a reasonable number of samples (< 100K)
-                        # For large datasets (1s with 955K), sorting adds significant overhead
-                        sample_names = [name for name in group.keys() if name.startswith('sample_')]
-                        if len(sample_names) < 100000:
-                            sample_names = sorted(sample_names)  # Only sort for smaller datasets
-                        for sample_name in sample_names:
-                            all_samples.append((task_type, sample_name))
+                    # For very large datasets (>500K), collecting keys via group.keys() is extremely slow
+                    # (requires full B-tree traversal which can take hours for 955K items)
+                    # We must still collect keys, but we'll add progress logging
+                    if total_samples > 500000:
+                        if worker_info is None or worker_info.id == 0:
+                            logger.info(f"Large dataset detected ({total_samples:,} samples).")
+                            logger.info("Collecting sample names (this may take 10-30 minutes for 955K samples)...")
+                            logger.info("This is a one-time operation - cache will be saved for future use.")
+                        
+                        task_groups = []
+                        if self.task_type in ["active", "both"]:
+                            if 'active' in f:
+                                task_groups.append(('active', f['active']))
+                        if self.task_type in ["passive", "both"]:
+                            if 'passive' in f:
+                                task_groups.append(('passive', f['passive']))
+                        
+                        all_samples = []
+                        # Unfortunately, we still need to collect keys to know which samples exist in which group
+                        # But we'll add progress indication
+                        for task_type, group in task_groups:
+                            if worker_info is None or worker_info.id == 0:
+                                logger.info(f"Collecting {task_type} sample names...")
+                            # Collect keys - this is the slow part but necessary
+                            sample_names = []
+                            count = 0
+                            for name in group.keys():
+                                if name.startswith('sample_'):
+                                    sample_names.append(name)
+                                    count += 1
+                                    # Log progress every 100K samples
+                                    if count % 100000 == 0 and (worker_info is None or worker_info.id == 0):
+                                        logger.info(f"  Collected {count:,} {task_type} sample names...")
+                            
+                            if worker_info is None or worker_info.id == 0:
+                                logger.info(f"  Collected {len(sample_names):,} {task_type} sample names total")
+                            
+                            # Don't sort for large datasets (saves time)
+                            for sample_name in sample_names:
+                                all_samples.append((task_type, sample_name))
+                    else:
+                        # Small/medium datasets: use original approach (collect keys)
+                        task_groups = []
+                        if self.task_type in ["active", "both"]:
+                            if 'active' in f:
+                                task_groups.append(('active', f['active']))
+                        if self.task_type in ["passive", "both"]:
+                            if 'passive' in f:
+                                task_groups.append(('passive', f['passive']))
+                        
+                        # Collect all (task_type, sample_name) pairs
+                        all_samples = []
+                        for task_type, group in task_groups:
+                            # Use list comprehension for faster collection
+                            # Only sort if we have a reasonable number of samples (< 100K)
+                            sample_names = [name for name in group.keys() if name.startswith('sample_')]
+                            if len(sample_names) < 100000:
+                                sample_names = sorted(sample_names)  # Only sort for smaller datasets
+                            for sample_name in sample_names:
+                                all_samples.append((task_type, sample_name))
                     
                     # Cache the results
                     self._cached_sample_names = all_samples
@@ -181,8 +224,14 @@ class EEGDataset(IterableDataset):
             # Open HDF5 file and cache group references (avoid repeated lookups)
             # Use larger chunk cache for 1s datasets (955K samples need more cache)
             # Increase cache size for better performance with many small reads
-            cache_size = 1024*1024*500 if len(all_samples) > 500000 else 1024*1024*100  # 500MB for large datasets, 100MB otherwise
-            with h5py.File(self.hdf5_file_str, 'r', rdcc_nbytes=cache_size, rdcc_nslots=50000) as f:
+            # For very large datasets, use 1GB cache to reduce disk I/O
+            if len(all_samples) > 500000:
+                cache_size = 1024*1024*1024  # 1GB for very large datasets (1s segments)
+                cache_slots = 100000  # More slots for better cache hit rate
+            else:
+                cache_size = 1024*1024*100  # 100MB for smaller datasets
+                cache_slots = 50000
+            with h5py.File(self.hdf5_file_str, 'r', rdcc_nbytes=cache_size, rdcc_nslots=cache_slots) as f:
                 # Cache group references to avoid repeated dictionary lookups
                 active_group = f.get('active', None)
                 passive_group = f.get('passive', None)
@@ -196,6 +245,8 @@ class EEGDataset(IterableDataset):
                         group = passive_group
                     
                     # Load sample data
+                    # Note: sample_name is guaranteed to exist in group because we collected it
+                    # from group.keys() during cache building, so no existence check needed
                     sample_data = group[sample_name][:]  # Shape: (60, timepoints)
                     
                     # Get metadata (optimize string replacement)
@@ -484,8 +535,9 @@ class EEGDataLoader:
         if num_workers > 0:
             # Increase prefetch_factor for better GPU utilization (higher = more prefetching)
             # Higher prefetch means more batches ready when GPU needs them, reducing idle time
-            # Reduced for spawn context to prevent OOM (each worker prefetches independently)
-            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 4)  # Reduced from 16 to prevent OOM with spawn
+            # For very large batch sizes (6144), we can use higher prefetch since each worker handles fewer batches
+            # With maximum batches, memory per prefetched batch is manageable
+            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 16)  # Increased to 16 for maximum GPU utilization
             loader_kwargs['persistent_workers'] = True  # Keep workers alive between epochs (avoids worker restart overhead)
             # Use 'spawn' for better HDF5 compatibility with multiprocessing
             # 'fork' can cause issues with HDF5 file handles
