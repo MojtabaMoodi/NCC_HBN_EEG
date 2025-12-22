@@ -4,81 +4,9 @@ Provides a comprehensive interface for running multiple experiments and generati
 """
 
 import argparse
-from config import SystemConfig, DataConfig, ModelConfig, TrainingConfig, ExperimentConfig
+from config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
 from experiment import run_experiments
-
-
-# Data paths and segment lengths (HDF5 format)
-DATA_PATHS = {
-    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '2s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
-}
-
-SEGMENT_LENGTHS = {
-    '1s': 200,  # 1 second = 200 samples at 200Hz
-    '2s': 400,  # 2 second = 400 samples at 200Hz
-    '4s': 800   # 4 seconds = 800 samples at 200Hz
-}
-
-
-def create_data_config_for_segment_length(segment_length: str, batch_size: int = None, 
-                                        random_seed: int = 42, num_gpus: int = 1) -> DataConfig:
-    """
-    Create DataConfig for a specific segment length.
-    
-    Args:
-        segment_length: '1s', '2s', or '4s'
-        batch_size: Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)
-        random_seed: Random seed
-        
-    Returns:
-        DataConfig configured for the specified segment length
-    """
-    if segment_length not in DATA_PATHS:
-        raise ValueError(f"Invalid segment_length: {segment_length}. Must be '1s', '2s', or '4s'")
-    
-    # Use larger batch sizes for better GPU utilization and fewer iterations
-    # With 4 GPUs and L40S (48GB each), we have plenty of GPU memory
-    # But need to balance with CPU memory (spawn workers use more RAM)
-    if batch_size is None:
-        if segment_length == '1s':
-            batch_size = 6144  # Maximum batch size to minimize number of batches and HDF5 I/O operations
-            # With 955K samples, this gives ~155 batches per epoch (vs 233 with 4096)
-        elif segment_length == '2s':
-            batch_size = 256  # Balanced for memory and performance
-        else:  # 4s
-            batch_size = 192  # Reduced to prevent OOM
-    
-    # Use num_workers based on segment length and number of GPUs
-    # Balanced to prevent OOM while maintaining good data loading performance
-    # With 'spawn' context, each worker uses significant memory (full Python env)
-    # So we need fewer workers than with 'fork' context
-    if segment_length == '1s':
-        # 1s has many more samples (955K vs 308K for 4s)
-        # With maximum batch size (6144), we have very few batches, so many workers help
-        # without causing excessive HDF5 file contention
-        # With 64GB RAM, we can support more workers (each worker uses ~1-2GB with spawn context)
-        num_workers = max(24, 6 * num_gpus)  # Use 24 workers minimum, or 6 per GPU (optimized for 64GB RAM)
-    elif segment_length == '2s':
-        # 2s: use fewer workers to prevent OOM (2s segments are larger)
-        num_workers = max(6, 2 * num_gpus)  # 2 workers per GPU
-    else:  # 4s mode
-        # 4s segments are larger, use fewer workers to avoid memory issues
-        if num_gpus >= 2:
-            num_workers = 2 * num_gpus  # 2 workers per GPU
-        else:
-            num_workers = 4  # Use 4 workers for faster loading with single GPU
-    
-    config = DataConfig(
-        hdf5_dir=DATA_PATHS[segment_length],
-        segment_length=SEGMENT_LENGTHS[segment_length],
-        batch_size=batch_size,
-        random_seed=random_seed,
-        num_workers=num_workers
-    )
-    
-    return config
+from utils import create_data_config_for_segment_length
 
 
 def create_all_experiments_for_segment_length(segment_length: str, epochs: int = 50, 
