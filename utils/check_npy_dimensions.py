@@ -340,7 +340,7 @@ def analyze_tasks_per_participant(directory):
     return participant_tasks
 
 if __name__ == "__main__":
-    directory = "/home/mojtabam/scratch/preprocessed_new"
+    directory = "/home/mojtabam/projects/aip-aghodsib/mojtabam/preprocessed_new"
     expected_dim = (2, 60, 240)
     
     print("Checking .npy file dimensions...")
