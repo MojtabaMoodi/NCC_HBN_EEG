@@ -306,10 +306,20 @@ class EEGDataset(IterableDataset):
             Dictionary containing sample data with transforms applied
         """
         # Check for NaN/Inf values in input data
-        if np.any(np.isnan(eeg_data)) or np.any(np.isinf(eeg_data)):
-            raise ValueError(f"NaN/Inf detected in EEG data for participant {participant_id}, task {task_type}, sample {sample_idx}. "
-                             f"NaN count: {np.sum(np.isnan(eeg_data))}, Inf count: {np.sum(np.isinf(eeg_data))}. "
-                             f"Replacing with zeros.")
+        # Best practice: Fail fast at dataset level to alert user to data quality issues
+        # This ensures data quality problems are caught early, not hidden during training
+        nan_count = np.sum(np.isnan(eeg_data))
+        inf_count = np.sum(np.isinf(eeg_data))
+        if nan_count > 0 or inf_count > 0:
+            error_msg = (
+                f"NaN/Inf detected in EEG data for participant {participant_id}, "
+                f"task {task_type}, sample {sample_idx}. "
+                f"NaN count: {nan_count}, Inf count: {inf_count}. "
+                f"This indicates a data quality issue that should be fixed at the preprocessing stage. "
+                f"Please check the preprocessing pipeline and source data."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         # Convert EEG data to tensor
         eeg_tensor = torch.FloatTensor(eeg_data)
