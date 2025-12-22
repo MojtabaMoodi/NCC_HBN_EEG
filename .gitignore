@@ -3,6 +3,7 @@ CNN/checkpoints/*
 CNN/models/__pycache__/*
 CNN/experiment_results/*
 CNN/experiment_results_4s/*
+CNN/report_2025-12-16/*
 CNN/reports/*
 CNN/report_v1/*
 CNN/report_1s/*
@@ -16,6 +17,8 @@ data_processing/processed_eeg_data*
 LaBraM/__pycache__/*
 LaBraM/data_processor/__pycache__/*
 LaBraM/results/*
+LaBraM/report_2025-12-16/*
+LaBraM/runs/logs/*
 utils/__pycache__/*
 utils/*.png
 utils/*.txt
