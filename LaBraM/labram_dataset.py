@@ -59,7 +59,7 @@ class LaBraMEEGDataset(IterableDataset):
         self.default_rate = 200
         
         # Copy attributes for compatibility
-        self.pickle_dir = eeg_dataset.pickle_dir
+        self.hdf5_file = eeg_dataset.hdf5_file_str if hasattr(eeg_dataset, 'hdf5_file_str') else None
         self.task_type = eeg_dataset.task_type
         self.transform = eeg_dataset.transform
         self.gender_transform = eeg_dataset.gender_transform
@@ -212,27 +212,22 @@ def _split_participants(participants: List[str],
     return train_participants, val_participants, test_participants
 
 
-def prepare_labram_dataset(dataset_type: str, pickle_dir: str,
+def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str = "1s",
                           task_type: str = "both",
-                          train_ratio: float = 0.7,
-                          val_ratio: float = 0.15,
-                          test_ratio: float = 0.15,
                           random_seed: int = 42,
                           **kwargs) -> Tuple[LaBraMEEGDataset, LaBraMEEGDataset, LaBraMEEGDataset]:
     """
-    Prepare LaBraM-compatible datasets for training, validation, and testing.
+    Prepare LaBraM-compatible datasets for training, validation, and testing using HDF5 files.
     
-    This function creates datasets directly without going through DataLoaders,
-    since LaBraM expects raw Dataset objects.
+    This function creates datasets directly from pre-split HDF5 files (train/val/test),
+    since LaBraM expects raw Dataset objects. The splits are already created during preprocessing.
     
     Args:
         dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
-        pickle_dir: Directory containing pickle files
+        hdf5_dir: Directory containing HDF5 files (e.g., "processed_eeg_data_hdf5")
+        segment_length: Length of segments ('1s', '2s', or '4s')
         task_type: Type of tasks to include ("active", "passive", "both")
-        train_ratio: Ratio of data for training (default: 0.7)
-        val_ratio: Ratio of data for validation (default: 0.15)
-        test_ratio: Ratio of data for testing (default: 0.15)
-        random_seed: Random seed for reproducible splits (default: 42)
+        random_seed: Random seed for shuffling (default: 42)
         **kwargs: Additional arguments passed to dataset constructor (e.g., sampling_rate)
         
     Returns:
@@ -242,67 +237,44 @@ def prepare_labram_dataset(dataset_type: str, pickle_dir: str,
     # Get dataset configuration
     target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
     
-    # Set random seed BEFORE collecting participants (matching CNN behavior)
-    # This ensures consistent participant collection order
-    import torch
-    torch.manual_seed(random_seed)
-    np.random.seed(random_seed)
-    
-    # Get unique participants by iterating through a temporary dataset
-    participants = set()
-    temp_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type="both",  # Get all participants regardless of task_type
-        target_type="both"
+    # Get HDF5 file paths
+    hdf5_dir_path = Path(hdf5_dir)
+    train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+        hdf5_dir_path, segment_length
     )
-    for sample in temp_dataset:
-        participants.add(sample['participant_id'])
-    participants = list(participants)
-    np.random.shuffle(participants)  # Shuffle after collection (matching CNN behavior)
+    EEGDataLoader._verify_hdf5_files(train_file, val_file, test_file)
     
-    # Diagnostic: Log participant count
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Found {len(participants)} unique participants for dataset preparation")
-    
-    # Split participants (now just does the split, random seed already set)
-    train_participants, val_participants, test_participants = _split_participants(
-        participants, train_ratio, val_ratio, test_ratio, random_seed
-    )
-    
-    # Diagnostic: Log split counts
-    logger.info(f"Participant split: Train={len(train_participants)}, Val={len(val_participants)}, Test={len(test_participants)}")
-    logger.info(f"Split ratios: Train={len(train_participants)/len(participants):.2f}, Val={len(val_participants)/len(participants):.2f}, Test={len(test_participants)/len(participants):.2f}")
-    
-    # Create EEGDataset instances with participant filtering
+    # Create EEGDataset instances from pre-split HDF5 files
+    # Note: HDF5 files are already split into train/val/test, so no participant filtering needed
     train_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
+        hdf5_file=str(train_file),
         task_type=task_type,
         target_type=target_type,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        participant_filter=train_participants
+        shuffle=True,  # Shuffle training data
+        random_seed=random_seed
     )
     
     val_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
+        hdf5_file=str(val_file),
         task_type=task_type,
         target_type=target_type,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        participant_filter=val_participants
+        shuffle=False  # Don't shuffle validation data
     )
     
     test_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
+        hdf5_file=str(test_file),
         task_type=task_type,
         target_type=target_type,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        participant_filter=test_participants
+        shuffle=False  # Don't shuffle test data
     )
     
     # Wrap with LaBraMEEGDataset
@@ -313,127 +285,21 @@ def prepare_labram_dataset(dataset_type: str, pickle_dir: str,
     
     return train_dataset, val_dataset, test_dataset
 
-def prepare_labram_cross_validation_datasets(dataset_type: str, pickle_dir: str,
+# COMMENTED OUT: Cross-validation and cross-task experiments not supported yet
+# These functions are disabled until HDF5 support is added for cross-validation/cross-task scenarios
+"""
+def prepare_labram_cross_validation_datasets(dataset_type: str, hdf5_dir: str, segment_length: str,
                                            n_folds: int = 5, task_type: str = "both",
                                            stratify_by: str = "gender",
                                            random_seed: int = 42,
                                            transform: Optional[callable] = None,
                                            **kwargs) -> List[Tuple[LaBraMEEGDataset, LaBraMEEGDataset, LaBraMEEGDataset]]:
-    """
-    Prepare LaBraM-compatible datasets for cross-validation.
-    
-    This function replicates the same logic as EEGDataLoader.create_cross_validation_loaders
-    but returns LaBraM-compatible datasets instead of DataLoaders.
-    
-    Args:
-        dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
-        pickle_dir: Directory containing pickle files
-        n_folds: Number of folds for cross-validation
-        task_type: Type of tasks to include ("active", "passive", "both")
-        stratify_by: Field to stratify by ("gender", "age", "both")
-        random_seed: Random seed for reproducible splits (default: 42)
-        transform: Optional transform to be applied on EEG data
-        **kwargs: Additional arguments passed to dataset constructor (e.g., sampling_rate)
-        
-    Returns:
-        List of (train_dataset, val_dataset, test_dataset) tuples for each fold
-    """
-    
-    # Validate stratify_by parameter
-    validate_stratify_by(stratify_by)
-    
-    # Set random seed for reproducibility
-    torch.manual_seed(random_seed)
-    np.random.seed(random_seed)
-    
-    # Get dataset configuration
-    target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
-    
-    # Get unique participants and their stratification labels by iterating through dataset
-    participants = set()
-    participant_data = {}
-    temp_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type="both",  # Get all participants regardless of task_type
-        target_type="both"
-    )
-    for sample in temp_dataset:
-        participant_id = sample['participant_id']
-        if participant_id not in participants:
-            participants.add(participant_id)
-            stratify_label = get_stratify_label(sample, stratify_by)
-            participant_data[participant_id] = stratify_label
-    
-    # Prepare data for stratification
-    participant_ids = list(participant_data.keys())
-    stratify_labels = [participant_data[pid] for pid in participant_ids]
-    np.random.shuffle(participant_ids)
-    
-    # Create stratified k-fold
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-    
-    fold_datasets = []
-    sampling_rate = kwargs.get('sampling_rate', 200)
-    
-    for fold, (train_val_indices, test_indices) in enumerate(skf.split(participant_ids, stratify_labels)):
-        # Split train_val into train and val
-        train_val_participants = [participant_ids[i] for i in train_val_indices]
-        test_participants = [participant_ids[i] for i in test_indices]
-        
-        # Get stratification labels for train_val participants
-        train_val_labels = [stratify_labels[i] for i in train_val_indices]
-        
-        # Use StratifiedShuffleSplit for train/val split to maintain stratification
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=random_seed)
-        
-        train_indices, val_indices = next(sss.split(train_val_participants, train_val_labels))
-        
-        train_participants = [train_val_participants[i] for i in train_indices]
-        val_participants = [train_val_participants[i] for i in val_indices]
-        
-        # Create EEGDataset instances with participant filtering
-        train_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=task_type,
-            target_type=target_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=train_participants
-        )
-        
-        val_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=task_type,
-            target_type=target_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=val_participants
-        )
-        
-        test_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=task_type,
-            target_type=target_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=test_participants
-        )
-        
-        # Wrap with LaBraMEEGDataset
-        train_dataset = LaBraMEEGDataset(train_eeg_dataset, sampling_rate=sampling_rate)
-        val_dataset = LaBraMEEGDataset(val_eeg_dataset, sampling_rate=sampling_rate)
-        test_dataset = LaBraMEEGDataset(test_eeg_dataset, sampling_rate=sampling_rate)
-        
-        fold_datasets.append((train_dataset, val_dataset, test_dataset))
-    
-    return fold_datasets
+    # Function body commented out - not supported with HDF5 yet
+    raise NotImplementedError("Cross-validation not yet supported with HDF5")
+"""
 
+# COMMENTED OUT: Cross-task experiments not supported yet
+"""
 def prepare_labram_cross_task_datasets(dataset_type: str, pickle_dir: str,
                                      train_task_type: str, val_test_task_type: str,
                                      task_type: str = "both",
@@ -442,234 +308,17 @@ def prepare_labram_cross_task_datasets(dataset_type: str, pickle_dir: str,
                                      test_ratio: float = 0.15,
                                      random_seed: int = 42,
                                      **kwargs) -> Tuple[LaBraMEEGDataset, LaBraMEEGDataset, LaBraMEEGDataset]:
-    """
-    Prepare LaBraM-compatible datasets for cross-task evaluation.
-    
-    This function replicates the same logic as EEGDataLoader.create_cross_task_loaders
-    but returns LaBraM-compatible datasets instead of DataLoaders.
-    
-    Args:
-        dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
-        pickle_dir: Directory containing pickle files
-        train_task_type: Task type for training ("active" or "passive")
-        val_test_task_type: Task type for validation and testing ("active" or "passive")
-        task_type: Type of tasks to include ("active", "passive", "both")
-        train_ratio: Ratio of data for training (default: 0.7)
-        val_ratio: Ratio of data for validation (default: 0.15)
-        test_ratio: Ratio of data for testing (default: 0.15)
-        random_seed: Random seed for reproducible splits (default: 42)
-        **kwargs: Additional arguments passed to dataset constructor (e.g., sampling_rate)
-        
-    Returns:
-        Tuple of (train_dataset, val_dataset, test_dataset)
-    """
-    
-    # Validate task types
-    if train_task_type not in ["active", "passive"]:
-        raise ValueError(f"train_task_type must be 'active' or 'passive', got {train_task_type}")
-    if val_test_task_type not in ["active", "passive"]:
-        raise ValueError(f"val_test_task_type must be 'active' or 'passive', got {val_test_task_type}")
-    if train_task_type == val_test_task_type:
-        raise ValueError(f"train_task_type and val_test_task_type must be different, both are {train_task_type}")
-    
-    # Validate ratios
-    if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
-        raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
-    
-    # Set random seed for reproducibility
-    torch.manual_seed(random_seed)
-    np.random.seed(random_seed)
-    
-    # Get dataset configuration
-    target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
-    
-    # Get unique participants by iterating through a temporary dataset
-    participants = set()
-    temp_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type="both",  # Get all participants regardless of task_type
-        target_type="both"
-    )
-    for sample in temp_dataset:
-        participants.add(sample['participant_id'])
-    participants = list(participants)
-    np.random.shuffle(participants)
-    
-    # Split participants
-    n_participants = len(participants)
-    n_train = int(n_participants * train_ratio)
-    n_val = int(n_participants * val_ratio)
-    
-    train_participants = participants[:n_train]
-    val_participants = participants[n_train:n_train + n_val]
-    test_participants = participants[n_train + n_val:]
-    
-    # Create EEGDataset instances with correct task_type and participant filtering
-    train_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type=train_task_type,  # Only train_task_type
-        target_type=target_type,
-        gender_transform=gender_transform,
-        age_transform=age_transform,
-        combined_transform=combined_transform,
-        participant_filter=train_participants
-    )
-    
-    val_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type=val_test_task_type,  # Only val_test_task_type
-        target_type=target_type,
-        gender_transform=gender_transform,
-        age_transform=age_transform,
-        combined_transform=combined_transform,
-        participant_filter=val_participants
-    )
-    
-    test_eeg_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type=val_test_task_type,  # Only val_test_task_type
-        target_type=target_type,
-        gender_transform=gender_transform,
-        age_transform=age_transform,
-        combined_transform=combined_transform,
-        participant_filter=test_participants
-    )
-    
-    # Wrap with LaBraMEEGDataset
-    sampling_rate = kwargs.get('sampling_rate', 200)
-    train_dataset = LaBraMEEGDataset(train_eeg_dataset, sampling_rate=sampling_rate)
-    val_dataset = LaBraMEEGDataset(val_eeg_dataset, sampling_rate=sampling_rate)
-    test_dataset = LaBraMEEGDataset(test_eeg_dataset, sampling_rate=sampling_rate)
-    
-    return train_dataset, val_dataset, test_dataset
+    # Function body commented out - not supported with HDF5 yet
+    pass
+"""
 
-def prepare_labram_cross_task_cross_validation_datasets(dataset_type: str, pickle_dir: str,
+# COMMENTED OUT: Cross-task cross-validation experiments not supported yet
+"""
+def prepare_labram_cross_task_cross_validation_datasets(dataset_type: str, hdf5_dir: str, segment_length: str,
                                                        train_task_type: str, val_test_task_type: str,
                                                        n_folds: int = 5, stratify_by: str = "gender",
                                                        random_seed: int = 42,
                                                        **kwargs) -> List[Tuple[LaBraMEEGDataset, LaBraMEEGDataset, LaBraMEEGDataset]]:
-    """
-    Prepare LaBraM-compatible datasets for cross-task cross-validation.
-    
-    This function combines cross-validation with cross-task evaluation:
-    - Training uses one task type (e.g., "active")
-    - Validation and testing use another task type (e.g., "passive")
-    - Stratified k-fold cross-validation on participants
-    - No participant overlap between train and val/test sets
-    
-    This function replicates the same logic as EEGDataLoader.create_cross_task_cross_validation_loaders
-    but returns LaBraM-compatible datasets instead of DataLoaders.
-    
-    Args:
-        dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
-        pickle_dir: Directory containing pickle files
-        train_task_type: Task type for training ("active" or "passive")
-        val_test_task_type: Task type for validation and testing ("active" or "passive")
-        n_folds: Number of folds for cross-validation
-        stratify_by: Field to stratify by ("gender", "age", "both")
-        random_seed: Random seed for reproducible splits (default: 42)
-        **kwargs: Additional arguments passed to dataset constructor (e.g., sampling_rate)
-        
-    Returns:
-        List of (train_dataset, val_dataset, test_dataset) tuples for each fold
-    """
-    
-    # Validate task types
-    if train_task_type not in ["active", "passive"]:
-        raise ValueError(f"train_task_type must be 'active' or 'passive', got {train_task_type}")
-    if val_test_task_type not in ["active", "passive"]:
-        raise ValueError(f"val_test_task_type must be 'active' or 'passive', got {val_test_task_type}")
-    if train_task_type == val_test_task_type:
-        raise ValueError(f"train_task_type and val_test_task_type must be different, both are {train_task_type}")
-    
-    # Validate stratify_by parameter
-    validate_stratify_by(stratify_by)
-    
-    # Set random seed for reproducibility
-    torch.manual_seed(random_seed)
-    np.random.seed(random_seed)
-    
-    # Get dataset configuration
-    target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
-    
-    # Get unique participants and their stratification labels by iterating through dataset
-    participants = set()
-    participant_data = {}
-    temp_dataset = EEGDataset(
-        pickle_dir=pickle_dir,
-        task_type="both",  # Get all participants regardless of task_type
-        target_type="both"
-    )
-    for sample in temp_dataset:
-        participant_id = sample['participant_id']
-        if participant_id not in participants:
-            participants.add(participant_id)
-            stratify_label = get_stratify_label(sample, stratify_by)
-            participant_data[participant_id] = stratify_label
-    
-    # Prepare data for stratification
-    participant_ids = list(participant_data.keys())
-    stratify_labels = [participant_data[pid] for pid in participant_ids]
-    np.random.shuffle(participant_ids)
-    
-    # Create stratified k-fold
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-    
-    fold_datasets = []
-    sampling_rate = kwargs.get('sampling_rate', 200)
-    
-    for fold, (train_val_indices, test_indices) in enumerate(skf.split(participant_ids, stratify_labels)):
-        # Split train_val into train and val
-        train_val_participants = [participant_ids[i] for i in train_val_indices]
-        test_participants = [participant_ids[i] for i in test_indices]
-        
-        # Get stratification labels for train_val participants
-        train_val_labels = [stratify_labels[i] for i in train_val_indices]
-        
-        # Use StratifiedShuffleSplit for train/val split to maintain stratification
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.15, random_state=random_seed)
-        
-        train_indices, val_indices = next(sss.split(train_val_participants, train_val_labels))
-        
-        train_participants = [train_val_participants[i] for i in train_indices]
-        val_participants = [train_val_participants[i] for i in val_indices]
-        
-        # Create EEGDataset instances with correct task_type and participant filtering
-        train_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=train_task_type,  # Only train_task_type
-            target_type=target_type,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=train_participants
-        )
-        
-        val_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=val_test_task_type,  # Only val_test_task_type
-            target_type=target_type,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=val_participants
-        )
-        
-        test_eeg_dataset = EEGDataset(
-            pickle_dir=pickle_dir,
-            task_type=val_test_task_type,  # Only val_test_task_type
-            target_type=target_type,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            participant_filter=test_participants
-        )
-        
-        # Wrap with LaBraMEEGDataset
-        train_dataset = LaBraMEEGDataset(train_eeg_dataset, sampling_rate=sampling_rate)
-        val_dataset = LaBraMEEGDataset(val_eeg_dataset, sampling_rate=sampling_rate)
-        test_dataset = LaBraMEEGDataset(test_eeg_dataset, sampling_rate=sampling_rate)
-        
-        fold_datasets.append((train_dataset, val_dataset, test_dataset))
-    
-    return fold_datasets
+    # Function body commented out - not supported with HDF5 yet
+    raise NotImplementedError("Cross-task cross-validation not yet supported with HDF5")
+"""
