@@ -73,9 +73,10 @@ from pyhealth.metrics import binary_metrics_fn, multiclass_metrics_fn
 
 from labram_dataset import (
         prepare_labram_dataset,
-        prepare_labram_cross_validation_datasets,
-        prepare_labram_cross_task_datasets,
-        prepare_labram_cross_task_cross_validation_datasets
+        # Cross-validation and cross-task functions are disabled
+        # prepare_labram_cross_validation_datasets,
+        # prepare_labram_cross_task_datasets,
+        # prepare_labram_cross_task_cross_validation_datasets
     )
 
 
@@ -863,61 +864,53 @@ def prepare_TUEV_dataset(root):
 # Generic dataset preparation function for our custom datasets
 def prepare_custom_dataset(dataset_type, root, **kwargs):
     """
-    Generic function to prepare custom datasets using labram_dataset.py
+    Generic function to prepare custom datasets using labram_dataset.py with HDF5 files.
     
     Args:
         dataset_type: Type of dataset ("age", "gender", "combined", "multi_output")
-        root: Path to the data directory
-        **kwargs: Additional arguments passed to the appropriate labram_dataset function
+        root: Path to the HDF5 data directory (e.g., "processed_eeg_data_hdf5")
+        **kwargs: Additional arguments including:
+            - segment_length: '1s', '2s', or '4s' (required)
+            - task_type: "active", "passive", or "both" (default: "both")
+            - random_seed: Random seed for shuffling (default: 42)
+            - sampling_rate: Sampling rate for resampling (default: 200)
         
     Returns:
-        Dataset(s) based on the experiment type
+        Tuple of (train_dataset, val_dataset, test_dataset)
     """
     
-    # Determine experiment type based on function name or kwargs
-    if 'n_folds' in kwargs and 'train_task_type' in kwargs:
-        # Cross-task cross-validation
-        result = prepare_labram_cross_task_cross_validation_datasets(
-            dataset_type=dataset_type,
-            pickle_dir=root,
-            **kwargs
-        )
-        print(f"{dataset_type.title()} cross-task cross-validation dataset loaded: {kwargs.get('n_folds', 5)} folds, train on {kwargs.get('train_task_type', 'active')}, test on {kwargs.get('val_test_task_type', 'passive')}")
-        
-    elif 'n_folds' in kwargs:
-        # Cross-validation only
-        result = prepare_labram_cross_validation_datasets(
-            dataset_type=dataset_type,
-            pickle_dir=root,
-            **kwargs
-        )
-        print(f"{dataset_type.title()} cross-validation dataset loaded: {kwargs.get('n_folds', 5)} folds")
-        
-    elif 'train_task_type' in kwargs:
-        # Cross-task only
-        result = prepare_labram_cross_task_datasets(
-            dataset_type=dataset_type,
-            pickle_dir=root,
-            **kwargs
-        )
-        print(f"{dataset_type.title()} cross-task dataset loaded: train on {kwargs.get('train_task_type', 'active')}, test on {kwargs.get('val_test_task_type', 'passive')}")
-        
-    else:
-        # Basic dataset
-        result = prepare_labram_dataset(
-            dataset_type=dataset_type,
-            pickle_dir=root,
-            **kwargs
-        )
-        train_dataset, val_dataset, test_dataset = result
-        
-        # Diagnostic: Count samples in train dataset (for IterableDataset, this is approximate)
-        print(f"{dataset_type.title()} baseline dataset loaded")
-        print(f"  Task type: {kwargs.get('task_type', 'both')}")
-        print(f"  Train/Val/Test split: {kwargs.get('train_ratio', 0.7):.1f}/{kwargs.get('val_ratio', 0.15):.1f}/{kwargs.get('test_ratio', 0.15):.1f}")
-        print(f"  Random seed: {kwargs.get('random_seed', 42)}")
-        print(f"  Note: IterableDataset size is unknown until iteration")
-        print(f"  ⚠️  If sample count differs significantly from CNN, check participant splits and data duplication")
+    # Extract segment_length from kwargs or infer from root path
+    segment_length = kwargs.pop('segment_length', None)
+    if segment_length is None:
+        # Try to infer from root path
+        if '1s' in root or '1s_segments' in root:
+            segment_length = '1s'
+        elif '2s' in root or '2s_segments' in root:
+            segment_length = '2s'
+        elif '4s' in root or '4s_segments' in root:
+            segment_length = '4s'
+        else:
+            # Default to 1s if cannot infer
+            segment_length = '1s'
+            print(f"Warning: Could not infer segment_length from root path '{root}', defaulting to '1s'")
+    
+    # Basic dataset (cross-validation and cross-task are commented out for now)
+    result = prepare_labram_dataset(
+        dataset_type=dataset_type,
+        hdf5_dir=root,
+        segment_length=segment_length,
+        **kwargs
+    )
+    train_dataset, val_dataset, test_dataset = result
+    
+    # Diagnostic: Log dataset information
+    print(f"{dataset_type.title()} baseline dataset loaded")
+    print(f"  HDF5 directory: {root}")
+    print(f"  Segment length: {segment_length}")
+    print(f"  Task type: {kwargs.get('task_type', 'both')}")
+    print(f"  Random seed: {kwargs.get('random_seed', 42)}")
+    print(f"  Note: Using pre-split HDF5 files (train/val/test splits from preprocessing)")
+    print(f"  Note: IterableDataset size is unknown until iteration")
     
     return result
 
