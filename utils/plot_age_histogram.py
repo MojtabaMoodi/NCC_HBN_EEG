@@ -234,7 +234,7 @@ def print_demographic_summary(demographics_list: list):
 
 def main():
     """Main function to run the age histogram analysis."""
-    data_root = "/home/mojtabam/scratch/preprocessed_new"
+    data_root = "/home/mojtabam/projects/aip-aghodsib/mojtabam/preprocessed_new"
     
     logger.info("Loading demographic data...")
     demographics_list = load_demographics(data_root)
