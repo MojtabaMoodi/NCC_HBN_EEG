@@ -2,6 +2,11 @@
 # LaBraM Fine-tuning Script for multi_output_cross_task_cv_passive_to_active_gender_stratified (4s segments)
 # Generated automatically - do not edit manually
 
+# ⚠️  WARNING: Cross-validation experiments are currently DISABLED
+# Cross-validation functionality has been commented out in labram_dataset.py
+# This script will fail until cross-validation is re-enabled for HDF5 format
+# See labram_dataset.py for details
+
 # Set environment variables for single GPU training (no distributed)
 # Unset any existing distributed variables to avoid conflicts
 unset RANK
