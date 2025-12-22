@@ -48,10 +48,12 @@ DATASET_TYPE_CONFIGS = {
     'multi_output': {'nb_classes': 2, 'metrics': ["accuracy", "balanced_accuracy", "f1_weighted"]},
 }
 
-# Data paths for different segment lengths
+# Data paths for different segment lengths (HDF5 format)
+# Using processed_eeg_data_hdf5_no_compression to match CNN experiments
 DATA_PATHS = {
-    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments_v2",
-    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_4s_segments_v2"
+    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
+    '2s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
+    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
 }
 
 def get_dataset_type_and_params(dataset_name):
@@ -160,13 +162,13 @@ def get_data_path(segment_length='1s'):
     Get data path for the specified segment length.
     
     Args:
-        segment_length: '1s' or '4s'
+        segment_length: '1s', '2s', or '4s'
         
     Returns:
-        Path to the data directory
+        Path to the HDF5 data directory
     """
     if segment_length not in DATA_PATHS:
-        raise ValueError(f"Invalid segment length: {segment_length}. Must be '1s' or '4s'")
+        raise ValueError(f"Invalid segment length: {segment_length}. Must be '1s', '2s', or '4s'")
     return DATA_PATHS[segment_length]
 
 # Generate the comprehensive dataset configs dynamically
