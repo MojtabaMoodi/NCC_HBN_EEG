@@ -17,7 +17,8 @@ export MASTER_PORT=12355
 # Dataset configuration
 DATASET="gender_baseline"
 SEGMENT_LENGTH="1s"  # Use 1s segments for gender classification
-DATA_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments"
+# Note: data_path is optional - if not specified, dataset_config.py will use HDF5 path automatically
+DATA_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5"
 
 # Output directory
 OUTPUT_DIR="./outputs/gender_baseline_$(date +%Y%m%d_%H%M%S)"
