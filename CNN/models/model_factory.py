@@ -7,6 +7,23 @@ from typing import Dict, Any, Type
 from .base_model import BaseEEGCNN
 from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN, EEGAgeRegressionCNN
 
+# Import ResNet models
+# Use absolute import from CNN directory
+# ResNet module is required - raise error if not available
+import sys
+import os
+# Add CNN directory to path if not already there
+cnn_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if cnn_dir not in sys.path:
+    sys.path.insert(0, cnn_dir)
+
+from resnet.resnet_model import (
+    EEGResNet, EEGResNet18, EEGResNet34, EEGResNet50,
+    EEGGenderResNet, EEGGenderResNet34, EEGGenderResNet50,
+    EEGAgeResNet, EEGAgeResNet34, EEGAgeResNet50,
+    CombinedResNet, MultiOutputResNet, EEGAgeRegressionResNet
+)
+
 class ModelFactory:
     """
     Factory class for creating EEG classification models.
@@ -15,6 +32,7 @@ class ModelFactory:
     
     # Registry of available models
     _models: Dict[str, Type[BaseEEGCNN]] = {
+        # Standard CNN models
         'eeg_cnn': EEGCNN,           # Unified model for any number of classes
         'gender_cnn': EEGGenderCNN,  # Backward compatibility (2 classes)
         'age_cnn': EEGAgeCNN,        # Backward compatibility (3 classes)
@@ -24,13 +42,39 @@ class ModelFactory:
     }
     
     @classmethod
+    def _get_models_dict(cls) -> Dict[str, Type[BaseEEGCNN]]:
+        """Get models dictionary, including ResNet models."""
+        models = cls._models.copy()
+        
+        # Add ResNet models (required - import error will be raised if not available)
+        models.update({
+            'resnet': EEGResNet,         # Base ResNet model (configurable)
+            'resnet18': EEGResNet18,     # ResNet-18 architecture (generic)
+            'resnet34': EEGResNet34,     # ResNet-34 architecture (generic)
+            'resnet50': EEGResNet50,     # ResNet-50 architecture (generic)
+            'gender_resnet': EEGGenderResNet,  # ResNet18 for gender classification (2 classes)
+            'gender_resnet34': EEGGenderResNet34,  # ResNet34 for gender classification (2 classes)
+            'gender_resnet50': EEGGenderResNet50,  # ResNet50 for gender classification (2 classes)
+            'age_resnet': EEGAgeResNet,  # ResNet18 for age classification (3 classes)
+            'age_resnet34': EEGAgeResNet34,  # ResNet34 for age classification (3 classes)
+            'age_resnet50': EEGAgeResNet50,  # ResNet50 for age classification (3 classes)
+            'age_regression_resnet': EEGAgeRegressionResNet,  # ResNet18 for age regression (1 output)
+            'combined_resnet': CombinedResNet,  # ResNet18 for combined classification (6 classes)
+            'multi_output_resnet': MultiOutputResNet,  # ResNet18 multi-output (2 heads: gender + age)
+        })
+        
+        return models
+    
+    @classmethod
     def create_model(cls, model_type: str, **kwargs) -> BaseEEGCNN:
         """
         Create a model instance by type.
         
         Args:
             model_type: Type of model to create 
-                       ('eeg_cnn', 'gender_cnn', 'age_cnn', 'age_regression_cnn', 'combined_cnn', 'multi_output_cnn')
+                       Standard CNN: 'eeg_cnn', 'gender_cnn', 'age_cnn', 'age_regression_cnn', 'combined_cnn', 'multi_output_cnn'
+                       ResNet: 'resnet', 'resnet18', 'resnet34', 'resnet50', 'gender_resnet', 'age_resnet', 
+                               'age_regression_resnet', 'combined_resnet', 'multi_output_resnet'
             **kwargs: Additional arguments for model initialization
             
         Returns:
@@ -39,17 +83,18 @@ class ModelFactory:
         Raises:
             ValueError: If model_type is not supported
         """
-        if model_type not in cls._models:
-            available_models = ', '.join(cls._models.keys())
+        models = cls._get_models_dict()
+        if model_type not in models:
+            available_models = ', '.join(models.keys())
             raise ValueError(f"Unknown model type: {model_type}. Available: {available_models}")
         
-        model_class = cls._models[model_type]
+        model_class = models[model_type]
         return model_class(**kwargs)
     
     @classmethod
     def get_available_models(cls) -> list:
         """Get list of available model types."""
-        return list(cls._models.keys())
+        return list(cls._get_models_dict().keys())
     
     @classmethod
     def get_model_info(cls, model_type: str) -> Dict[str, Any]:
@@ -62,10 +107,11 @@ class ModelFactory:
         Returns:
             Dictionary with model information
         """
-        if model_type not in cls._models:
+        models = cls._get_models_dict()
+        if model_type not in models:
             raise ValueError(f"Unknown model type: {model_type}")
         
-        model_class = cls._models[model_type]
+        model_class = models[model_type]
         return {
             'name': model_class.__name__,
             'module': model_class.__module__,
@@ -85,6 +131,8 @@ class ModelFactory:
             raise ValueError("Model class must inherit from BaseEEGCNN")
         
         cls._models[name] = model_class
+        # Also update the dynamic dict (ResNet models are always included)
+        cls._get_models_dict()[name] = model_class
 
 
 # Predefined model configurations for common use cases
