@@ -9,11 +9,24 @@
 # ---------------------------------------------------------
 import math
 import sys
+import warnings
+from pathlib import Path
 from typing import Iterable, Optional
 import torch
+
+# Suppress FutureWarning for autocast deprecation (may come from PyTorch internals)
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*autocast.*")
 from timm.utils import ModelEma
 import utils
 from einops import rearrange
+
+# Add LaBraM directory to path for imports (needed for labram_dataset and data_processing)
+_labram_dir = Path(__file__).parent
+if str(_labram_dir) not in sys.path:
+    sys.path.insert(0, str(_labram_dir))
+
+# Import LaBraM-specific modules
+from labram_dataset import prepare_labram_dataset
 
 def train_class_batch(model, samples, target, criterion, ch_names):
     outputs = model(samples, ch_names)
@@ -43,6 +56,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     model_ema: Optional[ModelEma] = None, log_writer=None,
                     start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
                     num_training_steps_per_epoch=None, update_freq=None, ch_names=None, is_binary=True):
+    skipped_batches = 0  # Track batches skipped due to NaN/Inf
     input_chans = None
     if ch_names is not None:
         input_chans = utils.get_input_chans(ch_names)
@@ -57,6 +71,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     sample_count = 0
     batch_count = 0
     count_samples = (epoch == 0)  # Only count in first epoch
+    task_type_counts = {'active': 0, 'passive': 0} if count_samples else None
 
     if loss_scaler is None:
         model.zero_grad()
@@ -68,6 +83,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # For IterableDataset, we let the iterator naturally exhaust
     # The step limit check is only for safety if num_training_steps_per_epoch is set to a reasonable value
     actual_steps = 0
+    
+    # For first epoch, count task types by iterating through underlying dataset separately
+    # This creates a new iterator, so it won't interfere with the training loop
+    if count_samples and hasattr(data_loader.dataset, 'eeg_dataset'):
+        print(f"  Counting task types in training dataset...")
+        eeg_dataset = data_loader.dataset.eeg_dataset
+        # Create a new iterator (IterableDataset creates new iterator each time)
+        for sample in eeg_dataset:
+            task_type = sample.get('task_type', 'unknown')
+            if task_type in task_type_counts:
+                task_type_counts[task_type] += 1
+        print(f"  Training dataset: {task_type_counts['active']:,} active, {task_type_counts['passive']:,} passive samples")
+    
     for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         # Count samples and batches in first epoch for diagnostic
         if count_samples:
@@ -89,8 +117,38 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 if wd_schedule_values is not None and param_group["weight_decay"] > 0:
                     param_group["weight_decay"] = wd_schedule_values[it]
 
-        samples = samples.float().to(device, non_blocking=True) / 100
+        # Check for NaN/Inf in raw input BEFORE any preprocessing
+        # This is a safety net - dataset should catch NaN/Inf and raise ValueError
+        # If we reach here, it means either:
+        # 1. NaN/Inf was introduced during tensor conversion (unlikely but possible)
+        # 2. Dataset check was bypassed somehow
+        # Best practice: Skip the batch and log warning, but this should rarely happen
+        raw_samples = samples.float()
+        if torch.isnan(raw_samples).any() or torch.isinf(raw_samples).any():
+            print(f"WARNING: NaN/Inf found in RAW input samples (from dataset) at epoch {epoch}, step {data_iter_step}")
+            print(f"  This should have been caught by dataset validation. Skipping batch.")
+            print(f"  NaN count: {torch.isnan(raw_samples).sum().item()}, Inf count: {torch.isinf(raw_samples).sum().item()}")
+            print(f"  Raw sample shape: {raw_samples.shape}")
+            print(f"  Raw sample stats: min={raw_samples.min().item():.6f}, max={raw_samples.max().item():.6f}, mean={raw_samples.mean().item():.6f}")
+            # Find which samples in the batch have NaN/Inf
+            nan_mask = torch.isnan(raw_samples).any(dim=(1, 2)) | torch.isinf(raw_samples).any(dim=(1, 2))
+            nan_indices = torch.where(nan_mask)[0].cpu().tolist()
+            print(f"  Samples with NaN/Inf in batch: {nan_indices} (out of {raw_samples.shape[0]} samples)")
+            print(f"  ⚠️  This indicates a data quality issue. Please check preprocessing pipeline.")
+            # Skip this batch (safety net - dataset should have caught this)
+            skipped_batches += 1
+            continue
+        
+        samples = raw_samples.to(device, non_blocking=True) / 100
         samples = rearrange(samples, 'B N (A T) -> B N A T', T=200)
+        
+        # Check for NaN/Inf after preprocessing (division and reshape)
+        if torch.isnan(samples).any() or torch.isinf(samples).any():
+            print(f"WARNING: NaN/Inf introduced during preprocessing at epoch {epoch}, step {data_iter_step}")
+            print(f"  NaN count: {torch.isnan(samples).sum().item()}, Inf count: {torch.isinf(samples).sum().item()}")
+            print(f"  Sample stats after preprocessing: min={samples.min().item():.6f}, max={samples.max().item():.6f}, mean={samples.mean().item():.6f}")
+            # Skip this batch
+            continue
         
         # Handle multi-output targets (tuple of (gender, age))
         is_multi_output = isinstance(targets, (list, tuple)) and len(targets) == 2
@@ -102,21 +160,82 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             targets = targets.to(device, non_blocking=True)
             if is_binary:
                 targets = targets.float().unsqueeze(-1)
-
+        
         if loss_scaler is None:
             samples = samples.half()
             loss, output = train_class_batch(
                 model, samples, targets, criterion, input_chans)
         else:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast(device_type='cuda'):
                 loss, output = train_class_batch(
                     model, samples, targets, criterion, input_chans)
 
+        # Check for NaN/Inf in model output before computing loss
+        output_has_nan = False
+        if isinstance(output, dict):
+            for key, val in output.items():
+                if torch.isnan(val).any() or torch.isinf(val).any():
+                    print(f"WARNING: NaN/Inf in model output '{key}' at epoch {epoch}, step {data_iter_step} - skipping batch")
+                    print(f"  Output stats: min={val.min().item():.6f}, max={val.max().item():.6f}, mean={val.mean().item():.6f}")
+                    output_has_nan = True
+                    break
+        elif torch.is_tensor(output) and (torch.isnan(output).any() or torch.isinf(output).any()):
+            print(f"WARNING: NaN/Inf in model output at epoch {epoch}, step {data_iter_step} - skipping batch")
+            print(f"  Output stats: min={output.min().item():.6f}, max={output.max().item():.6f}, mean={output.mean().item():.6f}")
+            output_has_nan = True
+
         loss_value = loss.item()
 
-        if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
-            sys.exit(1)
+        if not math.isfinite(loss_value) or output_has_nan:
+            skipped_batches += 1
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"WARNING: Skipping batch (loss={loss_value}, output_has_nan={output_has_nan}) at epoch {epoch}, step {data_iter_step}")
+            print(f"  Loss scale: {loss_scaler.state_dict()['scale'] if loss_scaler else 'N/A'}")
+            print(f"  Learning rate: {current_lr}")
+            print(f"  Total skipped batches this epoch: {skipped_batches}")
+            
+            # Check model parameters for NaN FIRST - if params are NaN, we must stop immediately
+            nan_params = []
+            for name, param in model.named_parameters():
+                if torch.isnan(param).any() or torch.isinf(param).any():
+                    nan_params.append(name)
+            if nan_params:
+                print(f"ERROR: Parameters with NaN/Inf detected: {nan_params[:5]}...")
+                print("  Model is corrupted, stopping training immediately")
+                sys.exit(1)
+            
+            # If learning rate is extremely small, it may cause numerical instability
+            # Note: With layer decay, some layers can have very small effective LR
+            # Check the base learning rate (before layer decay) instead of effective LR
+            # Get the maximum LR across all param groups to check the base schedule
+            if lr_schedule_values is not None and it < len(lr_schedule_values):
+                base_lr = lr_schedule_values[it]
+            else:
+                # If we can't get base LR from schedule, use the maximum LR across all param groups
+                # (this should be close to the base LR since layer decay only reduces it)
+                base_lr = max(pg['lr'] for pg in optimizer.param_groups)
+            
+            # Stop if base LR is below 1e-6 (10x smaller than typical min_lr of 1e-5)
+            # This prevents stopping due to layer decay making some layers have very small LR
+            if base_lr < 1e-6:
+                print(f"ERROR: Base learning rate ({base_lr:.2e}) is too small, causing numerical instability.")
+                print(f"  Effective LR for this layer: {current_lr:.2e}")
+                print("  This may be due to learning rate schedule being too aggressive.")
+                print("  Stopping training to prevent further corruption.")
+                sys.exit(1)
+            
+            # If we've skipped too many batches in a row, stop training
+            # Reduced from 10 to 5 to catch issues earlier
+            if skipped_batches > 5:
+                print(f"ERROR: Skipped {skipped_batches} batches in a row. Training unstable, stopping.")
+                print("  This suggests the model may be corrupted or there's a systematic issue.")
+                sys.exit(1)
+            
+            # Skip this batch and continue
+            continue
+
+        # Reset skipped_batches counter on successful batch
+        skipped_batches = 0
 
         if loss_scaler is None:
             loss /= update_freq
@@ -193,6 +312,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # Note: Detailed stats are logged during training via log_every
     # The epoch summary is printed in run_class_finetuning.py for better readability
     
+    # Prepare return dictionary
+    stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    
+    # Add task type counts to stats if available
+    if task_type_counts is not None:
+        stats['task_type_counts'] = task_type_counts.copy()
+    
     # Print sample and batch count diagnostic in first epoch
     if count_samples:
         actual_batch_size = data_loader.batch_size
@@ -233,7 +359,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 print(f"    Action: Check participant counts and verify no duplication in __iter__ methods")
         print(f"{'='*60}\n")
     
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    # Add skipped batches count to stats
+    stats['skipped_batches'] = skipped_batches
+    if skipped_batches > 0:
+        print(f"Epoch {epoch} summary: Skipped {skipped_batches} batches due to NaN/Inf")
+    
+    return stats
 
 
 @torch.no_grad()
@@ -282,7 +413,7 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
                 target = target.float().unsqueeze(-1)
         
         # compute output
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast(device_type='cuda'):
             output = model(EEG, input_chans=input_chans)
             
             # Compute loss
@@ -323,6 +454,9 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         metric_logger.update(loss=loss.item())
         
         # Compute metrics per batch
+        # Note: For binary classification, only compute accuracy per-batch
+        # Other metrics (balanced_accuracy, pr_auc, roc_auc) require both classes
+        # and will be computed correctly at the end when all predictions are aggregated
         if is_multi_output:
             # Compute metrics for gender head
             gender_results = utils.get_metrics(gender_output.numpy(), gender_target_cpu.numpy(), metrics, is_binary=False)
@@ -338,9 +472,29 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
             for key, value in gender_results.items():
                 metric_logger.meters[key].update(value, n=batch_size)
         else:
-            results = utils.get_metrics(output.numpy(), target.numpy(), metrics, is_binary)
-            for key, value in results.items():
-                metric_logger.meters[key].update(value, n=batch_size)
+            # For binary classification, only update accuracy per-batch
+            # Other metrics will be computed at the end from aggregated predictions
+            if is_binary:
+                # Compute only accuracy per-batch (works even with single-class batches)
+                batch_target = target.numpy()
+                batch_output = output.numpy()
+                batch_pred = (batch_output > 0.5).astype(float)
+                batch_acc = (batch_pred == batch_target).mean()
+                metric_logger.meters['accuracy'].update(batch_acc, n=batch_size)
+                
+                # For other metrics, only update if batch has both classes
+                # This prevents showing 0.0000 during progress
+                has_both_classes = (batch_target.sum() > 0) and (batch_target.sum() < len(batch_target))
+                if has_both_classes:
+                    results = utils.get_metrics(batch_output, batch_target, metrics, is_binary)
+                    for key, value in results.items():
+                        if key != 'accuracy':  # Already updated above
+                            metric_logger.meters[key].update(value, n=batch_size)
+            else:
+                # Multi-class: compute all metrics per-batch
+                results = utils.get_metrics(output.numpy(), target.numpy(), metrics, is_binary)
+                for key, value in results.items():
+                    metric_logger.meters[key].update(value, n=batch_size)
     
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -389,3 +543,102 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         ret['loss'] = metric_logger.loss.global_avg
     
     return ret
+
+
+def count_task_type_samples(data_loader):
+    """
+    Count active and passive samples in a data loader by iterating through it.
+    
+    Args:
+        data_loader: DataLoader to count samples from
+        
+    Returns:
+        Dictionary with 'active' and 'passive' sample counts
+    """
+    counts = {'active': 0, 'passive': 0}
+    
+    # Access underlying dataset to get task_type from samples
+    dataset = data_loader.dataset
+    if hasattr(dataset, 'eeg_dataset'):
+        # LaBraMEEGDataset wrapper - access underlying EEGDataset
+        eeg_dataset = dataset.eeg_dataset
+        # Iterate through dataset to count task types (creates new iterator)
+        for sample in eeg_dataset:
+            task_type = sample.get('task_type', 'unknown')
+            if task_type in counts:
+                counts[task_type] += 1
+    else:
+        # Direct EEGDataset - iterate to count (creates new iterator)
+        for sample in dataset:
+            task_type = sample.get('task_type', 'unknown')
+            if task_type in counts:
+                counts[task_type] += 1
+    
+    return counts
+
+
+def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length, 
+                          ch_names=None, metrics=['acc'], is_binary=True, random_seed=42):
+    """
+    Evaluate model separately on active and passive tasks.
+    
+    Args:
+        model: Model to evaluate
+        device: Device to run evaluation on
+        dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
+        hdf5_dir: Directory containing HDF5 files
+        segment_length: Length of segments ('1s', '2s', or '4s')
+        ch_names: Channel names
+        metrics: List of metrics to compute
+        is_binary: Whether this is binary classification
+        random_seed: Random seed for shuffling
+        
+    Returns:
+        Dictionary mapping task type to evaluation results with sample counts
+        {'active': {...}, 'passive': {...}}
+    """
+    # Create datasets and loaders for each task type
+    def _create_task_type_loader(task_type: str):
+        """Helper to create dataset and loader for a specific task type."""
+        test_dataset = prepare_labram_dataset(
+            dataset_type=dataset_type,
+            hdf5_dir=hdf5_dir,
+            segment_length=segment_length,
+            task_type=task_type,
+            random_seed=random_seed
+        )[2]  # Get test dataset (index 2)
+        
+        return torch.utils.data.DataLoader(
+            test_dataset,
+            batch_size=64,  # Use reasonable batch size for evaluation
+            num_workers=4,
+            pin_memory=True,
+            drop_last=False
+        )
+    
+    active_loader = _create_task_type_loader("active")
+    passive_loader = _create_task_type_loader("passive")
+    
+    # Count samples for each task type
+    print(f"\n{'='*60}")
+    print(f"Counting samples by task type...")
+    print(f"{'='*60}")
+    active_counts = count_task_type_samples(active_loader)
+    passive_counts = count_task_type_samples(passive_loader)
+    
+    # Evaluate separately
+    print(f"\n{'='*60}")
+    print(f"Evaluating on active tasks ({active_counts['active']:,} samples)...")
+    print(f"{'='*60}")
+    active_results = evaluate(active_loader, model, device, header='Active Test:', 
+                              ch_names=ch_names, metrics=metrics, is_binary=is_binary)
+    active_results['num_samples'] = active_counts['active']
+    
+    print(f"\n{'='*60}")
+    print(f"Evaluating on passive tasks ({passive_counts['passive']:,} samples)...")
+    print(f"{'='*60}")
+    passive_results = evaluate(passive_loader, model, device, header='Passive Test:', 
+                               ch_names=ch_names, metrics=metrics, is_binary=is_binary)
+    passive_results['num_samples'] = passive_counts['passive']
+    
+    return {'active': active_results, 'passive': passive_results}
