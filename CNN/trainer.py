@@ -17,8 +17,6 @@ import numpy as np
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from models import BaseEEGCNN
-import sys
-import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from utils import safe_json_dump, convert_numpy_types
@@ -97,6 +95,17 @@ class EEGTrainer:
         self.best_val_loss = float('inf')
         self.patience_counter = 0
         self.best_epoch = 0
+    
+    def _get_best_checkpoint_path(self, experiment_results_dir: str = None) -> str:
+        """Get the path to the best checkpoint file."""
+        if experiment_results_dir:
+            checkpoint_dir = os.path.join(experiment_results_dir, 'checkpoints')
+        else:
+            model_name = self._get_underlying_model().__class__.__name__
+            checkpoint_dir = os.path.join(self.config.checkpoint_dir, model_name)
+        
+        best_path = os.path.join(checkpoint_dir, f'{self.experiment_name}_best.pth')
+        return best_path
     
     def _get_underlying_model(self):
         """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
@@ -346,8 +355,8 @@ class EEGTrainer:
         metric = correct / total if total > 0 else 0.0
         return avg_loss, metric
     
-    def save_checkpoint(self, epoch: int, is_best: bool = False, experiment_results_dir: str = None):
-        """Save model checkpoint."""
+    def save_checkpoint(self, epoch: int, is_best: bool = False, is_last: bool = False, experiment_results_dir: str = None):
+        """Save model checkpoint. Only saves best and last checkpoints."""
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
@@ -357,6 +366,13 @@ class EEGTrainer:
             'config': self.config.to_dict(),
             'model_info': self._get_underlying_model().get_model_info()
         }
+        
+        # Add optional fields if they exist (for backward compatibility with old checkpoints)
+        # These fields help with resume functionality but aren't strictly required
+        if hasattr(self, 'best_epoch'):
+            checkpoint['best_epoch'] = self.best_epoch
+        if hasattr(self, 'patience_counter'):
+            checkpoint['patience_counter'] = self.patience_counter
         
         # Use experiment-specific directory if provided, otherwise fall back to global
         if experiment_results_dir:
@@ -368,13 +384,6 @@ class EEGTrainer:
         
         os.makedirs(checkpoint_dir, exist_ok=True)
         
-        # Save regular checkpoint
-        checkpoint_path = os.path.join(
-            checkpoint_dir, 
-            f'{self.experiment_name}_epoch_{epoch+1}.pth'
-        )
-        torch.save(checkpoint, checkpoint_path)
-        
         # Save best model
         if is_best:
             best_path = os.path.join(
@@ -383,10 +392,26 @@ class EEGTrainer:
             )
             torch.save(checkpoint, best_path)
             print(f"New best model saved at epoch {epoch+1} in {checkpoint_dir}")
+        
+        # Save last model
+        if is_last:
+            last_path = os.path.join(
+                checkpoint_dir, 
+                f'{self.experiment_name}_last.pth'
+            )
+            torch.save(checkpoint, last_path)
+            print(f"Last model saved at epoch {epoch+1} in {checkpoint_dir}")
     
-    def train(self, train_loader: DataLoader, val_loader: DataLoader, progress_callback=None, experiment_results_dir: str = None) -> Dict[str, Any]:
+    def train(self, train_loader: DataLoader, val_loader: DataLoader, progress_callback=None, experiment_results_dir: str = None, resume_from_best: bool = True) -> Dict[str, Any]:
         """
         Train the model with early stopping and comprehensive logging.
+        
+        Args:
+            train_loader: DataLoader for training data
+            val_loader: DataLoader for validation data
+            progress_callback: Optional callback function for progress updates
+            experiment_results_dir: Directory to save experiment-specific checkpoints
+            resume_from_best: If True, resume from best checkpoint if it exists
         
         Returns:
             Dictionary with training results and metrics
@@ -398,6 +423,43 @@ class EEGTrainer:
         print(f"Learning rate: {self.config.learning_rate}")
         print("-" * 60)
         
+        # Check for existing checkpoint to resume from
+        start_epoch = 0
+        resumed_from_checkpoint = False
+        if resume_from_best:
+            checkpoint_path = self._get_best_checkpoint_path(experiment_results_dir)
+            if checkpoint_path and os.path.exists(checkpoint_path):
+                print(f"📂 Found existing checkpoint: {checkpoint_path}")
+                print("   Resuming training from best checkpoint...")
+                checkpoint = load_checkpoint(checkpoint_path, self._get_underlying_model(), self.device)
+                
+                # Restore training state
+                if 'optimizer_state_dict' in checkpoint:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'scheduler_state_dict' in checkpoint:
+                    self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                if 'best_val_loss' in checkpoint:
+                    self.best_val_loss = checkpoint['best_val_loss']
+                if 'epoch' in checkpoint:
+                    start_epoch = checkpoint['epoch'] + 1  # Resume from next epoch
+                    # For old checkpoints: if best_epoch is missing, use the checkpoint's epoch
+                    # (since this is the best checkpoint, the epoch it was saved at is the best epoch)
+                    self.best_epoch = checkpoint.get('best_epoch', checkpoint['epoch'])
+                # For old checkpoints: if patience_counter is missing, initialize to 0
+                # (we don't know the exact value, but starting at 0 is safe)
+                if 'patience_counter' in checkpoint:
+                    self.patience_counter = checkpoint['patience_counter']
+                else:
+                    # Old checkpoint doesn't have patience_counter - reset to 0
+                    # This is safe because we're resuming from the best model anyway
+                    self.patience_counter = 0
+                
+                resumed_from_checkpoint = True
+                print(f"   Resuming from epoch {start_epoch + 1}/{self.config.epochs}")
+                print(f"   Best validation loss so far: {self.best_val_loss:.4f} (epoch {self.best_epoch + 1})")
+            else:
+                print("   No existing checkpoint found. Starting fresh training.")
+        
         start_time = time.time()
         
         # Log that we're about to start loading first batch
@@ -405,7 +467,7 @@ class EEGTrainer:
         # Note: IterableDataset doesn't support __len__(), so we can't print dataset size
         sys.stdout.flush()
         
-        for epoch in range(self.config.epochs):
+        for epoch in range(start_epoch, self.config.epochs):
             epoch_start = time.time()
             print(f"\n🔄 Starting epoch {epoch+1}/{self.config.epochs}")
             sys.stdout.flush()
@@ -443,22 +505,44 @@ class EEGTrainer:
                         f"LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
             
             # Check for improvement
-            if val_loss < self.best_val_loss - self.config.min_delta:
-                self.best_val_loss = val_loss
-                self.patience_counter = 0
-                self.best_epoch = epoch
-                self.save_checkpoint(epoch, is_best=True, experiment_results_dir=experiment_results_dir)
+            # Note: We compare with min_delta to avoid saving checkpoints for tiny improvements
+            # When resuming, best_val_loss should be loaded from checkpoint, so this comparison
+            # ensures we only save a new best if there's a meaningful improvement
+            improvement_threshold = self.best_val_loss - self.config.min_delta
+            if val_loss < improvement_threshold:
+                # Additional check: if we just resumed and this is the first epoch after resume,
+                # and the improvement is very small (within 2*min_delta), it might be due to
+                # floating-point precision or data order differences. Only save if improvement is significant.
+                is_first_epoch_after_resume = (epoch == start_epoch and resumed_from_checkpoint)
+                improvement_magnitude = self.best_val_loss - val_loss
+                
+                if is_first_epoch_after_resume and improvement_magnitude < 2 * self.config.min_delta:
+                    # Very small improvement on first epoch after resume - likely due to precision/data order
+                    # Don't save new best, but still update best_val_loss to the current (slightly better) value
+                    print(f"   ⚠️  Small improvement ({improvement_magnitude:.6f}) on first epoch after resume - likely due to precision/data order. Not saving new best checkpoint.")
+                    self.best_val_loss = val_loss
+                    self.patience_counter = 0
+                    self.best_epoch = epoch
+                else:
+                    # Significant improvement - save new best checkpoint
+                    self.best_val_loss = val_loss
+                    self.patience_counter = 0
+                    self.best_epoch = epoch
+                    self.save_checkpoint(epoch, is_best=True, experiment_results_dir=experiment_results_dir)
             else:
                 self.patience_counter += 1
-            
-            # Save regular checkpoint
-            if (epoch + 1) % self.config.save_every == 0:
-                self.save_checkpoint(epoch, experiment_results_dir=experiment_results_dir)
             
             # Early stopping
             if self.patience_counter >= self.config.patience:
                 print(f"Early stopping at epoch {epoch+1} (patience: {self.config.patience})")
+                # Save last checkpoint before breaking
+                self.save_checkpoint(epoch, is_last=True, experiment_results_dir=experiment_results_dir)
                 break
+        
+        # Save last checkpoint at the end of training (if we didn't already save it due to early stopping)
+        if self.patience_counter < self.config.patience:
+            # Training completed normally (reached max epochs)
+            self.save_checkpoint(epoch, is_last=True, experiment_results_dir=experiment_results_dir)
         
         total_time = time.time() - start_time
         
