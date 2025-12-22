@@ -102,20 +102,24 @@ class ReportGenerator:
                             if 'active' in task_metrics and 'passive' in task_metrics:
                                 active_acc = task_metrics['active'].get('accuracy')
                                 passive_acc = task_metrics['passive'].get('accuracy')
+                                active_num_samples = task_metrics['active'].get('num_samples', 0)
+                                passive_num_samples = task_metrics['passive'].get('num_samples', 0)
                                 active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
                                 passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
-                                f.write(f"Active Task Accuracy: {active_acc_str}\n")
-                                f.write(f"Passive Task Accuracy: {passive_acc_str}\n")
+                                f.write(f"Active Task Accuracy: {active_acc_str} (n={active_num_samples})\n")
+                                f.write(f"Passive Task Accuracy: {passive_acc_str} (n={passive_num_samples})\n")
                                 # Note: Combined accuracy is a weighted average based on sample counts, not a simple average
                                 f.write(f"  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)\n")
                             elif 'active' in task_metrics:
                                 active_acc = task_metrics['active'].get('accuracy')
+                                active_num_samples = task_metrics['active'].get('num_samples', 0)
                                 active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
-                                f.write(f"Active Task Accuracy: {active_acc_str}\n")
+                                f.write(f"Active Task Accuracy: {active_acc_str} (n={active_num_samples})\n")
                             elif 'passive' in task_metrics:
                                 passive_acc = task_metrics['passive'].get('accuracy')
+                                passive_num_samples = task_metrics['passive'].get('num_samples', 0)
                                 passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
-                                f.write(f"Passive Task Accuracy: {passive_acc_str}\n")
+                                f.write(f"Passive Task Accuracy: {passive_acc_str} (n={passive_num_samples})\n")
                     
                     f.write(f"Training Time: {result.total_time:.2f}s\n")
             
@@ -228,19 +232,23 @@ class ReportGenerator:
                         if 'active' in task_metrics and 'passive' in task_metrics:
                             active_acc = task_metrics['active'].get('accuracy')
                             passive_acc = task_metrics['passive'].get('accuracy')
+                            active_num_samples = task_metrics['active'].get('num_samples', 0)
+                            passive_num_samples = task_metrics['passive'].get('num_samples', 0)
                             active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
                             passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
-                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str}</div>"
-                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str}</div>"
+                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str} (n={active_num_samples})</div>"
+                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str} (n={passive_num_samples})</div>"
                             accuracy_html += f"<div class=\"metric\" style=\"font-size: 0.9em; color: #666;\"><em>Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2</em></div>"
                         elif 'active' in task_metrics:
                             active_acc = task_metrics['active'].get('accuracy')
+                            active_num_samples = task_metrics['active'].get('num_samples', 0)
                             active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
-                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str}</div>"
+                            accuracy_html += f"<div class=\"metric\"><strong>Active Task Accuracy:</strong> {active_acc_str} (n={active_num_samples})</div>"
                         elif 'passive' in task_metrics:
                             passive_acc = task_metrics['passive'].get('accuracy')
+                            passive_num_samples = task_metrics['passive'].get('num_samples', 0)
                             passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
-                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str}</div>"
+                            accuracy_html += f"<div class=\"metric\"><strong>Passive Task Accuracy:</strong> {passive_acc_str} (n={passive_num_samples})</div>"
                     
                     html_content += f"""
         <div class="metrics">
