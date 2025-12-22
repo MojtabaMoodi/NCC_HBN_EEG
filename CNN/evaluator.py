@@ -413,6 +413,13 @@ class EEGEvaluator:
             results = self.evaluate(loader)
             results_by_task_type[task_type] = results
             
+            # Calculate and store sample count
+            num_samples = len(results.predictions) if results.predictions else (
+                len(results.gender_predictions) if results.gender_predictions is not None else 0
+            )
+            # Store sample count in metrics for reporting
+            results.metrics['num_samples'] = num_samples
+            
             # Print summary
             print(f"\n{task_type.upper()} Task Results:")
             # Check if this is a regression task (has 'mae' instead of 'accuracy')
@@ -428,7 +435,7 @@ class EEGEvaluator:
                     print(f"  F1-Score (weighted): {results.metrics['f1_weighted']:.4f}")
                 if 'roc_auc' in results.metrics and results.metrics['roc_auc'] is not None:
                     print(f"  ROC-AUC: {results.metrics['roc_auc']:.4f}")
-            print(f"  Number of samples: {len(results.predictions) if results.predictions else len(results.gender_predictions) if results.gender_predictions is not None else 0}")
+            print(f"  Number of samples: {num_samples}")
         
         # Print comparison summary
         if len(results_by_task_type) > 1:
