@@ -1,13 +1,34 @@
+# Core dependencies - MUST install torch first (required by deepspeed)
+torch
+torchvision
+
+# LaBraM dependencies
 timm==0.4.12
 Pillow
 blobfile
-mypy
-numpy
-pytest
-requests
 einops
-deepspeed==0.4.0
+tensorboardX
+
+# Scientific computing
+# IMPORTANT: numpy from Compute Canada wheelhouse has system library dependency issues (libcpupower.so.0)
+# Solution: Install numpy from PyPI first, then install other packages
+#   Step 1: pip install --no-binary numpy numpy
+#   Step 2: pip install -r requirements.txt
+# Or install all at once: pip install --no-binary numpy -r requirements.txt
+numpy
 scipy
-pyhealth==1.1.4
 h5py
 mne==1.4.2
+
+# Evaluation and metrics
+pyhealth==1.1.4
+
+# Development tools (optional)
+mypy
+pytest
+requests
+
+# Optional: DeepSpeed (install separately after torch is installed)
+# deepspeed==0.4.0
+# Note: To install deepspeed, run: pip install deepspeed==0.4.0
+# (after torch is already installed)
