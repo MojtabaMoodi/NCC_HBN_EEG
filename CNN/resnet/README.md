@@ -2,6 +2,8 @@
 
 This directory contains ResNet-like CNN architectures adapted for EEG time-series classification tasks.
 
+**Note**: The ResNet module is required. If the ResNet module is not available, the ModelFactory will raise an `ImportError` when attempting to import ResNet models.
+
 ## Overview
 
 ResNet (Residual Network) models use skip connections (residual connections) to enable training of deeper networks. These models are adapted for EEG data with the following characteristics:
@@ -18,9 +20,9 @@ ResNet (Residual Network) models use skip connections (residual connections) to 
 ### Base Models
 
 - **`EEGResNet`**: Base ResNet model (configurable number of blocks)
-- **`EEGResNet18`**: ResNet-18 architecture (4 blocks, ~64 base channels)
-- **`EEGResNet34`**: ResNet-34 architecture (6 blocks, ~64 base channels)
-- **`EEGResNet50`**: ResNet-50 architecture (8 blocks, ~64 base channels)
+- **`EEGResNet18`**: ResNet-18 architecture (8 BasicBlocks arranged as [2,2,2,2], 512 final channels)
+- **`EEGResNet34`**: ResNet-34 architecture (16 BasicBlocks arranged as [3,4,6,3], 512 final channels)
+- **`EEGResNet50`**: ResNet-50 architecture (16 BottleneckBlocks arranged as [3,4,6,3], 2048 final channels)
 
 ### Task-Specific Models
 
@@ -156,7 +158,8 @@ experiment = ExperimentConfig(
 
 ### EEGResNet-Specific Parameters
 
-- **`num_blocks`**: Number of ResNet blocks (default: 4)
+- **`layers`**: List of blocks per stage (e.g., [2,2,2,2] for ResNet18, [3,4,6,3] for ResNet34/50)
+- **`block_type`**: Block type (BasicBlock or BottleneckBlock)
 - **`base_channels`**: Base number of channels (default: 64)
 
 ## Key Features
@@ -173,9 +176,10 @@ experiment = ExperimentConfig(
 |---------|--------------|--------|
 | Skip Connections | ❌ | ✅ |
 | Batch Normalization | Optional | Built-in |
-| Depth | Fixed (8 layers) | Configurable (4-8+ blocks) |
+| Depth | Fixed (8 layers) | Configurable (8-16 blocks) |
 | Gradient Flow | Can degrade | Improved via skip connections |
 | Training Stability | Good | Excellent |
+| Architecture Variants | Single | ResNet18, ResNet34, ResNet50 |
 
 ## Notes
 
