@@ -25,7 +25,7 @@ class LaBraMReportGenerator:
         Initialize report generator.
         
         Args:
-            segment_length: Segment length ('1s' or '4s') to generate reports for
+            segment_length: Segment length ('1s', '2s', or '4s') to generate reports for
             outputs_dir: Directory containing LaBraM experiment outputs
             output_dir: Directory to save generated reports (defaults to reports_{segment_length})
         """
@@ -106,6 +106,13 @@ class LaBraMReportGenerator:
             # Parse experiment name
             target_type, experiment_type = self._parse_experiment_name(experiment_name)
             
+            # Extract task_type_metrics from the last epoch (final evaluation)
+            task_type_metrics = None
+            if metrics_list:
+                last_metrics = metrics_list[-1]
+                if 'task_type_metrics' in last_metrics:
+                    task_type_metrics = last_metrics['task_type_metrics']
+            
             # Extract metrics
             result = {
                 'experiment_name': experiment_name,
@@ -133,6 +140,7 @@ class LaBraMReportGenerator:
                     'pr_auc': best_metrics.get('test_pr_auc', 0),
                     'roc_auc': best_metrics.get('test_roc_auc', 0),
                 },
+                'task_type_metrics': task_type_metrics,  # Active/passive task metrics
                 'all_epochs': metrics_list,
                 'success': True
             }
@@ -202,19 +210,25 @@ class LaBraMReportGenerator:
     
     def _parse_experiment_name(self, experiment_name: str) -> tuple:
         """Parse experiment name to extract target type and experiment type."""
-        # Extract segment length (1s or 4s)
+        # Extract segment length (1s, 2s, or 4s)
         if '_1s' in experiment_name:
             segment_length = '1s'
             base_name = experiment_name.replace('_1s', '')
+        elif '_2s' in experiment_name:
+            segment_length = '2s'
+            base_name = experiment_name.replace('_2s', '')
         elif '_4s' in experiment_name:
             segment_length = '4s'
             base_name = experiment_name.replace('_4s', '')
         else:
-            segment_length = 'unknown'
+            # Don't overwrite self.segment_length if we can't parse it from the name
+            # Use the existing self.segment_length set in __init__
+            segment_length = getattr(self, 'segment_length', 'unknown')
             base_name = experiment_name
         
-        # Store segment length for later use
-        self.segment_length = segment_length
+        # Store segment length for later use (only if we successfully parsed it)
+        if segment_length != 'unknown':
+            self.segment_length = segment_length
         
         # Determine target type
         if base_name.startswith('age_'):
@@ -283,6 +297,41 @@ class LaBraMReportGenerator:
                     
                     f.write(f"Test ROC-AUC: {result['test_metrics']['roc_auc']:.4f}\n")
                     f.write(f"Test PR-AUC: {result['test_metrics']['pr_auc']:.4f}\n")
+                    
+                    # Add dataset sample counts if available
+                    if result.get('train_task_type_counts'):
+                        counts = result['train_task_type_counts']
+                        f.write(f"\nTraining Dataset Sample Counts:\n")
+                        f.write(f"  Active tasks: {counts.get('active', 0):,} samples\n")
+                        f.write(f"  Passive tasks: {counts.get('passive', 0):,} samples\n")
+                    if result.get('val_task_type_counts'):
+                        counts = result['val_task_type_counts']
+                        f.write(f"\nValidation Dataset Sample Counts:\n")
+                        f.write(f"  Active tasks: {counts.get('active', 0):,} samples\n")
+                        f.write(f"  Passive tasks: {counts.get('passive', 0):,} samples\n")
+                    if result.get('test_task_type_counts'):
+                        counts = result['test_task_type_counts']
+                        f.write(f"\nTest Dataset Sample Counts:\n")
+                        f.write(f"  Active tasks: {counts.get('active', 0):,} samples\n")
+                        f.write(f"  Passive tasks: {counts.get('passive', 0):,} samples\n")
+                    
+                    # Add task-type-specific metrics if available
+                    if result.get('task_type_metrics'):
+                        f.write(f"\nTask-Type-Specific Metrics (Test Set):\n")
+                        task_metrics = result['task_type_metrics']
+                        if 'active' in task_metrics:
+                            active_acc = task_metrics['active'].get('accuracy', 0.0)
+                            active_f1 = task_metrics['active'].get('f1_weighted', 0.0)
+                            active_n = task_metrics['active'].get('num_samples', 0)
+                            f.write(f"  Active Task Accuracy: {active_acc:.4f} (n={active_n:,})\n")
+                            f.write(f"  Active Task F1-Score: {active_f1:.4f}\n")
+                        if 'passive' in task_metrics:
+                            passive_acc = task_metrics['passive'].get('accuracy', 0.0)
+                            passive_f1 = task_metrics['passive'].get('f1_weighted', 0.0)
+                            passive_n = task_metrics['passive'].get('num_samples', 0)
+                            f.write(f"  Passive Task Accuracy: {passive_acc:.4f} (n={passive_n:,})\n")
+                            f.write(f"  Passive Task F1-Score: {passive_f1:.4f}\n")
+                        f.write(f"  Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2\n")
     
     def _generate_html_report(self, experiment_results: List[Dict[str, Any]]):
         """Generate HTML report."""
@@ -396,6 +445,79 @@ class LaBraMReportGenerator:
                     <div class="metric-value">{result['test_metrics']['pr_auc']:.1%}</div>
                     <div class="metric-label">Test PR-AUC</div>
                 </div>
+"""
+                    
+                    # Add dataset sample counts if available
+                    if result.get('train_task_type_counts') or result.get('val_task_type_counts') or result.get('test_task_type_counts'):
+                        html_content += """
+            <div class="metrics" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <h4 style="margin: 0 0 10px 0; color: #666;">Dataset Sample Counts:</h4>
+"""
+                        if result.get('train_task_type_counts'):
+                            counts = result['train_task_type_counts']
+                            html_content += f"""
+                <div style="grid-column: 1 / -1; margin-bottom: 5px;">
+                    <strong>Training:</strong> {counts.get('active', 0):,} active, {counts.get('passive', 0):,} passive
+                </div>
+"""
+                        if result.get('val_task_type_counts'):
+                            counts = result['val_task_type_counts']
+                            html_content += f"""
+                <div style="grid-column: 1 / -1; margin-bottom: 5px;">
+                    <strong>Validation:</strong> {counts.get('active', 0):,} active, {counts.get('passive', 0):,} passive
+                </div>
+"""
+                        if result.get('test_task_type_counts'):
+                            counts = result['test_task_type_counts']
+                            html_content += f"""
+                <div style="grid-column: 1 / -1; margin-bottom: 5px;">
+                    <strong>Test:</strong> {counts.get('active', 0):,} active, {counts.get('passive', 0):,} passive
+                </div>
+"""
+                        html_content += """
+            </div>
+"""
+                    
+                    # Add task-type-specific metrics if available
+                    if result.get('task_type_metrics'):
+                        task_metrics = result['task_type_metrics']
+                        html_content += """
+            <div class="metrics" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <h4 style="margin: 0 0 10px 0; color: #666;">Task-Type-Specific Metrics (Test Set):</h4>
+"""
+                        if 'active' in task_metrics:
+                            active_acc = task_metrics['active'].get('accuracy', 0.0)
+                            active_f1 = task_metrics['active'].get('f1_weighted', 0.0)
+                            active_n = task_metrics['active'].get('num_samples', 0)
+                            html_content += f"""
+                <div class="metric">
+                    <div class="metric-value">{active_acc:.1%}</div>
+                    <div class="metric-label">Active Task Accuracy (n={active_n:,})</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">{active_f1:.3f}</div>
+                    <div class="metric-label">Active Task F1-Score</div>
+                </div>
+"""
+                        if 'passive' in task_metrics:
+                            passive_acc = task_metrics['passive'].get('accuracy', 0.0)
+                            passive_f1 = task_metrics['passive'].get('f1_weighted', 0.0)
+                            passive_n = task_metrics['passive'].get('num_samples', 0)
+                            html_content += f"""
+                <div class="metric">
+                    <div class="metric-value">{passive_acc:.1%}</div>
+                    <div class="metric-label">Passive Task Accuracy (n={passive_n:,})</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">{passive_f1:.3f}</div>
+                    <div class="metric-label">Passive Task F1-Score</div>
+                </div>
+"""
+                        html_content += """
+                <div style="grid-column: 1 / -1; font-size: 0.9em; color: #666; font-style: italic; margin-top: 10px;">
+                    Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2
+                </div>
+            </div>
 """
                     
                     html_content += """
@@ -618,24 +740,29 @@ class LaBraMReportGenerator:
 
 
 def main():
-    """Main function to generate reports for both 1s and 4s segment lengths."""
+    """Main function to generate reports for 1s, 2s, or 4s segment lengths."""
     import sys
     
     # Check if specific segment length is requested
     segment_length = sys.argv[1] if len(sys.argv) > 1 else None
     
-    if segment_length and segment_length in ['1s', '4s']:
+    if segment_length and segment_length in ['1s', '2s', '4s']:
         # Generate report for specific segment length
         generator = LaBraMReportGenerator(segment_length=segment_length)
         generator.generate_all_reports()
     else:
-        # Generate reports for both segment lengths
-        print("Generating reports for both 1s and 4s segment lengths...")
+        # Generate reports for all segment lengths
+        print("Generating reports for all segment lengths (1s, 2s, 4s)...")
         
         # Generate 1s reports
         print("\nGenerating reports for 1s segment length...")
         generator_1s = LaBraMReportGenerator(segment_length='1s')
         generator_1s.generate_all_reports()
+        
+        # Generate 2s reports
+        print("\nGenerating reports for 2s segment length...")
+        generator_2s = LaBraMReportGenerator(segment_length='2s')
+        generator_2s.generate_all_reports()
         
         # Generate 4s reports
         print("\nGenerating reports for 4s segment length...")
