@@ -26,7 +26,7 @@ from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import ModelEma
 from optim_factory import create_optimizer, get_parameter_groups, LayerDecayValueAssigner
 
-from engine_for_finetuning import train_one_epoch, evaluate
+from engine_for_finetuning import train_one_epoch, evaluate, evaluate_by_task_type, count_task_type_samples
 from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils
 from scipy import interpolate
@@ -183,7 +183,7 @@ def get_args():
     parser.add_argument('--dataset', default='TUAB', type=str,
                         help='dataset: TUAB | TUEV | AGE | GENDER | COMBINED | MULTI_OUTPUT | AGE_CV_GENDER_STRATIFIED | GENDER_CROSS_TASK_ACTIVE_TO_PASSIVE | etc.')
     
-    parser.add_argument('--segment_length', default='1s', type=str, choices=['1s', '4s'],
+    parser.add_argument('--segment_length', default='1s', type=str, choices=['1s', '2s', '4s'],
                         help='Segment length: 1s or 4s (only for custom datasets)')
     
     parser.add_argument('--data_path', default=None, type=str,
@@ -277,6 +277,10 @@ def get_dataset(args):
         
         # Extract dataset type and parameters from dataset name
         dataset_type, kwargs = get_dataset_type_and_params(args.dataset)
+        
+        # Add segment_length to kwargs for HDF5 dataset preparation
+        if hasattr(args, 'segment_length'):
+            kwargs['segment_length'] = args.segment_length
         
         # Call prepare_custom_dataset directly
         result = utils.prepare_custom_dataset(dataset_type, data_path, **kwargs)
@@ -578,6 +582,25 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     start_time = time.time()
     max_accuracy = 0.0
     max_accuracy_test = 0.0
+    
+    # Count task types for validation and test sets (once, before training)
+    val_task_counts = None
+    test_task_counts = None
+    if data_loader_val is not None:
+        print(f"\n{'='*60}")
+        print("Counting task types in validation and test sets...")
+        print(f"{'='*60}")
+        val_task_counts = count_task_type_samples(data_loader_val)
+        print(f"  Validation: {val_task_counts['active']:,} active, {val_task_counts['passive']:,} passive samples")
+        if type(data_loader_test) == list:
+            # Multiple test sets - count first one
+            test_task_counts = count_task_type_samples(data_loader_test[0])
+            print(f"  Test (first set): {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
+        else:
+            test_task_counts = count_task_type_samples(data_loader_test)
+            print(f"  Test: {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
+        print(f"{'='*60}\n")
+    
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             # Note: IterableDataset doesn't use samplers, so no set_epoch needed
@@ -605,6 +628,33 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         if data_loader_val is not None:
             val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
             test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
+            
+            # Evaluate by task type (active/passive) every 5 epochs or on last epoch
+            task_type_results = None
+            if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epochs:
+                if args.dataset in CUSTOM_DATASET_CONFIGS:
+                    try:
+                        # Get dataset type and data path
+                        dataset_type, _ = get_dataset_type_and_params(args.dataset)
+                        if args.data_path is not None:
+                            hdf5_dir = args.data_path
+                        else:
+                            hdf5_dir = get_data_path(getattr(args, 'segment_length', '1s'))
+                        segment_length = getattr(args, 'segment_length', '1s')
+                        
+                        task_type_results = evaluate_by_task_type(
+                            model, device, dataset_type, hdf5_dir, segment_length,
+                            ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                            random_seed=args.seed
+                        )
+                        
+                        # Print task-type-specific results
+                        for task_type, results in task_type_results.items():
+                            acc = results.get('accuracy', 0.0) * 100
+                            num_samples = results.get('num_samples', 0)
+                            print(f"  {task_type.upper()} Test Acc: {acc:.4f}% (n={num_samples:,})")
+                    except Exception as e:
+                        print(f"  Warning: Could not evaluate by task type: {e}")
             
             # Print epoch summary in a clear format (matching CNN format)
             train_loss = train_stats.get('loss', 0.0)
@@ -666,6 +716,27 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                          **{f'test_{k}': v for k, v in test_stats.items()},
                          'epoch': epoch,
                          'n_parameters': n_parameters}
+            
+            # Add task type counts if available (from first epoch)
+            if epoch == 0:
+                if train_stats.get('task_type_counts'):
+                    log_stats['train_task_type_counts'] = train_stats['task_type_counts']
+                if val_task_counts:
+                    log_stats['val_task_type_counts'] = val_task_counts
+                if test_task_counts:
+                    log_stats['test_task_type_counts'] = test_task_counts
+            
+            # Add task-type-specific metrics if available
+            if task_type_results is not None:
+                log_stats['task_type_metrics'] = {
+                    task_type: {
+                        'accuracy': results.get('accuracy', 0.0),
+                        'f1_weighted': results.get('f1_weighted', 0.0),
+                        'balanced_accuracy': results.get('balanced_accuracy', 0.0),
+                        'num_samples': results.get('num_samples', 0),
+                    }
+                    for task_type, results in task_type_results.items()
+                }
         else:
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          'epoch': epoch,
@@ -680,6 +751,48 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    
+    # Final evaluation by task type (active/passive) after training
+    final_task_type_results = None
+    if args.dataset in CUSTOM_DATASET_CONFIGS:
+        try:
+            # Load best model for final evaluation
+            best_checkpoint_path = Path(args.output_dir) / 'checkpoint-best.pth'
+            if best_checkpoint_path.exists():
+                print(f"\nLoading best model from {best_checkpoint_path} for final evaluation...")
+                checkpoint = torch.load(best_checkpoint_path, map_location='cpu')
+                model_without_ddp.load_state_dict(checkpoint['model'])
+            
+            # Get dataset type and data path
+            dataset_type, _ = get_dataset_type_and_params(args.dataset)
+            if args.data_path is not None:
+                hdf5_dir = args.data_path
+            else:
+                hdf5_dir = get_data_path(getattr(args, 'segment_length', '1s'))
+            segment_length = getattr(args, 'segment_length', '1s')
+            
+            print(f"\n{'='*80}")
+            print("Final evaluation by task type (active/passive)")
+            print(f"{'='*80}")
+            final_task_type_results = evaluate_by_task_type(
+                model, device, dataset_type, hdf5_dir, segment_length,
+                ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                random_seed=args.seed
+            )
+            
+            # Print final task-type-specific results
+            print(f"\n{'='*80}")
+            print("Final Task-Type-Specific Results:")
+            print(f"{'='*80}")
+            for task_type, results in final_task_type_results.items():
+                acc = results.get('accuracy', 0.0) * 100
+                f1 = results.get('f1_weighted', 0.0)
+                num_samples = results.get('num_samples', 0)
+                print(f"  {task_type.upper()} tasks: Accuracy = {acc:.4f}%, F1-Score = {f1:.4f} (n={num_samples:,})")
+        except Exception as e:
+            print(f"Warning: Could not perform final task-type evaluation: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Save final model even if checkpoint saving was disabled
     if args.output_dir and not args.save_ckpt:
@@ -697,11 +810,29 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 'model': model_ema.module.state_dict(),
             }, Path(args.output_dir) / 'checkpoint-ema-best.pth')
     
-    # Return final metrics
+    # Return final metrics including task-type-specific results
     final_metrics = {
         'val_accuracy': max_accuracy,
         'test_accuracy': max_accuracy_test,
     }
+    
+    # Add task-type-specific metrics if available
+    if final_task_type_results is not None:
+        final_metrics['task_type_metrics'] = {
+            task_type: {
+                'accuracy': results.get('accuracy', 0.0),
+                'f1_weighted': results.get('f1_weighted', 0.0),
+                'balanced_accuracy': results.get('balanced_accuracy', 0.0),
+                'num_samples': results.get('num_samples', 0),
+            }
+            for task_type, results in final_task_type_results.items()
+        }
+    
+    # Add task type counts to final metrics
+    if val_task_counts:
+        final_metrics['val_task_type_counts'] = val_task_counts
+    if test_task_counts:
+        final_metrics['test_task_type_counts'] = test_task_counts
     
     # Restore original output directory
     args.output_dir = original_output_dir
