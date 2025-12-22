@@ -16,18 +16,25 @@ def generate_run_script(dataset_name, segment_length):
     dataset_type, kwargs = get_dataset_type_and_params(dataset_name)
     config = DATASET_TYPE_CONFIGS[dataset_type]
     
-    # Determine if this is a cross-validation experiment
+    # Determine if this is a cross-validation or cross-task experiment
     is_cv = 'cv' in dataset_name.lower()
+    is_cross_task = 'cross_task' in dataset_name.lower()
     is_cross_task_cv = 'cross_task_cv' in dataset_name.lower()
+    
+    # Check if this experiment type is disabled
+    is_disabled = is_cv or is_cross_task or is_cross_task_cv
     
     # Adjust batch size to avoid OOM:
     # - 4s segments are 4x larger in memory
+    # - 2s segments are 2x larger in memory
     # - Cross-task CV loads data from both task types (more memory)
     # Increased batch sizes for better training efficiency
     if segment_length == "4s" and is_cross_task_cv:
         batch_size = 16  # Increased from 8: Most memory intensive (eval uses 1.5x = 24)
     elif segment_length == "4s":
         batch_size = 256  # Increased from 128: 4x reduction from 1024 for 4s segments
+    elif segment_length == "2s":
+        batch_size = 512  # 2x reduction from 1024 for 2s segments
     elif is_cross_task_cv:
         batch_size = 128  # Increased from 64: Cross-task CV with reasonable batch size
     elif is_cv:
@@ -44,10 +51,28 @@ def generate_run_script(dataset_name, segment_length):
         ckpt_args = " \\\n    --save_ckpt \\\n    --auto_resume"
         eval_flag = ""
     
+    # Add warning for disabled experiments
+    warning = ""
+    if is_disabled:
+        if is_cv and not is_cross_task:
+            warning = """
+# ⚠️  WARNING: Cross-validation experiments are currently DISABLED
+# Cross-validation functionality has been commented out in labram_dataset.py
+# This script will fail until cross-validation is re-enabled for HDF5 format
+# See labram_dataset.py for details
+"""
+        elif is_cross_task:
+            warning = """
+# ⚠️  WARNING: Cross-task experiments are currently DISABLED
+# Cross-task functionality has been commented out in labram_dataset.py
+# This script will fail until cross-task is re-enabled for HDF5 format
+# See labram_dataset.py for details
+"""
+    
     # Script content
     script_content = f"""#!/bin/bash
 # LaBraM Fine-tuning Script for {dataset_name} ({segment_length} segments)
-# Generated automatically - do not edit manually
+# Generated automatically - do not edit manually{warning}
 
 # Set environment variables for single GPU training (no distributed)
 # Unset any existing distributed variables to avoid conflicts
@@ -65,9 +90,11 @@ NB_CLASSES={config['nb_classes']}
 # LaBraM fine-tuning hyperparameters (from paper)
 # Note: Batch size automatically adjusted based on segment length and dataset type:
 #   - 1024 for baseline experiments (1s) - increased from 512
+#   - 512 for baseline experiments (2s)
+#   - 256 for baseline experiments (4s) - increased from 128
 #   - 128 for cross-task CV (1s, eval uses 1.5x = 192) - increased from 64
-#   - 256 for 4s segments - increased from 128
 #   - 16 for cross-task CV with 4s segments (eval uses 1.5x = 24) - increased from 8
+# Note: Data is loaded from HDF5 format (processed_eeg_data_hdf5)
 EPOCHS={20 if is_cv else 50}
 BATCH_SIZE={batch_size}
 LEARNING_RATE={2e-4 if is_cross_task_cv else 5e-4}
@@ -176,8 +203,10 @@ def main():
     """Generate all run scripts."""
     
     print("Generating run scripts for all valid dataset names...")
+    print("Note: Cross-validation and cross-task experiments are currently disabled")
+    print("      They will be marked with warnings in the generated scripts")
     
-    segment_lengths = ["1s", "4s"]
+    segment_lengths = ["1s", "2s", "4s"]  # Support all segment lengths
     total_scripts = 0
     
     for dataset_name in VALID_DATASET_NAMES:
@@ -201,9 +230,12 @@ def main():
     print(f"\nGenerated {total_scripts} run scripts in the 'runs' directory")
     print("\nTo run an experiment:")
     print("  ./runs/run_gender_baseline_1s.sh")
+    print("  ./runs/run_gender_baseline_2s.sh")
     print("  ./runs/run_gender_baseline_4s.sh")
-    print("  ./runs/run_age_cv_age_stratified_1s.sh")
+    print("  ./runs/run_age_baseline_1s.sh")
     print("  etc.")
+    print("\n⚠️  Note: CV and cross-task scripts are disabled and will fail.")
+    print("   Only baseline experiments are currently supported with HDF5 format.")
 
 if __name__ == "__main__":
     main()
