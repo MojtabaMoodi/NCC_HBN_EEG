@@ -16,6 +16,7 @@ This script processes EEG data from the preprocessed_new directory structure:
 
 import numpy as np
 import pandas as pd
+import json
 import h5py
 import re
 import time
@@ -36,6 +37,10 @@ logger = logging.getLogger(__name__)
 SEGMENT_LENGTHS = ['1s', '2s', '4s']
 SPLIT_NAMES = ['train', 'val', 'test']
 TASK_TYPES = ['active', 'passive']
+
+# Maximum samples per file to prevent HDF5 B-tree performance degradation
+# For all segment lengths, we split into multiple files when needed
+MAX_SAMPLES_PER_FILE = 100000  # ~100K samples per file for optimal performance
 
 class EEGDataPreprocessor:
     """Class to handle EEG data preprocessing and organization."""
@@ -509,18 +514,22 @@ class EEGDataPreprocessor:
         else:
             raise ValueError(f"Invalid segment_length: {segment_length}. Must be '1s', '2s', or '4s'")
     
-    def _get_hdf5_file_path(self, split_name: str, segment_length: str) -> Path:
+    def _get_hdf5_file_path(self, split_name: str, segment_length: str, part_idx: Optional[int] = None) -> Path:
         """
         Get the HDF5 file path for a given split and segment length.
         
         Args:
             split_name: Name of the split ('train', 'val', 'test')
             segment_length: Length of segments ('1s', '2s', or '4s')
+            part_idx: Part index for multi-file splits (None for single file or first part)
             
         Returns:
             Path to the HDF5 file
         """
-        hdf5_filename = f"eeg_data_{split_name}_{segment_length}.h5"
+        if part_idx is not None:
+            hdf5_filename = f"eeg_data_{split_name}_{segment_length}_part{part_idx:02d}.h5"
+        else:
+            hdf5_filename = f"eeg_data_{split_name}_{segment_length}.h5"
         return self.output_dir / hdf5_filename
     
     def _initialize_hdf5_file(self, split_name: str, segment_length: str) -> None:
@@ -540,30 +549,707 @@ class EEGDataPreprocessor:
             f.attrs['num_participants'] = 0
             f.attrs['total_samples'] = 0
     
+    def _initialize_hdf5_file_part(self, split_name: str, segment_length: str, part_idx: int) -> None:
+        """
+        Initialize an empty HDF5 file part with the proper structure.
+        
+        Args:
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            part_idx: Part index for multi-file splits
+        """
+        hdf5_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
+        with h5py.File(hdf5_path, 'w') as f:
+            f.create_group('active')
+            f.create_group('passive')
+            f.attrs['split_name'] = split_name
+            f.attrs['segment_length'] = segment_length
+            f.attrs['part_idx'] = part_idx
+            f.attrs['num_participants'] = 0
+            f.attrs['total_samples'] = 0
+    
     def _update_participant_count(self, split_name: str, segment_length: str) -> None:
         """
-        Update the participant count in an HDF5 file by counting unique participants.
+        Update the participant count in HDF5 file(s) by counting unique participants.
+        For all segment lengths with multiple files, counts across all part files.
+        
+        Uses a two-pass approach:
+        1. First pass: Collect all unique participants across all part files
+        2. Second pass: Update all files with the final total count
         
         Args:
             split_name: Name of the split ('train', 'val', 'test')
             segment_length: Length of segments ('1s', '2s', or '4s')
         """
-        hdf5_path = self._get_hdf5_file_path(split_name, segment_length)
-        if not hdf5_path.exists():
+        # FIRST PASS: Collect all unique participants across all part files
+        participant_set = set()
+        part_files = []  # Track which files exist
+        part_idx = 0
+        
+        while True:
+            hdf5_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
+            if not hdf5_path.exists():
+                break
+            
+            part_files.append(hdf5_path)
+            
+            try:
+                with h5py.File(hdf5_path, 'r') as f:
+                    for group_name in TASK_TYPES:
+                        if group_name in f:
+                            for key in f[group_name].keys():
+                                if key.startswith('metadata_'):
+                                    metadata = f[group_name][key]
+                                    pid = metadata.attrs['participant_id']
+                                    if isinstance(pid, bytes):
+                                        pid = pid.decode()
+                                    participant_set.add(str(pid))
+            except Exception as e:
+                logger.error(f"Error reading participant data from {hdf5_path}: {e}")
+                raise RuntimeError(f"Failed to read participant data from {hdf5_path}") from e
+            
+            part_idx += 1
+        
+        if not part_files:
+            logger.warning(f"No HDF5 files found for {split_name}/{segment_length}, skipping participant count update")
             return
         
-        with h5py.File(hdf5_path, 'r+') as f:
-            participant_set = set()
-            for group_name in TASK_TYPES:
-                if group_name in f:
-                    for key in f[group_name].keys():
-                        if key.startswith('metadata_'):
-                            metadata = f[group_name][key]
-                            pid = metadata.attrs['participant_id']
-                            if isinstance(pid, bytes):
-                                pid = pid.decode()
-                            participant_set.add(str(pid))
-            f.attrs['num_participants'] = len(participant_set)
+        total_participants = len(participant_set)
+        
+        # SECOND PASS: Update all files with the final total count
+        for hdf5_path in part_files:
+            try:
+                with h5py.File(hdf5_path, 'r+') as f:
+                    f.attrs['num_participants'] = total_participants
+            except Exception as e:
+                logger.error(f"Error updating participant count in {hdf5_path}: {e}")
+                raise RuntimeError(f"Failed to update participant count in {hdf5_path}") from e
+        
+        logger.debug(f"Updated participant count for {split_name}/{segment_length}: {total_participants} unique participants across {len(part_files)} file(s)")
+    
+    def _get_current_hdf5_file_and_part(self, split_name: str, segment_length: str, 
+                                       current_sample_idx: int) -> Tuple[Path, int]:
+        """
+        Get the current HDF5 file path and part index based on sample count.
+        Rotates to next file when MAX_SAMPLES_PER_FILE is reached for all segment lengths.
+        
+        Args:
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            current_sample_idx: Current sample index across all files
+            
+        Returns:
+            Tuple of (file_path, part_idx)
+        """
+        # For all segment lengths, split into multiple files when needed
+        part_idx = current_sample_idx // MAX_SAMPLES_PER_FILE
+        file_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
+        
+        return file_path, part_idx
+    
+    def _get_current_global_sample_idx_for_task(self, split_name: str, segment_length: str, task_type: str) -> int:
+        """
+        Get the current global sample index for a specific task_type across all part files.
+        Counts samples in the specified task_type group.
+        
+        Args:
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            task_type: Task type ('active' or 'passive')
+            
+        Returns:
+            Total number of samples for this task_type across all part files
+        """
+        total_samples = 0
+        part_idx = 0
+        
+        while True:
+            file_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
+            if not file_path.exists():
+                break
+            
+            try:
+                with h5py.File(file_path, 'r') as f:
+                    if task_type not in f:
+                        # Task group doesn't exist in this file, we're done
+                        break
+                    
+                    task_group = f[task_type]
+                    # Count samples in this task group
+                    file_samples = sum(1 for key in task_group.keys() if key.startswith('sample_'))
+                    total_samples += file_samples
+                    
+                    # If file has less than MAX_SAMPLES_PER_FILE for this task, we're done
+                    if file_samples < MAX_SAMPLES_PER_FILE:
+                        break
+            except (OSError, BlockingIOError) as e:
+                # File access error - log and stop counting (file may be locked or corrupted)
+                # This is acceptable during initialization counting, but we log it explicitly
+                logger.warning(
+                    f"Error accessing {file_path} for sample count: {e}. "
+                    f"Stopping count at {total_samples} samples. "
+                    f"This may indicate a file locking issue or corrupted file. "
+                    f"Count may be incomplete."
+                )
+                break
+            except Exception as e:
+                # Unexpected error - log and re-raise (don't silently ignore)
+                logger.error(f"Unexpected error reading {file_path} for sample count: {e}")
+                raise RuntimeError(f"Failed to read sample count from {file_path}") from e
+            
+            part_idx += 1
+        
+        return total_samples
+    
+    def _get_current_total_sample_idx(self, split_name: str, segment_length: str) -> int:
+        """
+        Get the current total sample index across all task types for file rotation.
+        This counts samples from both 'active' and 'passive' task types.
+        
+        CRITICAL: This is used for file rotation to ensure MAX_SAMPLES_PER_FILE
+        is enforced across ALL task types, not per task type.
+        
+        Args:
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            
+        Returns:
+            Total number of samples across all task types for file rotation
+        """
+        total_samples = 0
+        part_idx = 0
+        
+        while True:
+            file_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
+            if not file_path.exists():
+                break
+            
+            try:
+                with h5py.File(file_path, 'r') as f:
+                    # Count samples from both task types
+                    file_total_samples = 0
+                    for task_type in TASK_TYPES:
+                        if task_type in f:
+                            task_group = f[task_type]
+                            task_samples = sum(1 for key in task_group.keys() if key.startswith('sample_'))
+                            file_total_samples += task_samples
+                    
+                    total_samples += file_total_samples
+                    
+                    # If file has less than MAX_SAMPLES_PER_FILE total, we're done
+                    if file_total_samples < MAX_SAMPLES_PER_FILE:
+                        break
+            except (OSError, BlockingIOError) as e:
+                # File access error - log and stop counting (file may be locked or corrupted)
+                logger.warning(
+                    f"Error accessing {file_path} for total sample count: {e}. "
+                    f"Stopping count at {total_samples} samples. "
+                    f"This may indicate a file locking issue or corrupted file. "
+                    f"Count may be incomplete."
+                )
+                break
+            except Exception as e:
+                # Unexpected error - log and re-raise (don't silently ignore)
+                logger.error(f"Unexpected error reading {file_path} for total sample count: {e}")
+                raise RuntimeError(f"Failed to read total sample count from {file_path}") from e
+            
+            part_idx += 1
+        
+        return total_samples
+    
+    def _save_samples_to_multiple_files(self, split_name: str, segment_length: str, task_type: str,
+                                        segments: List[np.ndarray], task_numbers: List[int],
+                                        split_indices: np.ndarray, participant_data: Dict[str, Any],
+                                        current_global_idx: int, current_total_idx: int) -> int:
+        """
+        Save samples to multiple HDF5 files for all segment lengths.
+        Rotates to next file when MAX_SAMPLES_PER_FILE is reached (based on total samples across all task types).
+        
+        Args:
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            task_type: Task type ('active' or 'passive')
+            segments: List of EEG segment arrays
+            task_numbers: List of task numbers
+            split_indices: Indices of segments to save
+            participant_data: Dictionary containing participant metadata
+            current_global_idx: Current global sample index for this task_type (for local indexing)
+            current_total_idx: Current total sample index across all task types (for file rotation)
+            
+        Returns:
+            Number of samples saved
+        """
+        
+        # Save each segment, rotating files as needed
+        for idx in split_indices:
+            # CRITICAL: Use total_idx for file rotation to ensure MAX_SAMPLES_PER_FILE
+            # is enforced across ALL task types, not per task type
+            file_path, part_idx = self._get_current_hdf5_file_and_part(
+                split_name, segment_length, current_total_idx
+            )
+            
+            # Initialize file if it doesn't exist
+            if not file_path.exists():
+                self._initialize_hdf5_file_part(split_name, segment_length, part_idx)
+            
+            with h5py.File(file_path, 'r+') as f:
+                # Ensure task group exists (should exist from initialization, but check to be safe)
+                if task_type not in f:
+                    f.create_group(task_type)
+                task_group = f[task_type]
+                
+                # Get local sample index within this file for this task type
+                # Use current_global_idx (per-task-type) for local indexing within the task group
+                local_sample_idx = current_global_idx % MAX_SAMPLES_PER_FILE
+                
+                # Save segment
+                dataset_name = f'sample_{local_sample_idx:06d}'
+                
+                # Check if dataset already exists (shouldn't happen in sequential processing)
+                # If it does exist, this indicates a serious logic error (duplicate sample indices)
+                if dataset_name in task_group:
+                    error_msg = (
+                        f"Dataset {dataset_name} already exists in {file_path}. "
+                        f"Participant: {participant_data['participant_id']}, "
+                        f"Task type: {task_type}, "
+                        f"Sample index (task): {current_global_idx}, "
+                        f"Total index: {current_total_idx}, "
+                        f"Local index: {local_sample_idx}. "
+                        f"This indicates a logic error in sample indexing - duplicate indices detected. "
+                        f"This should not happen in sequential processing."
+                    )
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                task_group.create_dataset(dataset_name, data=segments[idx], compression=None)
+                
+                # Store metadata
+                sample_group = task_group.create_group(f'metadata_{local_sample_idx:06d}')
+                sample_group.attrs['participant_id'] = participant_data['participant_id']
+                sample_group.attrs['task_type'] = task_type
+                sample_group.attrs['task_number'] = task_numbers[idx]
+            
+            # Increment both counters
+            current_global_idx += 1  # Per-task-type counter for local indexing
+            current_total_idx += 1    # Total counter for file rotation
+        
+        # Return number of samples saved
+        return len(split_indices)
+    
+    def _split_and_save_participant_samples(self, segments: List[np.ndarray], task_numbers: List[int],
+                                            participant_data: Dict[str, Any], task_type: str,
+                                            segment_length: str, train_ratio: float, val_ratio: float,
+                                            test_ratio: float, random_seed: int,
+                                            sample_counters: Dict[str, int], 
+                                            total_counters: Dict[str, int]) -> Tuple[int, int, int]:
+        """
+        Split a participant's samples and save to train/val/test HDF5 files.
+        
+        Args:
+            segments: List of EEG segment arrays for this participant and task type
+            task_numbers: List of task numbers corresponding to segments
+            participant_data: Dictionary containing participant metadata
+            task_type: Task type ('active' or 'passive')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            train_ratio: Ratio for training split
+            val_ratio: Ratio for validation split
+            test_ratio: Ratio for test split
+            random_seed: Random seed for shuffling
+            sample_counters: Dictionary tracking per-task-type sample counts (for local indexing)
+            total_counters: Dictionary tracking total sample counts per split/segment_length (for file rotation)
+            
+        Returns:
+            Tuple of (train_samples_saved, val_samples_saved, test_samples_saved)
+        """
+        if len(segments) == 0:
+            return (0, 0, 0)
+        
+        # Verify segments and task_numbers have same length
+        if len(segments) != len(task_numbers):
+            raise ValueError(
+                f"Data inconsistency for participant {participant_data['participant_id']}, "
+                f"task_type {task_type}, segment_length {segment_length}: "
+                f"segments has {len(segments)} items but task_numbers has {len(task_numbers)} items."
+            )
+        
+        # Create indices and shuffle
+        num_samples = len(segments)
+        indices = np.arange(num_samples)
+        rng = np.random.RandomState(random_seed)
+        rng.shuffle(indices)
+        
+        # Calculate split sizes
+        train_size = int(num_samples * train_ratio)
+        val_size = int(num_samples * val_ratio)
+        # test_size = remaining samples
+        
+        # Split indices
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:train_size + val_size]
+        test_indices = indices[train_size + val_size:]
+        
+        # Save to respective HDF5 files
+        # For all segment lengths, we need to track sample counts across multiple files
+        # Track how many samples were saved to each split
+        samples_saved = {}
+        for split_name, split_indices in [('train', train_indices), ('val', val_indices), ('test', test_indices)]:
+            # Get current counter for this split/segment_length/task_type (for local indexing)
+            counter_key = f"{split_name}_{segment_length}_{task_type}"
+            if counter_key not in sample_counters:
+                raise KeyError(
+                    f"Missing counter key '{counter_key}' in sample_counters. "
+                    f"This indicates a logic error in counter initialization."
+                )
+            current_global_idx = sample_counters[counter_key]
+            
+            # Get current total counter for file rotation (across all task types)
+            total_key = f"{split_name}_{segment_length}_total"
+            if total_key not in total_counters:
+                raise KeyError(
+                    f"Missing total counter key '{total_key}' in total_counters. "
+                    f"This indicates a logic error in counter initialization."
+                )
+            current_total_idx = total_counters[total_key]
+            
+            # For all segment lengths, handle file rotation
+            num_saved = self._save_samples_to_multiple_files(
+                split_name=split_name,
+                segment_length=segment_length,
+                task_type=task_type,
+                segments=segments,
+                task_numbers=task_numbers,
+                split_indices=split_indices,
+                participant_data=participant_data,
+                current_global_idx=current_global_idx,
+                current_total_idx=current_total_idx
+            )
+            
+            # Update both counters with number of samples saved
+            sample_counters[counter_key] = current_global_idx + num_saved
+            total_counters[total_key] = current_total_idx + num_saved
+            samples_saved[split_name] = num_saved
+        
+        # Verify all splits are present (should always be the case, but check for logic errors)
+        if 'train' not in samples_saved or 'val' not in samples_saved or 'test' not in samples_saved:
+            raise RuntimeError(
+                f"Missing split in samples_saved: {samples_saved}. "
+                f"This indicates a logic error - all splits should always be present."
+            )
+        
+        return samples_saved['train'], samples_saved['val'], samples_saved['test']
+    
+    def _save_participant_id_mapping(self, participant_id_to_class_idx: Dict[str, int]) -> None:
+        """
+        Save participant_id to class_idx mapping to a JSON file.
+        
+        Args:
+            participant_id_to_class_idx: Dictionary mapping participant_id to class index
+        """
+        # Sort by class index for consistency
+        sorted_mapping = dict(sorted(participant_id_to_class_idx.items(), key=lambda x: x[1]))
+        
+        mapping_file = self.output_dir / 'participant_id_to_class_idx.json'
+        with open(mapping_file, 'w') as f:
+            json.dump(sorted_mapping, f, indent=2)
+        
+        logger.info(f"Saved participant_id to class_idx mapping to: {mapping_file}")
+        logger.info(f"Total number of user classes: {len(sorted_mapping)}")
+    
+    def process_participant_user_identification(self, participant_dir: Path) -> Optional[Dict[str, Any]]:
+        """
+        Process all EEG files for a single participant for user identification.
+        This version does not require demographics - uses default values if missing.
+        
+        Args:
+            participant_dir: Path to participant directory
+            
+        Returns:
+            Dictionary containing processed participant data, or None if no valid data found
+        """
+        participant_id = participant_dir.name
+        
+        # Try to load demographics, but don't require it for user identification
+        demographics = self.load_demographics(participant_dir)
+        
+        # Use explicit default values if demographics missing
+        # These values are explicitly chosen to indicate "unknown" and are NOT silently assumed
+        if demographics is None:
+            logger.debug(f"No demographics found for participant {participant_id}, using explicit default values (gender=-1, age=-1.0)")
+            demographics = {
+                'gender': -1,  # Explicitly set to -1 to indicate "unknown" (not a valid gender value)
+                'age': -1.0,   # Explicitly set to -1.0 to indicate "unknown" (not a valid age value)
+            }
+        
+        # Initialize data structures using nested dictionaries
+        # Structure: {task_type: {segment_length: {'segments': [], 'task_numbers': []}}}
+        data = {
+            'active': {1: {'segments': [], 'task_numbers': []},
+                      2: {'segments': [], 'task_numbers': []},
+                      4: {'segments': [], 'task_numbers': []}},
+            'passive': {1: {'segments': [], 'task_numbers': []},
+                       2: {'segments': [], 'task_numbers': []},
+                       4: {'segments': [], 'task_numbers': []}}
+        }
+        
+        # Process all .npy files
+        npy_files = list(participant_dir.glob("*.npy"))
+        
+        if not npy_files:
+            logger.warning(f"No .npy files found for participant {participant_id}")
+            return None
+
+        for file_path in npy_files:
+            filename = file_path.stem  # e.g., "ccd_data_trial_0", "ccd_1_data_trial_0", "sus_data_trial_0", "sus_2_data_trial_0"
+            
+            # Determine task type - check if starts with "ccd" (with or without number) or "sus" (with or without number)
+            if filename.startswith("ccd"):
+                task_type = "active"
+            elif filename.startswith("sus"):
+                task_type = "passive"
+            else:
+                logger.warning(f"Unknown file type: {filename} for participant {participant_id}. Skipping.")
+                continue
+            
+            # Process EEG file to create segments for all lengths (1s, 2s, 4s)
+            segment_lengths = [1, 2, 4]
+            
+            for seg_len in segment_lengths:
+                try:
+                    segments, task_number = self.process_eeg_file_to_segments(file_path, segment_length=seg_len)
+                    if segments:
+                        data[task_type][seg_len]['segments'].extend(segments)
+                        # Store task number for each segment (same task number for all segments from this file)
+                        data[task_type][seg_len]['task_numbers'].extend([task_number] * len(segments))
+                except Exception as e:
+                    # Log error but continue processing other segment lengths for this file
+                    # This is acceptable since we want to process as much data as possible
+                    logger.warning(
+                        f"Error processing file {file_path.name} for participant {participant_id}, "
+                        f"segment_length {seg_len}s: {e}. Continuing with other segment lengths."
+                    )
+                    import traceback
+                    logger.debug(f"Traceback: {traceback.format_exc()}")
+                    continue
+        
+        # Check if we have any data
+        has_data = any(
+            len(data[task_type][seg_len]['segments']) > 0
+            for task_type in ['active', 'passive']
+            for seg_len in [1, 2, 4]
+        )
+        
+        if not has_data:
+            logger.warning(f"No valid EEG segments found for participant {participant_id}")
+            return None
+        
+        return {
+            'participant_id': participant_id,
+            'gender': demographics['gender'],
+            'age': demographics['age'],
+            'passive_eeg_1s': data['passive'][1]['segments'],
+            'active_eeg_1s': data['active'][1]['segments'],
+            'passive_eeg_2s': data['passive'][2]['segments'],
+            'active_eeg_2s': data['active'][2]['segments'],
+            'passive_eeg_4s': data['passive'][4]['segments'],
+            'active_eeg_4s': data['active'][4]['segments'],
+            'passive_task_numbers_1s': data['passive'][1]['task_numbers'],
+            'active_task_numbers_1s': data['active'][1]['task_numbers'],
+            'passive_task_numbers_2s': data['passive'][2]['task_numbers'],
+            'active_task_numbers_2s': data['active'][2]['task_numbers'],
+            'passive_task_numbers_4s': data['passive'][4]['task_numbers'],
+            'active_task_numbers_4s': data['active'][4]['task_numbers'],
+            'demographics': demographics
+        }
+    
+    def process_all_participants_user_identification(self, train_ratio: float = 0.7, val_ratio: float = 0.15, 
+                                                      test_ratio: float = 0.15, 
+                                                      random_seed: int = 42) -> None:
+        """
+        Process all participants for user identification task.
+        
+        CRITICAL: This method splits each participant's data at the SAMPLE level (not participant level):
+        - 70% of each participant's samples -> train
+        - 15% of each participant's samples -> val
+        - 15% of each participant's samples -> test
+        
+        This ensures ALL participants appear in ALL splits, which is correct for closed-set user identification:
+        - Model learns features for all 3145 users during training
+        - Validation/test check if model can identify these known users on new samples
+        - This is different from open-set identification where test users are completely unseen
+        
+        Args:
+            train_ratio: Ratio of each participant's samples for training (default: 0.7)
+            val_ratio: Ratio of each participant's samples for validation (default: 0.15)
+            test_ratio: Ratio of each participant's samples for testing (default: 0.15)
+            random_seed: Random seed for reproducible splits
+        """
+        # Validate ratios
+        if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
+            raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
+        
+        # Set random seed
+        np.random.seed(random_seed)
+        
+        # Get all release directories
+        release_dirs = [d for d in self.data_root.iterdir() if d.is_dir() and d.name.startswith("cmi_bids_R")]
+        release_dirs.sort()  # Process in order
+        
+        logger.info(f"Found {len(release_dirs)} release directories")
+        
+        # Collect all participant directories
+        all_participant_dirs = []
+        for release_dir in release_dirs:
+            participant_dirs = [d for d in release_dir.iterdir() if d.is_dir() and d.name.startswith("sub-")]
+            all_participant_dirs.extend(participant_dirs)
+        
+        total_participants = len(all_participant_dirs)
+        logger.info(f"Found {total_participants} total participants")
+        
+        # For user identification, we process ALL participants regardless of demographics
+        logger.info("Processing all participants for user identification")
+        logger.info(f"Total participants to process: {total_participants}")
+        logger.info("CRITICAL: All participants will appear in ALL splits (train/val/test)")
+        logger.info("  This allows model to learn features for all users during training")
+        
+        if total_participants == 0:
+            raise ValueError("No participants found!")
+        
+        # Initialize HDF5 files for train/val/test splits
+        # For all segment lengths, we'll create multiple files to improve performance
+        logger.info("Initializing HDF5 files...")
+        for segment_length in SEGMENT_LENGTHS:
+            for split_name in SPLIT_NAMES:
+                # For all segment lengths, initialize first part file
+                self._initialize_hdf5_file_part(split_name, segment_length, part_idx=0)
+        
+        # Sequential processing (parallel processing removed due to HDF5 file locking issues)
+        logger.info("Processing participants sequentially...")
+        processed_count = 0
+        participant_id_to_class_idx = {}
+        next_class_idx = 0
+        
+        # Track current sample indices per split/segment_length/task_type to avoid expensive recounting
+        # This is much faster than counting all samples from scratch for each participant
+        # CRITICAL: We need both per-task-type counters (for local indexing) and total counters (for file rotation)
+        sample_counters = {}
+        total_counters = {}  # Track total samples per split/segment_length across all task types
+        
+        for segment_length in SEGMENT_LENGTHS:
+            for split_name in SPLIT_NAMES:
+                # Initialize total counter for file rotation (across all task types)
+                total_key = f"{split_name}_{segment_length}_total"
+                total_counters[total_key] = self._get_current_total_sample_idx(
+                    split_name, segment_length
+                )
+                
+                # Initialize per-task-type counters for local indexing
+                for task_type in TASK_TYPES:
+                    key = f"{split_name}_{segment_length}_{task_type}"
+                    # Initialize by counting existing samples (only once at start)
+                    sample_counters[key] = self._get_current_global_sample_idx_for_task(
+                        split_name, segment_length, task_type
+                    )
+        
+        for participant_dir in tqdm(all_participant_dirs, desc="Processing participants", unit="participant"):
+            participant_id = participant_dir.name
+            
+            try:
+                # Process participant for user identification
+                participant_data = self.process_participant_user_identification(participant_dir)
+                if participant_data is None:
+                    tqdm.write(f"Warning: Participant {participant_id} returned None. Skipping.")
+                    continue
+                
+                # Assign class index to this participant (sorted by participant_id for consistency)
+                if participant_id not in participant_id_to_class_idx:
+                    participant_id_to_class_idx[participant_id] = next_class_idx
+                    next_class_idx += 1
+                else:
+                    raise ValueError(f"Participant {participant_id} already has a class index. This should not happen.")
+                
+                # Split each participant's samples across train/val/test
+                # Process each segment length separately
+                for segment_length in SEGMENT_LENGTHS:
+                    active_key, passive_key, active_task_key, passive_task_key = self._get_segment_keys(segment_length)
+                    
+                    # Split active task samples
+                    # process_participant_user_identification always returns these keys, so raise error if missing
+                    if active_key not in participant_data:
+                        raise KeyError(
+                            f"Missing key '{active_key}' in participant_data for participant {participant_id}. "
+                            f"This indicates a bug in process_participant_user_identification."
+                        )
+                    if active_task_key not in participant_data:
+                        raise KeyError(
+                            f"Missing key '{active_task_key}' in participant_data for participant {participant_id}. "
+                            f"This indicates a bug in process_participant_user_identification."
+                        )
+                    active_segments = participant_data[active_key]
+                    active_task_numbers = participant_data[active_task_key]
+                    if active_segments:
+                        self._split_and_save_participant_samples(
+                            segments=active_segments,
+                            task_numbers=active_task_numbers,
+                            participant_data=participant_data,
+                            task_type='active',
+                            segment_length=segment_length,
+                            train_ratio=train_ratio,
+                            val_ratio=val_ratio,
+                            test_ratio=test_ratio,
+                            random_seed=random_seed,
+                            sample_counters=sample_counters,
+                            total_counters=total_counters
+                        )
+                    
+                    # Split passive task samples
+                    # process_participant_user_identification always returns these keys, so raise error if missing
+                    if passive_key not in participant_data:
+                        raise KeyError(
+                            f"Missing key '{passive_key}' in participant_data for participant {participant_id}. "
+                            f"This indicates a bug in process_participant_user_identification."
+                        )
+                    if passive_task_key not in participant_data:
+                        raise KeyError(
+                            f"Missing key '{passive_task_key}' in participant_data for participant {participant_id}. "
+                            f"This indicates a bug in process_participant_user_identification."
+                        )
+                    passive_segments = participant_data[passive_key]
+                    passive_task_numbers = participant_data[passive_task_key]
+                    if passive_segments:
+                        self._split_and_save_participant_samples(
+                            segments=passive_segments,
+                            task_numbers=passive_task_numbers,
+                            participant_data=participant_data,
+                            task_type='passive',
+                            segment_length=segment_length,
+                            train_ratio=train_ratio,
+                            val_ratio=val_ratio,
+                            test_ratio=test_ratio,
+                            random_seed=random_seed,
+                            sample_counters=sample_counters,
+                            total_counters=total_counters
+                        )
+                
+                processed_count += 1
+                
+            except Exception as e:
+                tqdm.write(f"Error processing participant {participant_id}: {e}")
+                import traceback
+                tqdm.write(traceback.format_exc())
+                continue
+        
+        # Save participant_id to class_idx mapping
+        self._save_participant_id_mapping(participant_id_to_class_idx)
+        
+        # Update participant counts in HDF5 files
+        logger.info("Updating participant counts in HDF5 files...")
+        for segment_length in SEGMENT_LENGTHS:
+            for split_name in SPLIT_NAMES:
+                self._update_participant_count(split_name, segment_length)
+        
+        logger.info(f"Processing completed! Processed {processed_count} participants.")
+        logger.info(f"Total number of user classes: {len(participant_id_to_class_idx)}")
+        logger.info("All splits saved successfully!")
     
     def _save_segments_to_hdf5_group(self, group: h5py.Group, eeg_list: List[np.ndarray], 
                                      task_numbers: List[int], participant_data: Dict[str, Any],
@@ -646,15 +1332,29 @@ class EEGDataPreprocessor:
             passive_group = f['passive']
             
             # Get current sample index from total_samples attribute
+            # Default to 0 if attribute doesn't exist (newly created file)
+            if 'total_samples' not in f.attrs:
+                logger.debug(f"total_samples attribute not found in {hdf5_path}, defaulting to 0 (new file)")
             sample_idx = f.attrs.get('total_samples', 0)
             
             # Process active and passive tasks
+            # process_participant always returns these keys, so raise error if missing
             for task_type, group, eeg_key, task_key in [
                 ('active', active_group, active_key, active_task_key),
                 ('passive', passive_group, passive_key, passive_task_key)
             ]:
-                eeg_list = participant_data.get(eeg_key, [])
-                task_numbers = participant_data.get(task_key, [])
+                if eeg_key not in participant_data:
+                    raise KeyError(
+                        f"Missing key '{eeg_key}' in participant_data. "
+                        f"This indicates a bug in process_participant."
+                    )
+                if task_key not in participant_data:
+                    raise KeyError(
+                        f"Missing key '{task_key}' in participant_data. "
+                        f"This indicates a bug in process_participant."
+                    )
+                eeg_list = participant_data[eeg_key]
+                task_numbers = participant_data[task_key]
                 
                 sample_idx = self._save_segments_to_hdf5_group(
                     group, eeg_list, task_numbers, participant_data,
