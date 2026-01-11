@@ -21,16 +21,16 @@ from evaluator import EEGEvaluator, EvaluationResults
 from config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
 from utils import safe_json_dump, convert_numpy_types
 
-# Import data processing modules
-sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
-from eeg_dataset import EEGDataset, EEGDataLoader
-from target_transforms import (
+from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
+from data_processing.target_transforms import (
     gender_classification_transform, 
     age_classification_transform, 
     combined_gender_age_classification_transform,
     create_age_regression_transform_from_hdf5,
-    AgeRegressionTransform
+    AgeRegressionTransform,
+    create_user_identification_transform_from_hdf5
 )
+from data_processing.multi_file_dataset import MultiFileEEGDataset
 
 
 @dataclass
@@ -296,12 +296,23 @@ class Experiment:
         )
         
         # Create trainer
-        num_gpus = self.system_config.num_gpus if self.system_config else 2
+        # Use num_gpus from system_config, default to 1 if not specified
+        num_gpus = self.system_config.num_gpus if self.system_config else 1
+        device_preference = self.system_config.device if self.system_config else 'auto'
+        
         # Pass age range to trainer for displaying MAE in years (for regression tasks)
         age_min = getattr(self, '_age_min', None)
         age_max = getattr(self, '_age_max', None)
-        self.trainer = EEGTrainer(self.model, self.config.training_config, self.config.name, 
-                                 num_gpus=num_gpus, age_min=age_min, age_max=age_max)
+        
+        self.trainer = EEGTrainer(
+            self.model, 
+            self.config.training_config, 
+            self.config.name, 
+            num_gpus=num_gpus,
+            age_min=age_min, 
+            age_max=age_max,
+            device_preference=device_preference
+        )
         
         # Create evaluator
         # Determine prediction_type from training config
@@ -310,9 +321,18 @@ class Experiment:
         # Pass age min/max to evaluator if available (for regression)
         age_min = getattr(self, '_age_min', None)
         age_max = getattr(self, '_age_max', None)
-        self.evaluator = EEGEvaluator(self.model, self.config.target_type, 
-                                     prediction_type=prediction_type,
-                                     age_min=age_min, age_max=age_max)
+        
+        # Get device preference from system config
+        device_preference = self.system_config.device if self.system_config else 'auto'
+        
+        self.evaluator = EEGEvaluator(
+            self.model, 
+            self.config.target_type, 
+            prediction_type=prediction_type,
+            age_min=age_min, 
+            age_max=age_max,
+            device_preference=device_preference
+        )
         
         print(f"✅ Experiment setup complete")
     
@@ -327,6 +347,7 @@ class Experiment:
         gender_transform = None
         age_transform = None
         combined_transform = None
+        user_identification_transform = None
         
         if target_type == 'gender':
             gender_transform = gender_classification_transform
@@ -334,21 +355,30 @@ class Experiment:
             # Check if this is a regression task
             prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
             if prediction_type == 'regression':
-                # Get train file path to compute age range
+                # Get train file path(s) to compute age range
                 # IMPORTANT: Only use training data to compute min/max to avoid data leakage
                 # The same min/max will be used for normalizing train/val/test data
                 hdf5_dir_path = Path(data_config.hdf5_dir)
                 segment_length_str = f"{data_config.segment_length // 200}s"
-                train_file, _, _ = EEGDataLoader._get_hdf5_file_paths(hdf5_dir_path, segment_length_str)
+                train_files, _, _ = EEGDataLoader._get_hdf5_file_paths(hdf5_dir_path, segment_length_str)
                 
-                # Create transform with dataset-specific min/max from TRAINING data only
-                age_transform, age_min, age_max = create_age_regression_transform_from_hdf5(str(train_file))
+                # For 1s segments, train_files is a list - pass ALL files to compute age range
+                # across the entire training dataset. For 2s/4s, it's a single file.
+                train_file_or_files = train_files if isinstance(train_files, (list, tuple)) else [train_files]
+                
+                # Create transform with dataset-specific min/max from ALL TRAINING data
+                # This ensures we get the correct age range across all files for 1s segments
+                age_transform, age_min, age_max = create_age_regression_transform_from_hdf5(
+                    [str(f) for f in train_file_or_files]
+                )
                 
                 # Store age range for evaluator to use (same values for train/val/test)
                 self._age_min = age_min
                 self._age_max = age_max
+                num_files = len(train_file_or_files)
+                file_str = f"{num_files} file(s)" if num_files > 1 else "file"
                 print(f"📊 Using training data age range for regression normalization: min={age_min:.2f}, max={age_max:.2f} years")
-                print(f"   (This range will be used for all splits to avoid data leakage)")
+                print(f"   (Computed from {file_str}, used for all splits to avoid data leakage)")
             else:
                 age_transform = age_classification_transform
         elif target_type == 'combined':
@@ -358,6 +388,16 @@ class Experiment:
             gender_transform = gender_classification_transform
             age_transform = age_classification_transform
             combined_transform = None
+        elif target_type == 'user_identification':
+            # Create user identification transform from HDF5 directory
+            # This will load the participant_id_to_class_idx.json mapping
+            hdf5_dir_path = Path(data_config.hdf5_dir)
+            user_identification_transform, num_classes = create_user_identification_transform_from_hdf5(str(hdf5_dir_path))
+            
+            # Update model config with correct number of classes
+            self.config.model_config.num_classes = num_classes
+            print(f"📊 User identification: {num_classes} user classes detected")
+            print(f"   Model will be configured with num_classes={num_classes}")
         
         # Handle different experiment types based on data config
         # Note: Cross-validation and cross-task experiments are commented out
@@ -441,6 +481,7 @@ class Experiment:
                 gender_transform=gender_transform,
                 age_transform=age_transform,
                 combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
                 shuffle_train=True,
                 random_seed=data_config.random_seed
             )
@@ -692,6 +733,7 @@ class Experiment:
         gender_transform = None
         age_transform = None
         combined_transform = None
+        user_identification_transform = None
         
         if target_type == 'gender':
             gender_transform = gender_classification_transform
@@ -717,32 +759,65 @@ class Experiment:
         elif target_type == 'multi_output':
             gender_transform = gender_classification_transform
             age_transform = age_classification_transform
+        elif target_type == 'user_identification':
+            # Load user identification transform for task-type-specific evaluation
+            hdf5_dir_path = Path(data_config.hdf5_dir)
+            user_identification_transform, _ = create_user_identification_transform_from_hdf5(str(hdf5_dir_path))
         
-        # Get test file path
+        # Get test file path(s) - may be single file or list of files for 1s segments
         hdf5_dir_path = Path(data_config.hdf5_dir)
-        train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+        train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
             hdf5_dir_path, self.segment_length_str
         )
         
         # Create datasets for each task type
-        active_dataset = EEGDataset(
-            hdf5_file=str(test_file),
-            task_type="active",
-            target_type=target_type,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            shuffle=False
-        )
-        passive_dataset = EEGDataset(
-            hdf5_file=str(test_file),
-            task_type="passive",
-            target_type=target_type,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            shuffle=False
-        )
+        # Handle both single file and multiple files (for 1s segments)
+        if isinstance(test_files, (list, tuple)):
+            # Multiple files - use MultiFileEEGDataset
+            test_file_paths = [str(f) for f in test_files]
+            
+            active_dataset = MultiFileEEGDataset(
+                hdf5_files=test_file_paths,
+                task_type="active",
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                shuffle=False
+            )
+            passive_dataset = MultiFileEEGDataset(
+                hdf5_files=test_file_paths,
+                task_type="passive",
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                shuffle=False
+            )
+        else:
+            # Single file
+            active_dataset = EEGDataset(
+                hdf5_file=str(test_files),
+                task_type="active",
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                shuffle=False
+            )
+            passive_dataset = EEGDataset(
+                hdf5_file=str(test_files),
+                task_type="passive",
+                target_type=target_type,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                shuffle=False
+            )
         
         # Create loaders
         active_loader = EEGDataLoader.create_dataloader(

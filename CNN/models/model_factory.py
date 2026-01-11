@@ -5,7 +5,7 @@ Provides a centralized way to create and configure models.
 
 from typing import Dict, Any, Type
 from .base_model import BaseEEGCNN
-from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN, EEGAgeRegressionCNN
+from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN, EEGAgeRegressionCNN, EEGUserIdentificationCNN
 
 # Import ResNet models
 # Use absolute import from CNN directory
@@ -39,6 +39,7 @@ class ModelFactory:
         'age_regression_cnn': EEGAgeRegressionCNN,  # Age regression (1 output)
         'combined_cnn': CombinedCNN, # Combined age+gender classification (6 classes)
         'multi_output_cnn': MultiOutputCNN, # Multi-output model (2 heads: gender + age)
+        'user_identification_cnn': EEGUserIdentificationCNN,  # User identification (N classes = number of participants)
     }
     
     @classmethod

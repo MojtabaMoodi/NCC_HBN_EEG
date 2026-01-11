@@ -24,6 +24,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
 from utils import safe_json_dump, convert_numpy_types
+from gpu_utils import get_underlying_model as gpu_get_underlying_model, get_device
 
 class EvaluationResults:
     """Container for evaluation results with comprehensive metrics."""
@@ -84,14 +85,33 @@ class EEGEvaluator:
     
     def __init__(self, model: BaseEEGCNN, target_type: str, 
                  class_names: Optional[List[str]] = None, prediction_type: str = 'classification',
-                 age_min: Optional[float] = None, age_max: Optional[float] = None):
+                 age_min: Optional[float] = None, age_max: Optional[float] = None,
+                 device_preference: str = 'auto'):
+        """
+        Initialize evaluator.
+        
+        Args:
+            model: Model to evaluate (may be wrapped with DataParallel)
+            target_type: Type of target ('gender', 'age', 'combined', 'multi_output')
+            class_names: Optional list of class names
+            prediction_type: 'classification' or 'regression'
+            age_min: Minimum age for regression tasks (required for age regression)
+            age_max: Maximum age for regression tasks (required for age regression)
+            device_preference: Device preference ('auto', 'cuda', 'cpu')
+        
+        Raises:
+            ValueError: If age_min/age_max are missing for regression tasks
+            RuntimeError: If CUDA is requested but not available
+        """
         self.model = model
         self.target_type = target_type
         self.prediction_type = prediction_type  # 'classification' or 'regression'
         self.class_names = class_names or self._get_default_class_names()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Move model to device
+        # Setup device (explicit, no fallbacks)
+        self.device = get_device(device_preference)
+        
+        # Move model to device (handles DataParallel models correctly)
         self.model.to(self.device)
         self.model.eval()
         
@@ -110,24 +130,7 @@ class EEGEvaluator:
     
     def _get_underlying_model(self):
         """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
-        model = self.model
-        
-        # Recursively unwrap until we get to the base model
-        while True:
-            # Unwrap torch.compile wrapper (has _orig_mod attribute)
-            if hasattr(model, '_orig_mod'):
-                model = model._orig_mod
-                continue
-            
-            # Unwrap DataParallel wrapper
-            if isinstance(model, torch.nn.DataParallel):
-                model = model.module
-                continue
-            
-            # No more wrappers to unwrap
-            break
-        
-        return model
+        return gpu_get_underlying_model(self.model)
     
     def _get_default_class_names(self) -> List[str]:
         """Get default class names based on target type."""
@@ -135,6 +138,12 @@ class EEGEvaluator:
             return ['Female', 'Male']
         elif self.target_type == 'age':
             return ['<8.5 years', '8.5-12.5 years', '>12.5 years']
+        elif self.target_type == 'user_identification':
+            # For user identification, class names are participant IDs
+            # We'll use generic class names since we don't have access to the mapping here
+            # The actual participant IDs can be retrieved from the mapping file if needed
+            underlying_model = self._get_underlying_model()
+            return [f'User {i}' for i in range(underlying_model.num_classes)]
         else:
             underlying_model = self._get_underlying_model()
             return [f'Class {i}' for i in range(underlying_model.num_classes)]
@@ -198,7 +207,31 @@ class EEGEvaluator:
                     combined_classes = gender_int * 3 + age_int
                     labels = combined_classes
                 else:
+                    # Get labels from batch - validate key exists
+                    if self.target_type not in batch:
+                        raise KeyError(
+                            f"Target type '{self.target_type}' not found in batch during evaluation. "
+                            f"Available keys: {list(batch.keys())}. "
+                            f"This indicates a data loading issue."
+                        )
                     labels = batch[self.target_type].to(self.device)
+                    
+                    # Validate labels for classification tasks
+                    if self.prediction_type == 'classification':
+                        # Ensure labels are long integers for classification
+                        if labels.dtype != torch.long:
+                            labels = labels.long()
+                        
+                        # Validate label range for classification tasks
+                        num_classes = self._get_underlying_model().num_classes
+                        if labels.max() >= num_classes or labels.min() < 0:
+                            invalid_labels = labels[(labels >= num_classes) | (labels < 0)]
+                            raise ValueError(
+                                f"Invalid labels detected during evaluation: {invalid_labels.cpu().numpy()}. "
+                                f"Labels must be in range [0, {num_classes-1}], but found values outside this range. "
+                                f"This indicates a data inconsistency issue. "
+                                f"Check that the transform is correctly mapping participant IDs to class indices."
+                            )
                 
                 outputs = self.model(inputs)
                 
@@ -371,15 +404,36 @@ class EEGEvaluator:
             from eeg_dataset import EEGDataset, EEGDataLoader
             from pathlib import Path
             
-            # Get the test file path
+            # Get the test file path(s) - may be single file or list for 1s segments
             hdf5_dir_path = Path("processed_eeg_data_hdf5")
-            train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+            train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
                 hdf5_dir_path, segment_length="1s"
             )
             
             # Create datasets for each task type
-            active_dataset = EEGDataset(hdf5_file=str(test_file), task_type="active")
-            passive_dataset = EEGDataset(hdf5_file=str(test_file), task_type="passive")
+            # Use _create_dataset_from_hdf5 which handles both single files and lists
+            active_dataset = EEGDataLoader._create_dataset_from_hdf5(
+                hdf5_file_or_files=test_files,
+                task_type="active",
+                target_type="gender",  # Example target type
+                transform=None,
+                gender_transform=None,
+                age_transform=None,
+                combined_transform=None,
+                user_identification_transform=None,
+                shuffle=False
+            )
+            passive_dataset = EEGDataLoader._create_dataset_from_hdf5(
+                hdf5_file_or_files=test_files,
+                task_type="passive",
+                target_type="gender",  # Example target type
+                transform=None,
+                gender_transform=None,
+                age_transform=None,
+                combined_transform=None,
+                user_identification_transform=None,
+                shuffle=False
+            )
             
             # Create loaders
             active_loader = EEGDataLoader.create_dataloader(active_dataset, batch_size=32)

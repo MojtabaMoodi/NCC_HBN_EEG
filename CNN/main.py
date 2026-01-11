@@ -7,6 +7,7 @@ import argparse
 from config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
 from experiment import run_experiments
 from utils import create_data_config_for_segment_length
+from gpu_utils import detect_available_gpus
 
 
 def create_all_experiments_for_segment_length(segment_length: str, epochs: int = 50, 
@@ -314,7 +315,8 @@ def main():
     parser.add_argument('--batch_size', type=int, default=None, 
                        help='Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--num_gpus', type=int, default=2, help='Number of GPUs to use for DataParallel (default: 2)')
+    parser.add_argument('--num_gpus', type=int, default=None, 
+                       help='Number of GPUs to use for DataParallel (default: auto-detect, uses 4 if available, else 1)')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
                        help='Directory to save results')
     parser.add_argument('--reports_dir', type=str, default='reports', 
@@ -322,16 +324,18 @@ def main():
     
     args = parser.parse_args()
     
-    # Auto-select fewer GPUs for 4s mode to reduce memory usage
-    actual_num_gpus = args.num_gpus
-    if args.mode == '4s' and args.num_gpus == 2:
-        actual_num_gpus = 1  # Use single GPU for 4s to reduce memory pressure
+    # Determine number of GPUs to use
+    if args.num_gpus is None:
+        actual_num_gpus = detect_available_gpus()
+    else:
+        actual_num_gpus = args.num_gpus
     
     # Create system configuration
     system_config = SystemConfig(
         results_dir=args.results_dir,
         reports_dir=args.reports_dir,
-        num_gpus=actual_num_gpus
+        num_gpus=actual_num_gpus,
+        device='auto'
     )
     
     # Determine actual batch size (auto-select if None)
