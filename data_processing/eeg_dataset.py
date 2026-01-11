@@ -24,8 +24,15 @@ from target_transforms import (
     gender_classification_transform,
     age_classification_transform,
     age_regression_transform,
-    combined_gender_age_classification_transform
+    combined_gender_age_classification_transform,
+    UserIdentificationTransform
 )
+
+# Import MultiFileEEGDataset for 1s segments
+try:
+    from multi_file_dataset import MultiFileEEGDataset
+except ImportError:
+    MultiFileEEGDataset = None
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +54,8 @@ class EEGDataset(IterableDataset):
                  gender_transform: Optional[callable] = None,
                  age_transform: Optional[callable] = None,
                  combined_transform: Optional[callable] = None,
-                 target_type: str = "both",  # "gender", "age", "both", "combined"
+                 user_identification_transform: Optional[UserIdentificationTransform] = None,
+                 target_type: str = "both",  # "gender", "age", "both", "combined", "user_identification"
                  participant_filter: Optional[List[str]] = None,
                  shuffle: bool = False,
                  random_seed: Optional[int] = None):  
@@ -61,7 +69,8 @@ class EEGDataset(IterableDataset):
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
             combined_transform: Optional transform to be applied on combined targets (gender + age)
-            target_type: Type of target to return ("gender", "age", "both", "combined")
+            user_identification_transform: Optional transform to be applied on user identification targets
+            target_type: Type of target to return ("gender", "age", "both", "combined", "user_identification")
             participant_filter: Optional list of participant IDs to include (None = all participants)
             shuffle: Whether to shuffle samples during iteration (recommended for training)
             random_seed: Random seed for shuffling (None = use current random state)
@@ -79,6 +88,7 @@ class EEGDataset(IterableDataset):
         self.gender_transform = gender_transform
         self.age_transform = age_transform
         self.combined_transform = combined_transform
+        self.user_identification_transform = user_identification_transform
         self.target_type = target_type
         self.participant_filter = participant_filter if participant_filter is None else set(participant_filter)
         self.shuffle = shuffle
@@ -262,8 +272,30 @@ class EEGDataset(IterableDataset):
                             continue
                         
                         # Extract metadata attributes (cache to avoid repeated lookups)
-                        gender = int(metadata.attrs['gender'])
-                        age = float(metadata.attrs['age'])
+                        # For user_identification target_type, gender and age are optional
+                        if self.target_type == "user_identification":
+                            # User identification only needs participant_id, task_type, and task_number
+                            gender = metadata.attrs.get('gender', None)
+                            if gender is not None:
+                                gender = int(gender)
+                            age = metadata.attrs.get('age', None)
+                            if age is not None:
+                                age = float(age)
+                        else:
+                            # For other target types, gender and age are required
+                            if 'gender' not in metadata.attrs:
+                                raise KeyError(
+                                    f"Missing required 'gender' attribute in metadata for sample {sample_name} "
+                                    f"in file {self.hdf5_file_str}. This is required for target_type '{self.target_type}'."
+                                )
+                            if 'age' not in metadata.attrs:
+                                raise KeyError(
+                                    f"Missing required 'age' attribute in metadata for sample {sample_name} "
+                                    f"in file {self.hdf5_file_str}. This is required for target_type '{self.target_type}'."
+                                )
+                            gender = int(metadata.attrs['gender'])
+                            age = float(metadata.attrs['age'])
+                        
                         task_number = int(metadata.attrs.get('task_number', -1))
                         
                         # Create sample dictionary
@@ -288,7 +320,7 @@ class EEGDataset(IterableDataset):
             raise RuntimeError(error_msg) from e
     
     def _create_sample_dict(self, eeg_data: np.ndarray, task_type: str, 
-                           participant_id: str, gender: int, age: float, 
+                           participant_id: str, gender: Optional[int], age: Optional[float], 
                            task_number: int, sample_idx: str) -> Dict[str, Any]:
         """
         Create a sample dictionary and apply transforms.
@@ -297,8 +329,8 @@ class EEGDataset(IterableDataset):
             eeg_data: EEG data array
             task_type: Task type ('active' or 'passive')
             participant_id: Participant ID
-            gender: Gender value
-            age: Age value
+            gender: Gender value (optional, None for user_identification)
+            age: Age value (optional, None for user_identification)
             task_number: Task number from metadata
             sample_idx: Sample identifier (from HDF5 dataset name)
             
@@ -333,24 +365,37 @@ class EEGDataset(IterableDataset):
             'eeg_data': eeg_tensor,
             'task_type': task_type,
             'participant_id': participant_id,
-            'gender': gender,
-            'age': age,
             'task_number': task_number,
             'sample_id': f"{participant_id}_{task_type}_{sample_idx}"
         }
         
+        # Only include gender and age if they are not None
+        if gender is not None:
+            sample['gender'] = gender
+        if age is not None:
+            sample['age'] = age
+        
         # Apply individual transforms
-        if self.gender_transform and 'gender' in sample:
+        if self.gender_transform and 'gender' in sample and sample['gender'] is not None:
             sample['gender'] = self.gender_transform(sample['gender'])
         
-        if self.age_transform and 'age' in sample:
+        if self.age_transform and 'age' in sample and sample['age'] is not None:
             sample['age'] = self.age_transform(sample['age'])
         
         # Apply combined transform if target_type is "combined"
         # Note: Combined transform uses raw gender and age values before individual transforms
         if self.target_type == "combined" and self.combined_transform:
+            if gender is None or age is None:
+                raise ValueError(
+                    f"Combined transform requires both gender and age, but got gender={gender}, age={age} "
+                    f"for participant {participant_id}, sample {sample_idx}"
+                )
             # Apply combined transform
             sample['combined'] = self.combined_transform(gender, age)
+        
+        # Apply user identification transform if target_type is "user_identification"
+        if self.target_type == "user_identification" and self.user_identification_transform:
+            sample['user_identification'] = self.user_identification_transform(participant_id)
         
         return sample
 
@@ -361,102 +406,164 @@ class EEGDataLoader:
     """
     
     @staticmethod
-    def _get_hdf5_file_paths(hdf5_dir: Path, segment_length: str) -> Tuple[Path, Path, Path]:
+    def _get_hdf5_file_paths(hdf5_dir: Path, segment_length: str) -> Tuple[Union[Path, List[Path]], Union[Path, List[Path]], Union[Path, List[Path]]]:
         """
         Helper method to construct HDF5 file paths for train/val/test splits.
+        
+        Checks for multiple part files for all segment lengths and returns list of paths if found.
+        Falls back to single file paths if no part files exist.
         
         Args:
             hdf5_dir: Directory containing HDF5 files
             segment_length: Length of segments ('1s', '2s', or '4s')
             
         Returns:
-            Tuple of (train_file, val_file, test_file) paths
+            Tuple of (train_file(s), val_file(s), test_file(s)) paths
+            Returns lists of paths if multi-file structure exists, single paths otherwise.
         """
-        train_file = hdf5_dir / f"eeg_data_train_{segment_length}.h5"
-        val_file = hdf5_dir / f"eeg_data_val_{segment_length}.h5"
-        test_file = hdf5_dir / f"eeg_data_test_{segment_length}.h5"
+        # Check for multiple part files for all segment lengths
+        train_files = sorted(hdf5_dir.glob(f"eeg_data_train_{segment_length}_part*.h5"))
+        val_files = sorted(hdf5_dir.glob(f"eeg_data_val_{segment_length}_part*.h5"))
+        test_files = sorted(hdf5_dir.glob(f"eeg_data_test_{segment_length}_part*.h5"))
         
-        return train_file, val_file, test_file
+        # Fallback to single file if no part files found
+        if not train_files:
+            train_file = hdf5_dir / f"eeg_data_train_{segment_length}.h5"
+            if train_file.exists():
+                train_files = [train_file]
+        if not val_files:
+            val_file = hdf5_dir / f"eeg_data_val_{segment_length}.h5"
+            if val_file.exists():
+                val_files = [val_file]
+        if not test_files:
+            test_file = hdf5_dir / f"eeg_data_test_{segment_length}.h5"
+            if test_file.exists():
+                test_files = [test_file]
+        
+        # Return lists if multi-file, single paths if single file
+        if len(train_files) == 1 and len(val_files) == 1 and len(test_files) == 1:
+            # All are single files, return as single paths for backward compatibility
+            return train_files[0], val_files[0], test_files[0]
+        else:
+            # Multi-file structure, return as lists
+            return train_files, val_files, test_files
     
     @staticmethod
-    def _verify_hdf5_files(train_file: Path, val_file: Path, test_file: Path) -> None:
+    def _verify_hdf5_files(train_files, val_files, test_files) -> None:
         """
         Helper method to verify that HDF5 files exist.
         
         Args:
-            train_file: Path to train HDF5 file
-            val_file: Path to val HDF5 file
-            test_file: Path to test HDF5 file
+            train_files: Path(s) to train HDF5 file(s) (single Path or list of Paths)
+            val_files: Path(s) to val HDF5 file(s) (single Path or list of Paths)
+            test_files: Path(s) to test HDF5 file(s) (single Path or list of Paths)
             
         Raises:
             FileNotFoundError: If any file is missing
         """
-        for file_path, split_name in [(train_file, "train"), (val_file, "val"), (test_file, "test")]:
-            if not file_path.exists():
-                raise FileNotFoundError(f"{split_name} HDF5 file not found: {file_path}")
+        # Handle both single files and lists of files
+        for files, split_name in [(train_files, "train"), (val_files, "val"), (test_files, "test")]:
+            if isinstance(files, (list, tuple)):
+                if len(files) == 0:
+                    raise FileNotFoundError(f"{split_name} HDF5 files not found")
+                for file_path in files:
+                    if not file_path.exists():
+                        raise FileNotFoundError(f"{split_name} HDF5 file not found: {file_path}")
+            else:
+                if not files.exists():
+                    raise FileNotFoundError(f"{split_name} HDF5 file not found: {files}")
     
     @staticmethod
-    def _create_dataset_from_hdf5(hdf5_file: str,
+    def _create_dataset_from_hdf5(hdf5_file_or_files,
                                   task_type: str,
                                   target_type: str,
                                   transform: Optional[callable],
                                   gender_transform: Optional[callable],
                                   age_transform: Optional[callable],
                                   combined_transform: Optional[callable],
+                                  user_identification_transform: Optional[UserIdentificationTransform] = None,
                                   shuffle: bool = False,
-                                  random_seed: Optional[int] = None) -> EEGDataset:
+                                  random_seed: Optional[int] = None):
         """
-        Helper method to create an EEGDataset from an HDF5 file.
+        Create dataset from HDF5 file(s).
         
         Args:
-            hdf5_file: Path to HDF5 file
-            task_type: Type of tasks to include ("active", "passive", "both")
-            target_type: Type of target to return ("gender", "age", "both", "combined")
+            hdf5_file_or_files: Single file path (str) or list of file paths (for multi-file)
+            task_type: Type of tasks to include
+            target_type: Type of target to return
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
             combined_transform: Optional transform to be applied on combined targets
+            user_identification_transform: Optional transform for user identification
             shuffle: Whether to shuffle samples during iteration
             random_seed: Random seed for shuffling
             
         Returns:
-            EEGDataset instance
+            EEGDataset or MultiFileEEGDataset instance
         """
-        return EEGDataset(
-            hdf5_file=hdf5_file,
-            task_type=task_type,
-            transform=transform,
-            gender_transform=gender_transform,
-            age_transform=age_transform,
-            combined_transform=combined_transform,
-            target_type=target_type,
-            shuffle=shuffle,
-            random_seed=random_seed
-        )
+        # Handle multiple files (for 1s segments)
+        if isinstance(hdf5_file_or_files, (list, tuple)):
+            if MultiFileEEGDataset is None:
+                raise ImportError("MultiFileEEGDataset not available. Cannot load multiple files.")
+            
+            # Convert Path objects to strings
+            hdf5_files = [str(f) if isinstance(f, Path) else f for f in hdf5_file_or_files]
+            
+            return MultiFileEEGDataset(
+                hdf5_files=hdf5_files,
+                task_type=task_type,
+                transform=transform,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                target_type=target_type,
+                shuffle=shuffle,
+                random_seed=random_seed
+            )
+        else:
+            # Single file
+            hdf5_file = str(hdf5_file_or_files) if isinstance(hdf5_file_or_files, Path) else hdf5_file_or_files
+            
+            return EEGDataset(
+                hdf5_file=hdf5_file,
+                task_type=task_type,
+                transform=transform,
+                gender_transform=gender_transform,
+                age_transform=age_transform,
+                combined_transform=combined_transform,
+                user_identification_transform=user_identification_transform,
+                target_type=target_type,
+                shuffle=shuffle,
+                random_seed=random_seed
+            )
     
     @staticmethod
-    def _create_loaders_from_files(train_file: Path, val_file: Path, test_file: Path,
+    def _create_loaders_from_files(train_file, val_file, test_file,
                                    train_task_type: str, val_task_type: str, test_task_type: str,
                                    target_type: str, transform: Optional[callable],
                                    gender_transform: Optional[callable], age_transform: Optional[callable],
-                                   combined_transform: Optional[callable], batch_size: int,
-                                   num_workers: int, shuffle_train: bool = True,
+                                   combined_transform: Optional[callable],
+                                   user_identification_transform: Optional[UserIdentificationTransform] = None,
+                                   batch_size: int = 32, num_workers: int = 4, shuffle_train: bool = True,
                                    random_seed: Optional[int] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
         """
-        Helper method to create train/val/test loaders from HDF5 files.
+        Create loaders from HDF5 file(s).
         
         Args:
-            train_file: Path to train HDF5 file
-            val_file: Path to val HDF5 file
-            test_file: Path to test HDF5 file
+            train_file: Path(s) to train HDF5 file(s) (single Path or list of Paths)
+            val_file: Path(s) to val HDF5 file(s) (single Path or list of Paths)
+            test_file: Path(s) to test HDF5 file(s) (single Path or list of Paths)
             train_task_type: Task type for training ("active", "passive", "both")
             val_task_type: Task type for validation ("active", "passive", "both")
             test_task_type: Task type for testing ("active", "passive", "both")
-            target_type: Type of target to return ("gender", "age", "both", "combined")
+            target_type: Type of target to return ("gender", "age", "both", "combined", "user_identification")
             transform: Optional transform to be applied on EEG data
             gender_transform: Optional transform to be applied on gender targets
             age_transform: Optional transform to be applied on age targets
             combined_transform: Optional transform to be applied on combined targets
+            user_identification_transform: Optional transform for user identification
             batch_size: Batch size for all loaders
             num_workers: Number of workers for all loaders
             shuffle_train: Whether to shuffle training data (default: True)
@@ -466,36 +573,39 @@ class EEGDataLoader:
             Tuple of (train_loader, val_loader, test_loader)
         """
         train_dataset = EEGDataLoader._create_dataset_from_hdf5(
-            hdf5_file=str(train_file),
+            hdf5_file_or_files=train_file,
             task_type=train_task_type,
             target_type=target_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
+            user_identification_transform=user_identification_transform,
             shuffle=shuffle_train,  # Shuffle training data to avoid participant-level batch correlations
             random_seed=random_seed
         )
         
         val_dataset = EEGDataLoader._create_dataset_from_hdf5(
-            hdf5_file=str(val_file),
+            hdf5_file_or_files=val_file,
             task_type=val_task_type,
             target_type=target_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
+            user_identification_transform=user_identification_transform,
             shuffle=False  # Don't shuffle validation data
         )
         
         test_dataset = EEGDataLoader._create_dataset_from_hdf5(
-            hdf5_file=str(test_file),
+            hdf5_file_or_files=test_file,
             task_type=test_task_type,
             target_type=target_type,
             transform=transform,
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
+            user_identification_transform=user_identification_transform,
             shuffle=False  # Don't shuffle test data
         )
         
@@ -566,39 +676,57 @@ class EEGDataLoader:
         Returns:
             Dictionary containing batched tensors
         """
+        if not batch:
+            raise ValueError("Cannot collate empty batch")
+        
         # Stack EEG data
         eeg_data = torch.stack([sample['eeg_data'] for sample in batch])
         
-        # Stack other tensors - handle both scalar and tensor values
-        gender_list = []
-        age_list = []
-        
-        for sample in batch:
-            if isinstance(sample['gender'], torch.Tensor):
-                gender_list.append(sample['gender'])
-            else:
-                # Gender is typically used for classification, so use long dtype
-                gender_list.append(torch.tensor(sample['gender'], dtype=torch.long))
-            
-            if isinstance(sample['age'], torch.Tensor):
-                age_list.append(sample['age'])
-            else:
-                # Age is typically used for regression, so use float32 dtype
-                age_list.append(torch.tensor(sample['age'], dtype=torch.float32))
-        
-        # Stack tensors
-        gender = torch.stack(gender_list)
-        age = torch.stack(age_list)
+        # Determine which fields are present in the batch
+        has_gender = 'gender' in batch[0] and batch[0]['gender'] is not None
+        has_age = 'age' in batch[0] and batch[0]['age'] is not None
+        has_user_identification = 'user_identification' in batch[0]
+        has_combined = 'combined' in batch[0]
         
         result = {
             'eeg_data': eeg_data,  # Shape: (batch_size, 60, timepoints), dtype: float32
-            'gender': gender,       # Shape: (batch_size,), dtype: long (for classification)
-            'age': age,            # Shape: (batch_size,), dtype: float32 (for regression)
             'participant_ids': [sample['participant_id'] for sample in batch],
             'task_types': [sample['task_type'] for sample in batch],
             'task_numbers': [sample.get('task_number', -1) for sample in batch],
             'sample_ids': [sample['sample_id'] for sample in batch]
         }
+        
+        # Stack gender if present
+        if has_gender:
+            gender_list = []
+            for sample in batch:
+                if 'gender' not in sample or sample['gender'] is None:
+                    raise ValueError(
+                        f"Inconsistent batch: some samples have 'gender' and others don't. "
+                        f"All samples in a batch must have the same fields."
+                    )
+                if isinstance(sample['gender'], torch.Tensor):
+                    gender_list.append(sample['gender'])
+                else:
+                    # Gender is typically used for classification, so use long dtype
+                    gender_list.append(torch.tensor(sample['gender'], dtype=torch.long))
+            result['gender'] = torch.stack(gender_list)
+        
+        # Stack age if present
+        if has_age:
+            age_list = []
+            for sample in batch:
+                if 'age' not in sample or sample['age'] is None:
+                    raise ValueError(
+                        f"Inconsistent batch: some samples have 'age' and others don't. "
+                        f"All samples in a batch must have the same fields."
+                    )
+                if isinstance(sample['age'], torch.Tensor):
+                    age_list.append(sample['age'])
+                else:
+                    # Age is typically used for regression, so use float32 dtype
+                    age_list.append(torch.tensor(sample['age'], dtype=torch.float32))
+            result['age'] = torch.stack(age_list)
         
         # Add combined target if present
         if 'combined' in batch[0]:
@@ -609,6 +737,16 @@ class EEGDataLoader:
                 else:
                     combined_list.append(torch.tensor(sample['combined'], dtype=torch.long))
             result['combined'] = torch.stack(combined_list)
+        
+        # Add user identification target if present
+        if 'user_identification' in batch[0]:
+            user_id_list = []
+            for sample in batch:
+                if isinstance(sample['user_identification'], torch.Tensor):
+                    user_id_list.append(sample['user_identification'])
+                else:
+                    user_id_list.append(torch.tensor(sample['user_identification'], dtype=torch.long))
+            result['user_identification'] = torch.stack(user_id_list)
         
         return result
     
@@ -623,6 +761,7 @@ class EEGDataLoader:
                                     gender_transform: Optional[callable] = None,
                                     age_transform: Optional[callable] = None,
                                     combined_transform: Optional[callable] = None,
+                                    user_identification_transform: Optional[UserIdentificationTransform] = None,
                                     shuffle_train: bool = True,
                                     random_seed: Optional[int] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
         """
@@ -655,16 +794,16 @@ class EEGDataLoader:
         hdf5_dir_path = Path(hdf5_dir)
         
         # Construct and verify HDF5 file paths
-        train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+        train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
             hdf5_dir_path, segment_length
         )
-        EEGDataLoader._verify_hdf5_files(train_file, val_file, test_file)
+        EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
         
         # Create loaders using helper method
         train_loader, val_loader, test_loader = EEGDataLoader._create_loaders_from_files(
-            train_file=train_file,
-            val_file=val_file,
-            test_file=test_file,
+            train_file=train_files,
+            val_file=val_files,
+            test_file=test_files,
             train_task_type=task_type,
             val_task_type=task_type,
             test_task_type=task_type,
@@ -673,15 +812,22 @@ class EEGDataLoader:
             gender_transform=gender_transform,
             age_transform=age_transform,
             combined_transform=combined_transform,
+            user_identification_transform=user_identification_transform,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle_train=shuffle_train,
             random_seed=random_seed
         )
         
-        logger.info(f"Created data loaders from HDF5 files:")
-        logger.info(f"  Train: {train_file.name}")
-        logger.info(f"  Val: {val_file.name}")
-        logger.info(f"  Test: {test_file.name}")
+        # Log file information
+        logger.info(f"Created data loaders from HDF5 files for {segment_length} segments:")
+        if isinstance(train_files, (list, tuple)):
+            logger.info(f"  Train: {len(train_files)} file(s) (multi-file structure)")
+            logger.info(f"  Val: {len(val_files)} file(s) (multi-file structure)")
+            logger.info(f"  Test: {len(test_files)} file(s) (multi-file structure)")
+        else:
+            logger.info(f"  Train: {train_files.name if isinstance(train_files, Path) else train_files}")
+            logger.info(f"  Val: {val_files.name if isinstance(val_files, Path) else val_files}")
+            logger.info(f"  Test: {test_files.name if isinstance(test_files, Path) else test_files}")
         
         return train_loader, val_loader, test_loader
