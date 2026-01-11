@@ -7,6 +7,10 @@ machine learning tasks on EEG data. It includes both basic transforms
 and factory functions for creating dataset-specific transforms.
 """
 
+import json
+import logging
+from pathlib import Path
+import h5py
 import torch
 import numpy as np
 from typing import Union, Callable, Any, List, Dict, Tuple
@@ -14,6 +18,8 @@ from constants import (
     AGE_CLASS_1_MAX, AGE_CLASS_2_MAX, DEFAULT_MIN_AGE, DEFAULT_MAX_AGE,
     get_age_class, get_gender_class, get_combined_class, validate_gender
 )
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # BASIC TRANSFORM FUNCTIONS
@@ -135,6 +141,107 @@ def combined_gender_age_classification_transform(gender: Union[float, int],
     combined_class = get_combined_class(gender, age)
     return torch.tensor(combined_class, dtype=torch.long)
 
+class UserIdentificationTransform:
+    """
+    Picklable user identification transform class for multiprocessing compatibility.
+    Maps participant_id to class index for user identification task.
+    """
+    def __init__(self, participant_id_to_class_idx: Dict[str, int]):
+        """
+        Initialize user identification transform.
+        
+        Args:
+            participant_id_to_class_idx: Dictionary mapping participant_id to class index
+        """
+        self.participant_id_to_class_idx = participant_id_to_class_idx
+        # Create reverse mapping for validation
+        self.class_idx_to_participant_id = {v: k for k, v in participant_id_to_class_idx.items()}
+    
+    def __call__(self, participant_id: str) -> torch.Tensor:
+        """
+        Transform participant_id to class index.
+        
+        Args:
+            participant_id: Participant ID string
+            
+        Returns:
+            Class index tensor
+            
+        Raises:
+            KeyError: If participant_id is not in the mapping
+        """
+        if participant_id not in self.participant_id_to_class_idx:
+            raise KeyError(
+                f"Participant ID '{participant_id}' not found in participant_id_to_class_idx mapping. "
+                f"This indicates a data inconsistency issue."
+            )
+        class_idx = self.participant_id_to_class_idx[participant_id]
+        return torch.tensor(class_idx, dtype=torch.long)
+    
+    def get_num_classes(self) -> int:
+        """Get the number of user classes."""
+        return len(self.participant_id_to_class_idx)
+    
+    def get_participant_id(self, class_idx: int) -> str:
+        """
+        Get participant_id from class index (reverse lookup).
+        
+        Args:
+            class_idx: Class index
+            
+        Returns:
+            Participant ID string
+        """
+        if class_idx not in self.class_idx_to_participant_id:
+            raise KeyError(f"Class index {class_idx} not found in mapping")
+        return self.class_idx_to_participant_id[class_idx]
+
+def create_user_identification_transform_from_mapping_file(mapping_file_path: str) -> UserIdentificationTransform:
+    """
+    Create user identification transform from a JSON mapping file.
+    
+    Args:
+        mapping_file_path: Path to JSON file containing participant_id to class_idx mapping
+        
+    Returns:
+        UserIdentificationTransform instance
+    """
+    
+    mapping_path = Path(mapping_file_path)
+    if not mapping_path.exists():
+        raise FileNotFoundError(f"Mapping file not found: {mapping_file_path}")
+    
+    with open(mapping_path, 'r') as f:
+        participant_id_to_class_idx = json.load(f)
+    
+    return UserIdentificationTransform(participant_id_to_class_idx)
+
+def create_user_identification_transform_from_hdf5(hdf5_dir: str) -> Tuple[UserIdentificationTransform, int]:
+    """
+    Create user identification transform from HDF5 directory.
+    Looks for participant_id_to_class_idx.json in the HDF5 directory.
+    
+    Args:
+        hdf5_dir: Directory containing HDF5 files and mapping JSON
+        
+    Returns:
+        Tuple of (transform, num_classes)
+    """
+    
+    hdf5_dir_path = Path(hdf5_dir)
+    mapping_file = hdf5_dir_path / 'participant_id_to_class_idx.json'
+    
+    if not mapping_file.exists():
+        raise FileNotFoundError(
+            f"Mapping file not found: {mapping_file}. "
+            f"Please run preprocessing with process_all_participants_user_identification() first."
+        )
+    
+    transform = create_user_identification_transform_from_mapping_file(str(mapping_file))
+    num_classes = transform.get_num_classes()
+    
+    return transform, num_classes
+
 # =============================================================================
 # FACTORY FUNCTIONS FOR DATASET-SPECIFIC TRANSFORMS
 # =============================================================================
@@ -238,42 +345,69 @@ def create_age_regression_transform_from_dataset(dataset) -> Callable:
     ages = _extract_ages_from_dataset(dataset)
     return create_age_regression_transform(ages)
 
-def compute_age_range_from_hdf5(hdf5_file_path: str) -> Tuple[float, float]:
+def compute_age_range_from_hdf5(hdf5_file_path_or_files: Union[str, List[str], Path, List[Path]]) -> Tuple[float, float]:
     """
-    Compute age min/max from an HDF5 file by reading metadata.
+    Compute age min/max from HDF5 file(s) by reading metadata.
     
-    Important: For regression normalization, this should be called on the TRAINING file only.
+    Important: For regression normalization, this should be called on the TRAINING file(s) only.
     The computed min/max should then be used for normalizing all splits (train/val/test)
     to avoid data leakage. Never compute min/max from validation or test data.
     
+    For 1s segments with multiple files, this function will read from ALL files to compute
+    the correct age range across the entire training dataset.
+    
     Args:
-        hdf5_file_path: Path to HDF5 file (should be training file for proper normalization)
+        hdf5_file_path_or_files: Path to HDF5 file or list of paths (should be training file(s) for proper normalization)
         
     Returns:
         Tuple of (min_age, max_age)
     """
-    import h5py
-    from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+    
+    # Normalize input to list of paths
+    if isinstance(hdf5_file_path_or_files, (str, Path)):
+        file_paths = [Path(hdf5_file_path_or_files)]
+    else:
+        file_paths = [Path(p) for p in hdf5_file_path_or_files]
     
     ages = []
     try:
-        with h5py.File(hdf5_file_path, 'r') as f:
-            # Check for file-level attributes first
-            if 'age_min' in f.attrs and 'age_max' in f.attrs:
-                min_age = float(f.attrs['age_min'])
-                max_age = float(f.attrs['age_max'])
-                return min_age, max_age
-            
-            # Otherwise, iterate through metadata to collect ages
-            for task_group_name in ['active', 'passive']:
-                if task_group_name in f:
-                    task_group = f[task_group_name]
-                    for key in task_group.keys():
-                        if key.startswith('metadata_'):
-                            metadata = task_group[key]
-                            if 'age' in metadata.attrs:
-                                age = float(metadata.attrs['age'])
-                                ages.append(age)
+        # Check all files for age_min/age_max attributes first (fast path)
+        all_have_attributes = True
+        attribute_ages = []
+        
+        for file_path in file_paths:
+            if not file_path.exists():
+                all_have_attributes = False
+                break
+            with h5py.File(file_path, 'r') as f:
+                if 'age_min' in f.attrs and 'age_max' in f.attrs:
+                    file_min = float(f.attrs['age_min'])
+                    file_max = float(f.attrs['age_max'])
+                    attribute_ages.extend([file_min, file_max])
+                else:
+                    all_have_attributes = False
+        
+        # If all files have age_min/age_max attributes, use them
+        if all_have_attributes and attribute_ages:
+            min_age = float(min(attribute_ages))
+            max_age = float(max(attribute_ages))
+            return min_age, max_age
+        
+        # Otherwise, iterate through metadata in all files to collect all ages
+        # This is more accurate as it reads actual age values from all samples
+        for file_path in file_paths:
+            if not file_path.exists():
+                continue
+            with h5py.File(file_path, 'r') as f:
+                for task_group_name in ['active', 'passive']:
+                    if task_group_name in f:
+                        task_group = f[task_group_name]
+                        for key in task_group.keys():
+                            if key.startswith('metadata_'):
+                                metadata = task_group[key]
+                                if 'age' in metadata.attrs:
+                                    age = float(metadata.attrs['age'])
+                                    ages.append(age)
         
         if ages:
             min_age = float(min(ages))
@@ -282,24 +416,28 @@ def compute_age_range_from_hdf5(hdf5_file_path: str) -> Tuple[float, float]:
         else:
             return DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
     except Exception as e:
-        print(f"⚠️  Error computing age range from {hdf5_file_path}: {e}, using defaults")
+        file_str = str(file_paths[0]) if len(file_paths) == 1 else f"{len(file_paths)} files"
+        logger.warning(f"Error computing age range from {file_str}: {e}, using defaults")
         return DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
 
-def create_age_regression_transform_from_hdf5(hdf5_file_path: str) -> Tuple[Callable, float, float]:
+def create_age_regression_transform_from_hdf5(hdf5_file_path_or_files: Union[str, List[str], Path, List[Path]]) -> Tuple[Callable, float, float]:
     """
-    Create age regression transform from HDF5 file.
+    Create age regression transform from HDF5 file(s).
     
-    Important: This should be called on the TRAINING file only. The computed min/max
+    Important: This should be called on the TRAINING file(s) only. The computed min/max
     will be used to normalize all data splits (train/val/test) to prevent data leakage.
     
+    For 1s segments with multiple files, this function will read from ALL files to compute
+    the correct age range across the entire training dataset.
+    
     Args:
-        hdf5_file_path: Path to HDF5 file (MUST be training file for proper normalization)
+        hdf5_file_path_or_files: Path to HDF5 file or list of paths (MUST be training file(s) for proper normalization)
         
     Returns:
         Tuple of (transform_function, min_age, max_age)
         The transform_function is a picklable AgeRegressionTransform instance
     """
-    min_age, max_age = compute_age_range_from_hdf5(hdf5_file_path)
+    min_age, max_age = compute_age_range_from_hdf5(hdf5_file_path_or_files)
     
     # Return a picklable class instance instead of a closure
     transform = AgeRegressionTransform(min_age, max_age)
