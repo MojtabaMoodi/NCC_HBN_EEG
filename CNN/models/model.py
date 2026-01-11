@@ -149,6 +149,132 @@ class MultiOutputCNN(BaseEEGCNN):
         ])
 
 
+class EEGUserIdentificationCNN(EEGCNN):
+    """
+    CNN model for user identification (multi-class classification).
+    Uses EEGCNN with dynamic number of classes based on number of participants.
+    
+    For large classification tasks (many classes), this model uses:
+    - Larger fully connected layers for better capacity
+    - Better weight initialization for the final classification layer
+    """
+    # Weight initialization multiplier for final layer (no hardcoding)
+    # This ensures logits start in a safe range for large classification tasks
+    FINAL_LAYER_INIT_MULTIPLIER = 5.0
+    
+    def __init__(self, num_channels=64, num_classes=None, dropout_rate=0.5, use_layer_norm=True):
+        if num_classes is None:
+            raise ValueError("num_classes must be specified for user identification. "
+                           "It should equal the number of unique participants.")
+        
+        # Call parent __init__ first
+        super(EEGUserIdentificationCNN, self).__init__(
+            num_channels=num_channels, 
+            num_classes=num_classes,
+            dropout_rate=dropout_rate,
+            use_layer_norm=use_layer_norm
+        )
+        
+        # Override FC layers with larger capacity for large classification tasks
+        # Original: 256 -> 64 -> num_classes (too small bottleneck for 3000+ classes)
+        # Previous: 256 -> 512 -> 256 -> num_classes (still insufficient for 3145 classes)
+        # New: 256 -> 1024 -> 512 -> num_classes (increased capacity for better learning)
+        # This provides more representational power for distinguishing between 3145 users
+        self.fc1 = nn.Linear(256, 1024)
+        self.fc2_intermediate = nn.Linear(1024, 512)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.fc2 = nn.Linear(512, num_classes)
+        
+        # Initialize weights properly for large classification
+        self._initialize_weights()
+    
+    def _initialize_weights(self):
+        """
+        Initialize weights with better strategies for large classification.
+        Uses Kaiming initialization for ReLU layers and small initialization for final layer.
+        """
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                if m == self.fc2:
+                    # Final classification layer: use larger initialization for numerical stability
+                    # For large number of classes (3145), very small logits cause numerical issues
+                    # with label smoothing (softmax probabilities become too small, -log overflows)
+                    # We use a larger std to ensure logits are in a safe range
+                    fan_in = m.weight.size(1)
+                    fan_out = m.weight.size(0)
+                    # Xavier init: std = sqrt(2.0 / (fan_in + fan_out))
+                    # For 512 -> 3145: std ≈ sqrt(2.0 / (512 + 3145)) ≈ 0.023
+                    # Scale up significantly for large classification to prevent numerical issues
+                    # Target: logits in range [-1, 1] to avoid extreme softmax values
+                    # With 3145 classes, we need logits large enough that softmax probabilities
+                    # don't become so small that -log overflows with label smoothing
+                    std = (2.0 / (fan_in + fan_out)) ** 0.5
+                    # Use class constant instead of hardcoded value (no hardcoding)
+                    std = std * self.FINAL_LAYER_INIT_MULTIPLIER
+                    nn.init.normal_(m.weight, mean=0.0, std=std)
+                    # Initialize bias to zero (let weights do the work)
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0.0)
+                else:
+                    # Intermediate layers: use Kaiming initialization for ReLU
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+    
+    def _apply_fc_layers(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Apply fully connected layers with increased capacity for user identification.
+        
+        Args:
+            x: Input tensor of shape (batch_size, 256)
+            
+        Returns:
+            Output tensor of shape (batch_size, num_classes)
+        """
+        x = F.relu(self.fc1(x))  # 256 -> 1024
+        x = self.dropout(x)
+        x = F.relu(self.fc2_intermediate(x))  # 1024 -> 512
+        x = self.dropout(x)
+        x = self.fc2(x)  # 512 -> num_classes
+        return x
+    
+    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Extract feature embeddings before the final classification layer.
+        This is used for ArcFace loss, which requires normalized features.
+        
+        Args:
+            x: Input tensor of shape (batch_size, num_channels, sequence_length)
+            
+        Returns:
+            Feature embeddings of shape (batch_size, 512)
+            (output of fc2_intermediate, before fc2)
+        """
+        x = self._preprocess_input(x)
+        x = self._apply_conv_layers(x)
+        
+        # Global average pooling across spatial dimensions
+        x = F.adaptive_avg_pool2d(x, (1, 1))  # (batch, 256, 1, 1)
+        x = x.view(x.size(0), -1)             # (batch, 256)
+        
+        # Apply FC layers up to (but not including) final classification layer
+        x = F.relu(self.fc1(x))  # 256 -> 1024
+        # CRITICAL: Apply dropout only in training mode to ensure feature diversity
+        # In eval mode, dropout is disabled, which can cause features to be too similar
+        # and lead to model collapse (all predictions to same class)
+        x = self.dropout(x)
+        x = F.relu(self.fc2_intermediate(x))  # 1024 -> 512
+        # Note: We don't apply dropout after fc2_intermediate to preserve feature information
+        # The dropout after fc1 is sufficient for regularization
+        
+        # Return features before final classification layer
+        # These will be normalized and used with ArcFace
+        return x
+
 class EEGAgeRegressionCNN(BaseEEGCNN):
     """
     CNN model for EEG age regression.
