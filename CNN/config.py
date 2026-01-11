@@ -72,13 +72,59 @@ class ModelConfig:
 class TrainingConfig:
     """Configuration for training parameters."""
     epochs: int = 50
-    learning_rate: float = 0.001
+    learning_rate: float = 0.001  # Default learning rate (will be adjusted for ArcFace if needed)
     patience: int = 10
     min_delta: float = 1e-4
     save_every: int = 5
     checkpoint_dir: str = 'checkpoints'
-    target_key: str = 'gender'  # 'gender' or 'age'
+    target_key: str = 'gender'  # 'gender', 'age', 'combined', 'multi_output', or 'user_identification'
     prediction_type: str = 'classification'  # 'classification' or 'regression'
+    
+    # ArcFace-specific learning rate multiplier
+    # ArcFace is more sensitive to learning rate than CrossEntropyLoss
+    # DIAGNOSIS: LR of 0.00001 was TOO LOW - model couldn't learn effectively
+    # Increased from 0.01 to 0.1 to allow meaningful weight updates
+    # This results in effective LR of 0.0001 after warmup (0.001 * 0.1)
+    # Still conservative but allows model to actually learn discriminative features
+    arcface_lr_multiplier: float = 0.1  # Multiply base LR by this for ArcFace (default: 0.1 for large-scale classification)
+    
+    # Gradient clipping for training stability
+    # Prevents exploding gradients, especially important for large-scale classification
+    # Set to None to disable gradient clipping
+    # For very large classification (3000+ classes), use more aggressive clipping
+    # Further reduced from 0.3 to 0.2 for maximum stability
+    max_grad_norm: float = 0.2  # Maximum gradient norm for clipping (default: 0.2 for very large-scale classification)
+    
+    # Learning rate warmup for stable training
+    # Gradually increases learning rate from 0 to target LR over warmup_epochs
+    # This prevents large gradient updates in early epochs that can cause collapse
+    # DIAGNOSIS: 12 epochs was too long - reduced to 8 for faster ramp-up
+    # With higher LR (0.0001), we can afford faster warmup
+    warmup_epochs: int = 8  # Number of epochs for warmup (default: 8 for large-scale classification)
+    
+    # Optimizer hyperparameters
+    weight_decay: float = 0.0  # L2 regularization (default: 0.0, set to 1e-4 for user identification)
+    
+    # Learning rate scheduler hyperparameters
+    scheduler_factor: float = 0.5  # Factor by which learning rate is reduced
+    scheduler_patience: int = None  # Patience for scheduler (None = use default: 10, or 3 for user identification)
+    
+    # Loss function hyperparameters
+    # Label smoothing for CrossEntropyLoss (used for large classification tasks)
+    label_smoothing_large: float = 0.1  # For num_classes > 100
+    label_smoothing_very_large: float = 0.05  # For num_classes > 2000
+    
+    # ArcFace hyperparameters (for very large classification: num_classes > 2000)
+    arcface_margin: float = 0.5  # Angular margin in radians (~28.6 degrees)
+    # DIAGNOSIS: Scale of 32.0 was TOO LOW - insufficient discrimination power for 3145 classes
+    # Increased back to standard 64.0 for proper discrimination
+    # Standard ArcFace uses 64.0, which is proven effective for large-scale classification
+    arcface_scale: float = 64.0  # Feature scale parameter (standard value for ArcFace)
+    arcface_easy_margin: bool = False  # Whether to use easier margin computation
+    
+    # Numerical stability hyperparameters
+    output_clamp_min: float = -50.0  # Minimum value for output clamping (prevents numerical overflow)
+    output_clamp_max: float = 50.0  # Maximum value for output clamping (prevents numerical overflow)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for serialization."""
@@ -90,7 +136,19 @@ class TrainingConfig:
             'save_every': self.save_every,
             'checkpoint_dir': self.checkpoint_dir,
             'target_key': self.target_key,
-            'prediction_type': self.prediction_type
+            'prediction_type': self.prediction_type,
+            'weight_decay': self.weight_decay,
+            'scheduler_factor': self.scheduler_factor,
+            'scheduler_patience': self.scheduler_patience,
+            'label_smoothing_large': self.label_smoothing_large,
+            'label_smoothing_very_large': self.label_smoothing_very_large,
+            'arcface_margin': self.arcface_margin,
+            'arcface_scale': self.arcface_scale,
+            'arcface_easy_margin': self.arcface_easy_margin,
+            'arcface_lr_multiplier': self.arcface_lr_multiplier,
+            'max_grad_norm': self.max_grad_norm,
+            'output_clamp_min': self.output_clamp_min,
+            'output_clamp_max': self.output_clamp_max
         }
 
 @dataclass
@@ -125,6 +183,10 @@ class ExperimentConfig:
             self.model_config.num_classes = 6  # 2 genders × 3 age groups = 6 classes
         elif self.target_type == 'multi_output':
             self.model_config.num_classes = 2  # Will be overridden by multi-output heads
+        elif self.target_type == 'user_identification':
+            # num_classes will be set dynamically based on number of participants
+            # This is handled in experiment.py when loading the transform
+            pass
 
 @dataclass
 class SystemConfig:
@@ -135,7 +197,7 @@ class SystemConfig:
     log_dir: str = 'logs'
     device: str = 'auto'  # 'auto', 'cpu', 'cuda'
     verbose: bool = True
-    num_gpus: int = 2  # Number of GPUs to use for DataParallel (default: 2)
+    num_gpus: int = 1  # Number of GPUs to use for DataParallel (default: 1, will auto-detect up to 4 if available)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for serialization."""
