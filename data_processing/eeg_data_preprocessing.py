@@ -41,6 +41,8 @@ TASK_TYPES = ['active', 'passive']
 # Maximum samples per file to prevent HDF5 B-tree performance degradation
 # For all segment lengths, we split into multiple files when needed
 MAX_SAMPLES_PER_FILE = 100000  # ~100K samples per file for optimal performance
+SHUFFLE_BUFFER_SIZE = 25000  # Buffer size for global shuffling (25K samples = ~4.5GB for 4s segments)
+# Reduced from 100K to 25K to prevent OOM while still providing good global shuffling
 
 class EEGDataPreprocessor:
     """Class to handle EEG data preprocessing and organization."""
@@ -757,6 +759,132 @@ class EEGDataPreprocessor:
         
         return total_samples
     
+    def _flush_sample_buffer(self, buffer: List[Dict[str, Any]], split_name: str, segment_length: str,
+                             task_type: str, sample_counters: Dict[str, int], total_counters: Dict[str, int],
+                             random_seed: int) -> None:
+        """
+        Shuffle and save samples from buffer to HDF5 files.
+        
+        CRITICAL: This method performs GLOBAL shuffling across all participants in the buffer,
+        ensuring samples from different participants are mixed before saving.
+        This prevents participant-level clustering that can cause model collapse.
+        
+        Args:
+            buffer: List of sample dictionaries, each containing:
+                - 'segment': numpy array (EEG data)
+                - 'task_number': int
+                - 'participant_data': dict with participant metadata
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            task_type: Task type ('active' or 'passive')
+            sample_counters: Dictionary tracking per-task-type sample counts (for local indexing)
+            total_counters: Dictionary tracking total sample counts per split/segment_length (for file rotation)
+            random_seed: Random seed for shuffling
+        """
+        if len(buffer) == 0:
+            return
+        
+        # GLOBAL SHUFFLE: Shuffle all samples in buffer across all participants
+        # This ensures samples from different participants are mixed
+        rng = np.random.RandomState(random_seed)
+        indices = np.arange(len(buffer))
+        rng.shuffle(indices)
+        
+        # Get current counters
+        counter_key = f"{split_name}_{segment_length}_{task_type}"
+        if counter_key not in sample_counters:
+            raise KeyError(
+                f"Missing counter key '{counter_key}' in sample_counters. "
+                f"This indicates a logic error in counter initialization."
+            )
+        current_global_idx = sample_counters[counter_key]
+        
+        total_key = f"{split_name}_{segment_length}_total"
+        if total_key not in total_counters:
+            raise KeyError(
+                f"Missing total counter key '{total_key}' in total_counters. "
+                f"This indicates a logic error in counter initialization."
+            )
+        current_total_idx = total_counters[total_key]
+        
+        # Save shuffled samples
+        for idx in indices:
+            sample = buffer[idx]
+            
+            # Get current file path based on total_idx (for file rotation)
+            file_path, part_idx = self._get_current_hdf5_file_and_part(
+                split_name, segment_length, current_total_idx
+            )
+            
+            # Initialize file if it doesn't exist
+            if not file_path.exists():
+                self._initialize_hdf5_file_part(split_name, segment_length, part_idx)
+            
+            with h5py.File(file_path, 'r+') as f:
+                # Ensure task group exists
+                if task_type not in f:
+                    f.create_group(task_type)
+                task_group = f[task_type]
+                
+                # Get local sample index within this file for this task type
+                local_sample_idx = current_global_idx % MAX_SAMPLES_PER_FILE
+                
+                # Save segment
+                dataset_name = f'sample_{local_sample_idx:06d}'
+                
+                # Check if dataset already exists (shouldn't happen, but check for logic errors)
+                if dataset_name in task_group:
+                    error_msg = (
+                        f"Dataset {dataset_name} already exists in {file_path}. "
+                        f"Participant: {sample['participant_data']['participant_id']}, "
+                        f"Task type: {task_type}, "
+                        f"Sample index (task): {current_global_idx}, "
+                        f"Total index: {current_total_idx}, "
+                        f"Local index: {local_sample_idx}. "
+                        f"This indicates a logic error in sample indexing."
+                    )
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                task_group.create_dataset(dataset_name, data=sample['segment'], compression=None)
+                
+                # Store metadata
+                sample_group = task_group.create_group(f'metadata_{local_sample_idx:06d}')
+                sample_group.attrs['participant_id'] = sample['participant_data']['participant_id']
+                sample_group.attrs['task_type'] = task_type
+                sample_group.attrs['task_number'] = sample['task_number']
+            
+            # Increment both counters
+            current_global_idx += 1
+            current_total_idx += 1
+        
+        # Update counters
+        sample_counters[counter_key] = current_global_idx
+        total_counters[total_key] = current_total_idx
+        
+        # Clear buffer
+        buffer.clear()
+    
+    def _add_samples_to_buffer(self, segments: List[np.ndarray], task_numbers: List[int],
+                               participant_data: Dict[str, Any], split_indices: np.ndarray,
+                               buffer: List[Dict[str, Any]]) -> None:
+        """
+        Add samples to buffer for later global shuffling.
+        
+        Args:
+            segments: List of EEG segment arrays
+            task_numbers: List of task numbers corresponding to segments
+            participant_data: Dictionary containing participant metadata
+            split_indices: Indices of segments to add to buffer
+            buffer: Buffer list to append samples to
+        """
+        for idx in split_indices:
+            buffer.append({
+                'segment': segments[idx],
+                'task_number': task_numbers[idx],
+                'participant_data': participant_data
+            })
+    
     def _save_samples_to_multiple_files(self, split_name: str, segment_length: str, task_type: str,
                                         segments: List[np.ndarray], task_numbers: List[int],
                                         split_indices: np.ndarray, participant_data: Dict[str, Any],
@@ -841,9 +969,16 @@ class EEGDataPreprocessor:
                                             segment_length: str, train_ratio: float, val_ratio: float,
                                             test_ratio: float, random_seed: int,
                                             sample_counters: Dict[str, int], 
-                                            total_counters: Dict[str, int]) -> Tuple[int, int, int]:
+                                            total_counters: Dict[str, int],
+                                            buffers: Dict[str, List[Dict[str, Any]]],
+                                            buffer_flush_counts: Dict[str, int]) -> Tuple[int, int, int]:
         """
-        Split a participant's samples and save to train/val/test HDF5 files.
+        Split a participant's samples and add to buffers for global shuffling.
+        
+        CRITICAL: Samples are added to buffers instead of being saved immediately.
+        Buffers are flushed when they reach SHUFFLE_BUFFER_SIZE, performing global
+        shuffling across all participants. This prevents participant-level clustering
+        that can cause model collapse during training.
         
         Args:
             segments: List of EEG segment arrays for this participant and task type
@@ -857,9 +992,11 @@ class EEGDataPreprocessor:
             random_seed: Random seed for shuffling
             sample_counters: Dictionary tracking per-task-type sample counts (for local indexing)
             total_counters: Dictionary tracking total sample counts per split/segment_length (for file rotation)
+            buffers: Dictionary of buffers for each split/segment_length/task_type combination
+            buffer_flush_counts: Dictionary tracking flush count per buffer (for seed variation)
             
         Returns:
-            Tuple of (train_samples_saved, val_samples_saved, test_samples_saved)
+            Tuple of (train_samples_added, val_samples_added, test_samples_added)
         """
         if len(segments) == 0:
             return (0, 0, 0)
@@ -888,55 +1025,53 @@ class EEGDataPreprocessor:
         val_indices = indices[train_size:train_size + val_size]
         test_indices = indices[train_size + val_size:]
         
-        # Save to respective HDF5 files
-        # For all segment lengths, we need to track sample counts across multiple files
-        # Track how many samples were saved to each split
-        samples_saved = {}
+        # Add samples to buffers for global shuffling (instead of saving immediately)
+        # This prevents participant-level clustering that can cause model collapse
+        samples_added = {}
         for split_name, split_indices in [('train', train_indices), ('val', val_indices), ('test', test_indices)]:
-            # Get current counter for this split/segment_length/task_type (for local indexing)
-            counter_key = f"{split_name}_{segment_length}_{task_type}"
-            if counter_key not in sample_counters:
-                raise KeyError(
-                    f"Missing counter key '{counter_key}' in sample_counters. "
-                    f"This indicates a logic error in counter initialization."
-                )
-            current_global_idx = sample_counters[counter_key]
+            buffer_key = f"{split_name}_{segment_length}_{task_type}"
+            if buffer_key not in buffers:
+                buffers[buffer_key] = []
             
-            # Get current total counter for file rotation (across all task types)
-            total_key = f"{split_name}_{segment_length}_total"
-            if total_key not in total_counters:
-                raise KeyError(
-                    f"Missing total counter key '{total_key}' in total_counters. "
-                    f"This indicates a logic error in counter initialization."
-                )
-            current_total_idx = total_counters[total_key]
-            
-            # For all segment lengths, handle file rotation
-            num_saved = self._save_samples_to_multiple_files(
-                split_name=split_name,
-                segment_length=segment_length,
-                task_type=task_type,
+            # Add samples to buffer
+            self._add_samples_to_buffer(
                 segments=segments,
                 task_numbers=task_numbers,
-                split_indices=split_indices,
                 participant_data=participant_data,
-                current_global_idx=current_global_idx,
-                current_total_idx=current_total_idx
+                split_indices=split_indices,
+                buffer=buffers[buffer_key]
             )
             
-            # Update both counters with number of samples saved
-            sample_counters[counter_key] = current_global_idx + num_saved
-            total_counters[total_key] = current_total_idx + num_saved
-            samples_saved[split_name] = num_saved
+            samples_added[split_name] = len(split_indices)
+            
+            # Flush buffer if it reaches SHUFFLE_BUFFER_SIZE
+            if len(buffers[buffer_key]) >= SHUFFLE_BUFFER_SIZE:
+                # Vary random seed per buffer flush for better randomization
+                # Use buffer key hash + flush count to ensure different seeds per flush
+                # Ensure seed is within valid range [0, 2^32 - 1] for numpy RandomState
+                buffer_hash = abs(hash(buffer_key)) % (2**32)
+                flush_count = buffer_flush_counts.get(buffer_key, 0)
+                flush_seed = (random_seed + buffer_hash + flush_count) % (2**32)
+                buffer_flush_counts[buffer_key] = flush_count + 1
+                
+                self._flush_sample_buffer(
+                    buffer=buffers[buffer_key],
+                    split_name=split_name,
+                    segment_length=segment_length,
+                    task_type=task_type,
+                    sample_counters=sample_counters,
+                    total_counters=total_counters,
+                    random_seed=flush_seed
+                )
         
         # Verify all splits are present (should always be the case, but check for logic errors)
-        if 'train' not in samples_saved or 'val' not in samples_saved or 'test' not in samples_saved:
+        if 'train' not in samples_added or 'val' not in samples_added or 'test' not in samples_added:
             raise RuntimeError(
-                f"Missing split in samples_saved: {samples_saved}. "
+                f"Missing split in samples_added: {samples_added}. "
                 f"This indicates a logic error - all splits should always be present."
             )
         
-        return samples_saved['train'], samples_saved['val'], samples_saved['test']
+        return samples_added['train'], samples_added['val'], samples_added['test']
     
     def _save_participant_id_mapping(self, participant_id_to_class_idx: Dict[str, int]) -> None:
         """
@@ -1134,6 +1269,12 @@ class EEGDataPreprocessor:
         sample_counters = {}
         total_counters = {}  # Track total samples per split/segment_length across all task types
         
+        # Initialize buffers for global shuffling (prevents participant-level clustering)
+        # Key format: "{split_name}_{segment_length}_{task_type}"
+        buffers = {}
+        # Track flush count per buffer for seed variation
+        buffer_flush_counts = {}
+        
         for segment_length in SEGMENT_LENGTHS:
             for split_name in SPLIT_NAMES:
                 # Initialize total counter for file rotation (across all task types)
@@ -1149,6 +1290,10 @@ class EEGDataPreprocessor:
                     sample_counters[key] = self._get_current_global_sample_idx_for_task(
                         split_name, segment_length, task_type
                     )
+                    # Initialize buffer for this split/segment_length/task_type
+                    buffers[key] = []
+                    # Initialize flush count for seed variation
+                    buffer_flush_counts[key] = 0
         
         for participant_dir in tqdm(all_participant_dirs, desc="Processing participants", unit="participant"):
             participant_id = participant_dir.name
@@ -1198,7 +1343,9 @@ class EEGDataPreprocessor:
                             test_ratio=test_ratio,
                             random_seed=random_seed,
                             sample_counters=sample_counters,
-                            total_counters=total_counters
+                            total_counters=total_counters,
+                            buffers=buffers,
+                            buffer_flush_counts=buffer_flush_counts
                         )
                     
                     # Split passive task samples
@@ -1227,7 +1374,9 @@ class EEGDataPreprocessor:
                             test_ratio=test_ratio,
                             random_seed=random_seed,
                             sample_counters=sample_counters,
-                            total_counters=total_counters
+                            total_counters=total_counters,
+                            buffers=buffers,
+                            buffer_flush_counts=buffer_flush_counts
                         )
                 
                 processed_count += 1
@@ -1237,6 +1386,37 @@ class EEGDataPreprocessor:
                 import traceback
                 tqdm.write(traceback.format_exc())
                 continue
+        
+        # Flush all remaining buffers (samples that didn't reach SHUFFLE_BUFFER_SIZE)
+        logger.info("Flushing remaining sample buffers with global shuffling...")
+        for buffer_key, buffer in buffers.items():
+            if len(buffer) > 0:
+                # Parse buffer key: "{split_name}_{segment_length}_{task_type}"
+                # Example: "train_4s_active" -> split_name="train", segment_length="4s", task_type="active"
+                parts = buffer_key.split('_')
+                if len(parts) >= 3:
+                    split_name = parts[0]
+                    # segment_length is "1s", "2s", or "4s" (single part)
+                    segment_length = parts[1]
+                    task_type = parts[2]
+                    
+                    # Vary random seed per buffer flush for better randomization
+                    # Use buffer key hash + flush count to ensure different seeds per flush
+                    # Ensure seed is within valid range [0, 2^32 - 1] for numpy RandomState
+                    buffer_hash = abs(hash(buffer_key)) % (2**32)
+                    flush_count = buffer_flush_counts.get(buffer_key, 0)
+                    flush_seed = (random_seed + buffer_hash + flush_count) % (2**32)
+                    buffer_flush_counts[buffer_key] = flush_count + 1
+                    
+                    self._flush_sample_buffer(
+                        buffer=buffer,
+                        split_name=split_name,
+                        segment_length=segment_length,
+                        task_type=task_type,
+                        sample_counters=sample_counters,
+                        total_counters=total_counters,
+                        random_seed=flush_seed
+                    )
         
         # Save participant_id to class_idx mapping
         self._save_participant_id_mapping(participant_id_to_class_idx)
@@ -1249,7 +1429,7 @@ class EEGDataPreprocessor:
         
         logger.info(f"Processing completed! Processed {processed_count} participants.")
         logger.info(f"Total number of user classes: {len(participant_id_to_class_idx)}")
-        logger.info("All splits saved successfully!")
+        logger.info("All splits saved successfully with global shuffling to prevent participant-level clustering!")
     
     def _save_segments_to_hdf5_group(self, group: h5py.Group, eeg_list: List[np.ndarray], 
                                      task_numbers: List[int], participant_data: Dict[str, Any],
