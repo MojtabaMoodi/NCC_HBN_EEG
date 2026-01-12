@@ -175,18 +175,6 @@ class ArcFaceLoss(nn.Module):
         
         return loss
     
-    def get_embeddings(self, embeddings: torch.Tensor) -> torch.Tensor:
-        """
-        Get normalized embeddings (for inference/feature extraction).
-        
-        Args:
-            embeddings: Raw feature embeddings
-            
-        Returns:
-            Normalized embeddings on unit hypersphere
-        """
-        return F.normalize(embeddings, p=2, dim=1)
-    
     def compute_logits(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
         Compute logits from embeddings (for inference).
