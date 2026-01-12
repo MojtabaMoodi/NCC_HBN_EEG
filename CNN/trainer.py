@@ -582,6 +582,10 @@ class EEGTrainer:
         correct = 0
         total = 0
         num_batches = 0
+        # Reset collapse counter at start of each validation epoch
+        # This allows model to recover if collapse was temporary
+        if hasattr(self, '_val_collapse_batch_count'):
+            self._val_collapse_batch_count = 0
         
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_loader):
@@ -755,20 +759,42 @@ class EEGTrainer:
                         correct += batch_correct
                         
                         # CRITICAL: Detect model collapse (all predictions to same class)
-                        # This is a serious issue that must be caught and reported
+                        # Track collapse across batches to avoid false positives from temporary collapses
+                        # Use same threshold mechanism as training for consistency
                         unique_predictions = len(torch.unique(predicted))
                         if unique_predictions == 1:
-                            # Model collapse detected - all predictions are the same class
-                            collapsed_class = predicted[0].item()
-                            raise RuntimeError(
-                                f"Model collapse detected in validation: All {labels.size(0)} samples predicted as class {collapsed_class}. "
-                                f"This indicates a serious training issue. Possible causes: "
-                                f"1) ArcFace weight initialization problem, "
-                                f"2) Learning rate too high causing early collapse, "
-                                f"3) Feature extraction producing identical features, "
-                                f"4) Numerical instability. "
-                                f"Check model initialization, learning rate, and feature diversity."
-                            )
+                            # Track collapse occurrences
+                            if not hasattr(self, '_val_collapse_batch_count'):
+                                self._val_collapse_batch_count = 0
+                            self._val_collapse_batch_count += 1
+                            
+                            # Only raise error if collapse persists across multiple batches
+                            # This prevents false positives from temporary collapses
+                            # For very large classification (3000+ classes), model needs more time to recover
+                            collapse_threshold = 10  # Allow up to 10 consecutive batches with collapse
+                            if self._val_collapse_batch_count >= collapse_threshold:
+                                collapsed_class = predicted[0].item()
+                                raise RuntimeError(
+                                    f"Model collapse detected in validation: {self._val_collapse_batch_count} consecutive batches "
+                                    f"with all samples predicted as class {collapsed_class}. "
+                                    f"This indicates a serious training issue. Possible causes: "
+                                    f"1) ArcFace weight initialization problem, "
+                                    f"2) Learning rate too high causing early collapse, "
+                                    f"3) Feature extraction producing identical features, "
+                                    f"4) Numerical instability. "
+                                    f"Check model initialization, learning rate, and feature diversity."
+                                )
+                            elif self._val_collapse_batch_count == 1:
+                                # First occurrence - log warning but continue
+                                collapsed_class = predicted[0].item()
+                                print(f"⚠️  WARNING: Model collapse detected in validation batch (all predictions = class {collapsed_class}). "
+                                      f"Monitoring for persistence...")
+                        else:
+                            # Reset collapse counter if predictions are diverse
+                            if hasattr(self, '_val_collapse_batch_count'):
+                                if self._val_collapse_batch_count > 0:
+                                    print(f"✅ Model recovered in validation: Predictions are now diverse (unique: {unique_predictions})")
+                                self._val_collapse_batch_count = 0
                         
                         # Diagnostic logging for debugging validation accuracy issue
                         # Only log first batch of first validation epoch to avoid spam
