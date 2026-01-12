@@ -22,13 +22,19 @@ from torch.utils.data import IterableDataset
 # Add the data_processing directory to the path
 sys.path.append(str(Path(__file__).parent.parent / "data_processing"))
 
-from eeg_dataset import EEGDataset, EEGDataLoader
-from target_transforms import (
+from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
+# Import MultiFileEEGDataset for type hints (optional, may not be available)
+try:
+    from data_processing.multi_file_dataset import MultiFileEEGDataset
+except ImportError:
+    MultiFileEEGDataset = None  # type: ignore
+
+from data_processing.target_transforms import (
     age_classification_transform,
     combined_gender_age_classification_transform,
     gender_classification_transform
 )
-from constants import (
+from data_processing.constants import (
     get_stratify_label,
     validate_stratify_by
 )
@@ -37,20 +43,23 @@ class LaBraMEEGDataset(IterableDataset):
     """
     LaBraM-compatible EEG Dataset wrapper.
     
-    This class wraps EEGDataset (IterableDataset) to provide LaBraM's expected interface:
+    This class wraps EEGDataset or MultiFileEEGDataset (IterableDataset) to provide 
+    LaBraM's expected interface:
     - __iter__ returns (X, Y) tuples instead of dictionaries
     - X is the EEG data tensor
     - Y is the label (int for single classification, tuple for multi-output)
+    
+    Works with both single-file EEGDataset and multi-file MultiFileEEGDataset instances.
     """
     
     def __init__(self, 
-                 eeg_dataset: EEGDataset,
+                 eeg_dataset: Union[EEGDataset, Any],  # Can be EEGDataset or MultiFileEEGDataset
                  sampling_rate: int = 200):
         """
         Initialize the LaBraM EEG Dataset wrapper.
         
         Args:
-            eeg_dataset: EEGDataset instance to wrap
+            eeg_dataset: EEGDataset or MultiFileEEGDataset instance to wrap
             sampling_rate: Sampling rate for resampling (default: 200 Hz)
         """
         super().__init__()
@@ -238,42 +247,49 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
     target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
     
     # Get HDF5 file paths
+    # Note: For 1s segments, this returns lists of files. For 2s/4s, returns single files.
     hdf5_dir_path = Path(hdf5_dir)
-    train_file, val_file, test_file = EEGDataLoader._get_hdf5_file_paths(
+    train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
         hdf5_dir_path, segment_length
     )
-    EEGDataLoader._verify_hdf5_files(train_file, val_file, test_file)
+    EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
     
-    # Create EEGDataset instances from pre-split HDF5 files
-    # Note: HDF5 files are already split into train/val/test, so no participant filtering needed
-    train_eeg_dataset = EEGDataset(
-        hdf5_file=str(train_file),
+    # Handle both single files and lists of files (for 1s segments with multi-file HDF5)
+    # Use _create_dataset_from_hdf5 which handles both cases automatically
+    train_eeg_dataset = EEGDataLoader._create_dataset_from_hdf5(
+        hdf5_file_or_files=train_files,
         task_type=task_type,
         target_type=target_type,
+        transform=None,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
+        user_identification_transform=None,
         shuffle=True,  # Shuffle training data
         random_seed=random_seed
     )
     
-    val_eeg_dataset = EEGDataset(
-        hdf5_file=str(val_file),
+    val_eeg_dataset = EEGDataLoader._create_dataset_from_hdf5(
+        hdf5_file_or_files=val_files,
         task_type=task_type,
         target_type=target_type,
+        transform=None,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
+        user_identification_transform=None,
         shuffle=False  # Don't shuffle validation data
     )
     
-    test_eeg_dataset = EEGDataset(
-        hdf5_file=str(test_file),
+    test_eeg_dataset = EEGDataLoader._create_dataset_from_hdf5(
+        hdf5_file_or_files=test_files,
         task_type=task_type,
         target_type=target_type,
+        transform=None,
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
+        user_identification_transform=None,
         shuffle=False  # Don't shuffle test data
     )
     
