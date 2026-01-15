@@ -290,9 +290,16 @@ class Experiment:
         self._create_data_loaders()
         
         # Create model using ModelFactory
+        model_kwargs = self.config.model_config.to_dict()
+        
+        # Handle LaBraM checkpoint if specified
+        if self.config.model_type == 'user_identification_labram':
+            if hasattr(self.config.model_config, 'labram_checkpoint'):
+                model_kwargs['pretrained_path'] = self.config.model_config.labram_checkpoint
+        
         self.model = ModelFactory.create_model(
             self.config.model_type,
-            **self.config.model_config.to_dict()
+            **model_kwargs
         )
         
         # Create trainer
