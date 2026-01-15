@@ -41,8 +41,11 @@ TASK_TYPES = ['active', 'passive']
 # Maximum samples per file to prevent HDF5 B-tree performance degradation
 # For all segment lengths, we split into multiple files when needed
 MAX_SAMPLES_PER_FILE = 100000  # ~100K samples per file for optimal performance
-SHUFFLE_BUFFER_SIZE = 25000  # Buffer size for global shuffling (25K samples = ~4.5GB for 4s segments)
-# Reduced from 100K to 25K to prevent OOM while still providing good global shuffling
+SHUFFLE_BUFFER_SIZE = 10000  # Buffer size for global shuffling (10K samples = ~1.8GB for 4s segments)
+# Reduced to 10K to prevent OOM - still provides good global shuffling with ~32GB worst case
+# Flush threshold: flush when buffer reaches 80% capacity to prevent accumulation
+SHUFFLE_BUFFER_FLUSH_THRESHOLD = int(SHUFFLE_BUFFER_SIZE * 0.8)  # Flush at 80% to be more aggressive
+PERIODIC_FLUSH_INTERVAL = 100  # Flush all buffers every N participants to prevent accumulation
 
 class EEGDataPreprocessor:
     """Class to handle EEG data preprocessing and organization."""
@@ -1044,8 +1047,9 @@ class EEGDataPreprocessor:
             
             samples_added[split_name] = len(split_indices)
             
-            # Flush buffer if it reaches SHUFFLE_BUFFER_SIZE
-            if len(buffers[buffer_key]) >= SHUFFLE_BUFFER_SIZE:
+            # Flush buffer if it reaches flush threshold (80% of SHUFFLE_BUFFER_SIZE)
+            # This prevents buffer accumulation and reduces memory pressure
+            if len(buffers[buffer_key]) >= SHUFFLE_BUFFER_FLUSH_THRESHOLD:
                 # Vary random seed per buffer flush for better randomization
                 # Use buffer key hash + flush count to ensure different seeds per flush
                 # Ensure seed is within valid range [0, 2^32 - 1] for numpy RandomState
@@ -1380,6 +1384,36 @@ class EEGDataPreprocessor:
                         )
                 
                 processed_count += 1
+                
+                # Periodic buffer flushing to prevent memory accumulation
+                # Flush all buffers every PERIODIC_FLUSH_INTERVAL participants
+                if processed_count % PERIODIC_FLUSH_INTERVAL == 0:
+                    logger.info(f"Periodic buffer flush at participant {processed_count}/{total_participants}...")
+                    for buffer_key, buffer in buffers.items():
+                        if len(buffer) > 0:
+                            # Parse buffer key
+                            parts = buffer_key.split('_')
+                            if len(parts) >= 3:
+                                split_name = parts[0]
+                                segment_length = parts[1]
+                                task_type = parts[2]
+                                
+                                # Flush with varied seed
+                                buffer_hash = abs(hash(buffer_key)) % (2**32)
+                                flush_count = buffer_flush_counts.get(buffer_key, 0)
+                                flush_seed = (random_seed + buffer_hash + flush_count) % (2**32)
+                                buffer_flush_counts[buffer_key] = flush_count + 1
+                                
+                                self._flush_sample_buffer(
+                                    buffer=buffer,
+                                    split_name=split_name,
+                                    segment_length=segment_length,
+                                    task_type=task_type,
+                                    sample_counters=sample_counters,
+                                    total_counters=total_counters,
+                                    random_seed=flush_seed
+                                )
+                    logger.info(f"Periodic flush completed. Processed {processed_count} participants so far.")
                 
             except Exception as e:
                 tqdm.write(f"Error processing participant {participant_id}: {e}")
