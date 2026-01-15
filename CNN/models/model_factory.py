@@ -7,6 +7,32 @@ from typing import Dict, Any, Type
 from .base_model import BaseEEGCNN
 from .model import EEGCNN, EEGGenderCNN, EEGAgeCNN, CombinedCNN, MultiOutputCNN, EEGAgeRegressionCNN, EEGUserIdentificationCNN
 
+# Import LaBraM wrapper (optional - only if LaBraM is available)
+# Import from user_identification directory
+try:
+    import sys
+    import importlib.util
+    from pathlib import Path
+    _user_id_dir = Path(__file__).parent.parent.parent / "user_identification"
+    _labram_model_path = _user_id_dir / "labram_model.py"
+    
+    if _labram_model_path.exists():
+        # Use importlib to explicitly load the module
+        spec = importlib.util.spec_from_file_location("labram_model", _labram_model_path)
+        labram_model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(labram_model)
+        LaBraMUserIdentificationWrapper = labram_model.LaBraMUserIdentificationWrapper
+        LABRAM_AVAILABLE = True
+    else:
+        # Fallback: try direct import if path is set
+        if str(_user_id_dir) not in sys.path:
+            sys.path.insert(0, str(_user_id_dir))
+        from labram_model import LaBraMUserIdentificationWrapper  # type: ignore
+        LABRAM_AVAILABLE = True
+except ImportError:
+    LaBraMUserIdentificationWrapper = None
+    LABRAM_AVAILABLE = False
+
 # Import ResNet models
 # Use absolute import from CNN directory
 # ResNet module is required - raise error if not available
@@ -41,6 +67,10 @@ class ModelFactory:
         'multi_output_cnn': MultiOutputCNN, # Multi-output model (2 heads: gender + age)
         'user_identification_cnn': EEGUserIdentificationCNN,  # User identification (N classes = number of participants)
     }
+    
+    # Add LaBraM models if available
+    if LABRAM_AVAILABLE and LaBraMUserIdentificationWrapper is not None:
+        _models['user_identification_labram'] = LaBraMUserIdentificationWrapper  # LaBraM for user identification
     
     @classmethod
     def _get_models_dict(cls) -> Dict[str, Type[BaseEEGCNN]]:
