@@ -177,16 +177,42 @@ class EEGUserIdentificationCNN(EEGCNN):
         
         # Override FC layers with larger capacity for large classification tasks
         # Original: 256 -> 64 -> num_classes (too small bottleneck for 3000+ classes)
-        # Previous: 256 -> 512 -> 256 -> num_classes (still insufficient for 3145 classes)
-        # New: 256 -> 1024 -> 512 -> num_classes (increased capacity for better learning)
+        # Previous: 256 -> 2048 -> 1024 -> num_classes (insufficient for 3145 classes)
+        # New: 512 -> 2048 -> 1024 -> num_classes (increased capacity with deeper conv layers)
         # This provides more representational power for distinguishing between 3145 users
-        self.fc1 = nn.Linear(256, 1024)
-        self.fc2_intermediate = nn.Linear(1024, 512)
+        # Embedding dimension of 1024 is recommended for 3000+ classes
+        # Note: Input to FC is now 512 (from deeper conv layers) instead of 256
+        self.fc1 = nn.Linear(512, 2048)
+        self.fc2_intermediate = nn.Linear(2048, 1024)
         self.dropout = nn.Dropout(dropout_rate)
-        self.fc2 = nn.Linear(512, num_classes)
+        self.fc2 = nn.Linear(1024, num_classes)
         
         # Initialize weights properly for large classification
         self._initialize_weights()
+    
+    def _build_conv_layers(self) -> nn.ModuleList:
+        """
+        Build deeper convolutional layers for user identification.
+        
+        For 3145 classes, we need deeper feature extraction to learn
+        discriminative features for each user. This adds 2 more layers
+        compared to the base model.
+        
+        Architecture: 1->16->32->64->128->128->256->256->256->512->512
+        """
+        return nn.ModuleList([
+            nn.Conv2d(1, 16, kernel_size=(self.num_channels, 3)),
+            nn.Conv2d(16, 32, kernel_size=(1, 3)),
+            nn.Conv2d(32, 64, kernel_size=(1, 3)),
+            nn.Conv2d(64, 128, kernel_size=(1, 3)),
+            nn.Conv2d(128, 128, kernel_size=(1, 3)),
+            nn.Conv2d(128, 256, kernel_size=(1, 3)),
+            nn.Conv2d(256, 256, kernel_size=(1, 3)),
+            nn.Conv2d(256, 256, kernel_size=(1, 3)),
+            # Additional layers for deeper feature extraction
+            nn.Conv2d(256, 512, kernel_size=(1, 3)),
+            nn.Conv2d(512, 512, kernel_size=(1, 3))
+        ])
     
     def _initialize_weights(self):
         """
@@ -207,7 +233,7 @@ class EEGUserIdentificationCNN(EEGCNN):
                     fan_in = m.weight.size(1)
                     fan_out = m.weight.size(0)
                     # Xavier init: std = sqrt(2.0 / (fan_in + fan_out))
-                    # For 512 -> 3145: std ≈ sqrt(2.0 / (512 + 3145)) ≈ 0.023
+                    # For 1024 -> 3145: std ≈ sqrt(2.0 / (1024 + 3145)) ≈ 0.021
                     # Scale up significantly for large classification to prevent numerical issues
                     # Target: logits in range [-1, 1] to avoid extreme softmax values
                     # With 3145 classes, we need logits large enough that softmax probabilities
@@ -230,16 +256,16 @@ class EEGUserIdentificationCNN(EEGCNN):
         Apply fully connected layers with increased capacity for user identification.
         
         Args:
-            x: Input tensor of shape (batch_size, 256)
+            x: Input tensor of shape (batch_size, 512)
             
         Returns:
             Output tensor of shape (batch_size, num_classes)
         """
-        x = F.relu(self.fc1(x))  # 256 -> 1024
+        x = F.relu(self.fc1(x))  # 512 -> 2048
         x = self.dropout(x)
-        x = F.relu(self.fc2_intermediate(x))  # 1024 -> 512
+        x = F.relu(self.fc2_intermediate(x))  # 2048 -> 1024
         x = self.dropout(x)
-        x = self.fc2(x)  # 512 -> num_classes
+        x = self.fc2(x)  # 1024 -> num_classes
         return x
     
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
@@ -251,23 +277,23 @@ class EEGUserIdentificationCNN(EEGCNN):
             x: Input tensor of shape (batch_size, num_channels, sequence_length)
             
         Returns:
-            Feature embeddings of shape (batch_size, 512)
+            Feature embeddings of shape (batch_size, 1024)
             (output of fc2_intermediate, before fc2)
         """
         x = self._preprocess_input(x)
         x = self._apply_conv_layers(x)
         
         # Global average pooling across spatial dimensions
-        x = F.adaptive_avg_pool2d(x, (1, 1))  # (batch, 256, 1, 1)
-        x = x.view(x.size(0), -1)             # (batch, 256)
+        x = F.adaptive_avg_pool2d(x, (1, 1))  # (batch, 512, 1, 1)
+        x = x.view(x.size(0), -1)             # (batch, 512)
         
         # Apply FC layers up to (but not including) final classification layer
-        x = F.relu(self.fc1(x))  # 256 -> 1024
+        x = F.relu(self.fc1(x))  # 512 -> 2048
         # CRITICAL: Apply dropout only in training mode to ensure feature diversity
         # In eval mode, dropout is disabled, which can cause features to be too similar
         # and lead to model collapse (all predictions to same class)
         x = self.dropout(x)
-        x = F.relu(self.fc2_intermediate(x))  # 1024 -> 512
+        x = F.relu(self.fc2_intermediate(x))  # 2048 -> 1024
         # Note: We don't apply dropout after fc2_intermediate to preserve feature information
         # The dropout after fc1 is sufficient for regularization
         
