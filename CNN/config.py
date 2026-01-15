@@ -82,11 +82,11 @@ class TrainingConfig:
     
     # ArcFace-specific learning rate multiplier
     # ArcFace is more sensitive to learning rate than CrossEntropyLoss
-    # DIAGNOSIS: LR of 0.00001 was TOO LOW - model couldn't learn effectively
-    # Increased from 0.01 to 0.1 to allow meaningful weight updates
-    # This results in effective LR of 0.0001 after warmup (0.001 * 0.1)
-    # Still conservative but allows model to actually learn discriminative features
-    arcface_lr_multiplier: float = 0.1  # Multiply base LR by this for ArcFace (default: 0.1 for large-scale classification)
+    # DIAGNOSIS: LR of 0.00005 (0.5 multiplier) caused model collapse in epoch 5
+    # Reduced to 0.3 to prevent collapse while still allowing meaningful learning
+    # This results in effective LR of 0.00003 after warmup (0.0001 * 0.3)
+    # Balanced between learning speed and stability for 3145 classes
+    arcface_lr_multiplier: float = 0.3  # Multiply base LR by this for ArcFace (default: 0.3 for very large-scale classification)
     
     # Gradient clipping for training stability
     # Prevents exploding gradients, especially important for large-scale classification
@@ -98,9 +98,9 @@ class TrainingConfig:
     # Learning rate warmup for stable training
     # Gradually increases learning rate from 0 to target LR over warmup_epochs
     # This prevents large gradient updates in early epochs that can cause collapse
-    # DIAGNOSIS: 12 epochs was too long - reduced to 8 for faster ramp-up
-    # With higher LR (0.0001), we can afford faster warmup
-    warmup_epochs: int = 8  # Number of epochs for warmup (default: 8 for large-scale classification)
+    # DIAGNOSIS: 8 epochs was too short - increased to 10 for more gradual ramp-up
+    # With deeper model and 3145 classes, we need more gradual warmup to prevent collapse
+    warmup_epochs: int = 10  # Number of epochs for warmup (default: 10 for very large-scale classification)
     
     # Optimizer hyperparameters
     weight_decay: float = 0.0  # L2 regularization (default: 0.0, set to 1e-4 for user identification)
@@ -116,10 +116,11 @@ class TrainingConfig:
     
     # ArcFace hyperparameters (for very large classification: num_classes > 2000)
     arcface_margin: float = 0.5  # Angular margin in radians (~28.6 degrees)
-    # DIAGNOSIS: Scale of 32.0 was TOO LOW - insufficient discrimination power for 3145 classes
-    # Increased back to standard 64.0 for proper discrimination
-    # Standard ArcFace uses 64.0, which is proven effective for large-scale classification
-    arcface_scale: float = 64.0  # Feature scale parameter (standard value for ArcFace)
+    # DIAGNOSIS: Scale of 64.0 was insufficient for 3145 classes
+    # With loss decreasing but accuracy near zero, model can't discriminate between classes
+    # Increased to 128.0 for better discrimination power (2x increase)
+    # Higher scale makes logits larger, softmax probabilities more peaked, better discrimination
+    arcface_scale: float = 128.0  # Feature scale parameter (increased for very large-scale classification)
     arcface_easy_margin: bool = False  # Whether to use easier margin computation
     
     # Numerical stability hyperparameters
