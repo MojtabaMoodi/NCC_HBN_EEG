@@ -3,8 +3,8 @@
 #SBATCH --partition=gpubase_l40s_b5
 #SBATCH --time=4-10:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=40
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=10
 #SBATCH --mem=128G
 #SBATCH --gres=gpu:l40s:4
 #SBATCH --job-name=user_id_4s
@@ -53,24 +53,65 @@ cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG
 # Create logs directory if it doesn't exist
 mkdir -p ./logs/slurm
 
-# Run the user identification training script
+# Run the LaBraM user identification training script with ArcFace
 echo "=========================================="
-echo "Starting User Identification Training: 4s mode"
+echo "Starting LaBraM User Identification Training: 4s mode with ArcFace"
 echo "=========================================="
 echo ""
-echo "Command: python user_identification/main.py --mode 4s --model both --epochs 50 --learning_rate 0.0001 --num_gpus 4 --results_dir results_user_id_4s --reports_dir reports_user_id_4s --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification --labram_checkpoint /path/to/pretrained_labram.pth"
+echo "Command: python user_identification/train_labram_arcface.py --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification --segment_length 4s --pretrained_path LaBraM/checkpoints/labram-base.pth --epochs 50 --lr 5e-4 --batch_size 192 --output_dir ./results_user_id_4s_labram_arcface"
 echo ""
 
-python user_identification/main.py \
-    --mode 4s \
-    --model labram \
-    --epochs 50 \
-    --learning_rate 0.0001 \
-    --num_gpus 4 \
-    --results_dir results_user_id_4s_labram \
-    --reports_dir reports_user_id_4s_labram \
+# Set up distributed training environment variables
+export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+export MASTER_PORT=29500
+
+# Calculate WORLD_SIZE: if SLURM_NTASKS is not set, use ntasks-per-node * nnodes
+if [ -z "$SLURM_NTASKS" ] || [ "$SLURM_NTASKS" = "" ]; then
+    # Calculate from ntasks-per-node and number of nodes
+    export WORLD_SIZE=$((SLURM_NTASKS_PER_NODE * SLURM_NNODES))
+else
+    export WORLD_SIZE=$SLURM_NTASKS
+fi
+
+# Ensure WORLD_SIZE is set (fallback to 4 if still empty)
+if [ -z "$WORLD_SIZE" ] || [ "$WORLD_SIZE" = "" ]; then
+    export WORLD_SIZE=4
+fi
+
+export RANK=$SLURM_PROCID
+export LOCAL_RANK=$SLURM_LOCALID
+
+# Debug: Print environment variables
+echo "Distributed Training Environment:"
+echo "  MASTER_ADDR=$MASTER_ADDR"
+echo "  MASTER_PORT=$MASTER_PORT"
+echo "  WORLD_SIZE=$WORLD_SIZE"
+echo "  RANK=$RANK"
+echo "  LOCAL_RANK=$LOCAL_RANK"
+echo "  SLURM_NTASKS=$SLURM_NTASKS"
+echo "  SLURM_NTASKS_PER_NODE=$SLURM_NTASKS_PER_NODE"
+echo "  SLURM_NNODES=$SLURM_NNODES"
+echo ""
+
+# Run with distributed training
+srun python user_identification/train_labram_arcface.py \
     --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification \
-    --labram_checkpoint LaBraM/checkpoints/labram-base.pth
+    --segment_length 4s \
+    --pretrained_path LaBraM/checkpoints/labram-base.pth \
+    --epochs 50 \
+    --lr 5e-4 \
+    --batch_size 192 \
+    --num_workers 8 \
+    --layer_decay 0.9 \
+    --weight_decay 0.05 \
+    --warmup_epochs 10 \
+    --clip_grad 0.2 \
+    --arcface_margin 0.5 \
+    --arcface_scale 256.0 \
+    --output_dir ./results_user_id_4s_labram_arcface \
+    --save_ckpt_freq 5 \
+    --seed 42 \
+    --distributed
 
 echo ""
 echo "=========================================="
