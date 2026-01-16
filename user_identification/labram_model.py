@@ -27,17 +27,19 @@ if str(_labram_dir) not in sys.path:
 
 try:
     from timm.models import create_model
-    # Import LaBraM modules (they're not a package, so we import directly after adding to path)
-    import importlib.util
-    _modeling_finetune_path = _labram_dir / "modeling_finetune.py"
-    if _modeling_finetune_path.exists():
-        spec = importlib.util.spec_from_file_location("modeling_finetune", _modeling_finetune_path)
-        modeling_finetune = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modeling_finetune)
-        NeuralTransformer = modeling_finetune.NeuralTransformer
-    else:
-        # Fallback to direct import (works when LaBraM is in path)
-        from modeling_finetune import NeuralTransformer  # type: ignore
+    # Import LaBraM modules directly (LaBraM directory is already in sys.path)
+    # We need to import modeling_finetune as a module so timm's registry works correctly
+    import importlib
+    import sys
+    
+    # Add LaBraM to sys.path if not already there (redundant but safe)
+    if str(_labram_dir) not in sys.path:
+        sys.path.insert(0, str(_labram_dir))
+    
+    # Import modeling_finetune as a proper module (not via importlib.util)
+    # This ensures timm's model registry can find it
+    import modeling_finetune  # type: ignore
+    NeuralTransformer = modeling_finetune.NeuralTransformer
     
     import utils as labram_utils  # type: ignore
 except ImportError as e:
@@ -112,9 +114,13 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         
         self.patch_size = patch_size
         self.model_name = model_name
+        self.embed_dim = embed_dim  # Store embed_dim for later use
         
         # Create LaBraM model using timm's create_model
         # multi_output=False for single classification head (user identification)
+        # Note: patch_size, embed_dim, depth, num_heads, mlp_ratio are already set by the model factory
+        # (e.g., labram_base_patch200_200 sets patch_size=200, embed_dim=200, depth=12, etc.)
+        # Only pass parameters that override the defaults or are not set by the factory
         self.labram_model = create_model(
             model_name,
             pretrained=False,
@@ -130,11 +136,8 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
             qkv_bias=False,  # Disable QKV bias (standard for LaBraM)
             multi_output=False,  # Single output for user identification
             EEG_size=None,  # Will be determined from input
-            patch_size=patch_size,
-            embed_dim=embed_dim,
-            depth=depth,
-            num_heads=num_heads,
-            mlp_ratio=mlp_ratio
+            # Don't pass patch_size, embed_dim, depth, num_heads, mlp_ratio here
+            # as they're already set by the model factory function (e.g., labram_base_patch200_200)
         )
         
         # Load pre-trained weights if provided
@@ -147,6 +150,39 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         
         # Store num_classes for compatibility
         self.num_classes = num_classes
+        
+        # Add a projection layer to make features more discriminative
+        # LaBraM's raw features might be too similar, so we add a learnable projection
+        # This helps ArcFace distinguish between different classes
+        # Use a larger embedding dimension for better discrimination (2x embed_dim)
+        projection_dim = embed_dim * 2  # 400 for embed_dim=200
+        self.feature_projection = nn.Sequential(
+            nn.Linear(embed_dim, projection_dim),
+            nn.LayerNorm(projection_dim),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(projection_dim, projection_dim),
+            nn.LayerNorm(projection_dim)
+        )
+        
+        # Initialize projection layers with proper weight initialization
+        # This is critical - poor initialization can prevent the layer from learning
+        for module in self.feature_projection:
+            if isinstance(module, nn.Linear):
+                # Use Xavier uniform initialization for better gradient flow
+                nn.init.xavier_uniform_(module.weight, gain=1.0)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
+        
+        # Add compatibility attribute for ArcFace loss
+        # The trainer expects fc2_intermediate.out_features to get embedding dimension
+        # Use projection_dim as the feature dimension for ArcFace
+        class EmbeddingDimension:
+            """Dummy class to provide out_features attribute for ArcFace compatibility."""
+            def __init__(self, dim):
+                self.out_features = dim
+        
+        self.fc2_intermediate = EmbeddingDimension(projection_dim)
     
     def _compute_input_chans(self) -> List[int]:
         """
@@ -174,7 +210,11 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
             checkpoint_path: Path to pre-trained checkpoint file
         """
         try:
-            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            # Suppress FutureWarning about weights_only (we trust our own checkpoints)
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning, message=".*weights_only.*")
+                checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
             
             # Handle different checkpoint formats
             if 'model' in checkpoint:
@@ -230,14 +270,21 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         Forward pass through LaBraM model.
         
         Args:
-            x: Input tensor of shape [batch_size, num_channels, sequence_length]
+            x: Input tensor of shape [batch_size, num_channels, sequence_length] 
+               or [batch_size, num_channels, num_patches, patch_size] (already reshaped)
             input_chans: Optional channel indices (if None, uses self.input_chans)
             
         Returns:
             Output tensor of shape [batch_size, num_classes]
         """
-        # Reshape input to LaBraM format
-        x = self._reshape_input_for_labram(x)
+        # Reshape input to LaBraM format if needed
+        # Check if already in LaBraM format [B, N, A, T]
+        if x.dim() == 4 and x.shape[2] > 1:
+            # Already in LaBraM format
+            pass
+        else:
+            # Need to reshape
+            x = self._reshape_input_for_labram(x)
         
         # Use provided input_chans or default
         if input_chans is None:
@@ -248,30 +295,49 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         
         return output
     
-    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
+    def extract_features(self, x: torch.Tensor, input_chans: Optional[List[int]] = None) -> torch.Tensor:
         """
         Extract feature embeddings before the final classification layer.
         This is used for ArcFace loss, which requires normalized features.
         
         Args:
             x: Input tensor of shape [batch_size, num_channels, sequence_length]
+               or [batch_size, num_channels, num_patches, patch_size] (already reshaped)
+            input_chans: Optional channel indices (if None, uses self.input_chans)
             
         Returns:
-            Feature embeddings of shape [batch_size, embed_dim]
+            Feature embeddings of shape [batch_size, projection_dim]
         """
-        # Reshape input to LaBraM format
-        x = self._reshape_input_for_labram(x)
+        # Reshape input to LaBraM format if needed
+        if x.dim() == 4 and x.shape[2] > 1:
+            # Already in LaBraM format
+            pass
+        else:
+            x = self._reshape_input_for_labram(x)
+        
+        # Use provided input_chans or default
+        if input_chans is None:
+            input_chans = self.input_chans
         
         # Extract features (before classification head)
         features = self.labram_model.forward_features(
             x, 
-            input_chans=self.input_chans,
+            input_chans=input_chans,
             return_patch_tokens=False,
             return_all_tokens=False
         )
         
-        # Features shape: [batch_size, embed_dim]
+        # Normalize raw features first to prevent extreme values
+        features = torch.nn.functional.normalize(features, p=2, dim=1)
+        
+        # Apply projection to make features more discriminative
+        features = self.feature_projection(features)
+        
+        # Normalize projected features for ArcFace
+        features = torch.nn.functional.normalize(features, p=2, dim=1)
+        
         return features
+    
     
     def _build_conv_layers(self) -> nn.ModuleList:
         """
