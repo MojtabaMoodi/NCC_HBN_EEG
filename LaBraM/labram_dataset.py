@@ -141,6 +141,15 @@ class LaBraMEEGDataset(IterableDataset):
             gender_label = sample['gender']
             age_label = sample['age']
             return (gender_label, age_label)
+        elif self.target_type == "user_identification":
+            # User identification: EEGDataset already applied user_identification_transform
+            if 'user_identification' in sample:
+                return sample['user_identification']
+            else:
+                raise ValueError(
+                    "user_identification label not found in sample. "
+                    "Ensure target_type is 'user_identification' and user_identification_transform is provided when creating EEGDataset."
+                )
         else:
             raise ValueError(f"Unknown target_type: {self.target_type}")
     
@@ -224,6 +233,7 @@ def _split_participants(participants: List[str],
 def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str = "1s",
                           task_type: str = "both",
                           random_seed: int = 42,
+                          user_identification_transform=None,
                           **kwargs) -> Tuple[LaBraMEEGDataset, LaBraMEEGDataset, LaBraMEEGDataset]:
     """
     Prepare LaBraM-compatible datasets for training, validation, and testing using HDF5 files.
@@ -244,7 +254,16 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
     """
     
     # Get dataset configuration
-    target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
+    if dataset_type == "user_identification":
+        # Special case for user identification
+        target_type = "user_identification"
+        gender_transform = None
+        age_transform = None
+        combined_transform = None
+        if user_identification_transform is None:
+            raise ValueError("user_identification_transform is required for user_identification dataset_type")
+    else:
+        target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
     
     # Get HDF5 file paths
     # Note: For 1s segments, this returns lists of files. For 2s/4s, returns single files.
@@ -253,6 +272,16 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
         hdf5_dir_path, segment_length
     )
     EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
+    
+    # DIAGNOSTIC: Log file discovery
+    import logging
+    logger = logging.getLogger(__name__)
+    if isinstance(train_files, (list, tuple)):
+        logger.info(f"📁 Found {len(train_files)} training file(s) for {segment_length} segments:")
+        for i, f in enumerate(train_files):
+            logger.info(f"   [{i}] {Path(f).name}")
+    else:
+        logger.info(f"📁 Found 1 training file for {segment_length} segments: {Path(train_files).name}")
     
     # Handle both single files and lists of files (for 1s segments with multi-file HDF5)
     # Use _create_dataset_from_hdf5 which handles both cases automatically
@@ -264,7 +293,7 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        user_identification_transform=None,
+        user_identification_transform=user_identification_transform,
         shuffle=True,  # Shuffle training data
         random_seed=random_seed
     )
@@ -277,7 +306,7 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        user_identification_transform=None,
+        user_identification_transform=user_identification_transform,
         shuffle=False  # Don't shuffle validation data
     )
     
@@ -289,7 +318,7 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
         gender_transform=gender_transform,
         age_transform=age_transform,
         combined_transform=combined_transform,
-        user_identification_transform=None,
+        user_identification_transform=user_identification_transform,
         shuffle=False  # Don't shuffle test data
     )
     
