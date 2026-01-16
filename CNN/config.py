@@ -82,10 +82,10 @@ class TrainingConfig:
     
     # ArcFace-specific learning rate multiplier
     # ArcFace is more sensitive to learning rate than CrossEntropyLoss
-    # DIAGNOSIS: LR of 0.00005 (0.5 multiplier) caused model collapse in epoch 5
-    # Reduced to 0.3 to prevent collapse while still allowing meaningful learning
+    # DIAGNOSIS: LR of 0.00005 (0.5 multiplier) caused model collapse in epoch 18
+    # Reduced to 0.3 to prevent collapse while still allowing learning
     # This results in effective LR of 0.00003 after warmup (0.0001 * 0.3)
-    # Balanced between learning speed and stability for 3145 classes
+    # Lower LR helps prevent collapse but may slow convergence
     arcface_lr_multiplier: float = 0.3  # Multiply base LR by this for ArcFace (default: 0.3 for very large-scale classification)
     
     # Gradient clipping for training stability
@@ -116,11 +116,12 @@ class TrainingConfig:
     
     # ArcFace hyperparameters (for very large classification: num_classes > 2000)
     arcface_margin: float = 0.5  # Angular margin in radians (~28.6 degrees)
-    # DIAGNOSIS: Scale of 64.0 was insufficient for 3145 classes
-    # With loss decreasing but accuracy near zero, model can't discriminate between classes
-    # Increased to 128.0 for better discrimination power (2x increase)
+    # DIAGNOSIS: Scale of 128.0 was insufficient for 3145 classes
+    # With loss decreasing but accuracy near zero, logits were too small, softmax too flat
+    # Increased to 256.0 for better discrimination power (2x increase from 128.0)
     # Higher scale makes logits larger, softmax probabilities more peaked, better discrimination
-    arcface_scale: float = 128.0  # Feature scale parameter (increased for very large-scale classification)
+    # This should help model make more confident predictions and improve accuracy
+    arcface_scale: float = 256.0  # Feature scale parameter (increased for very large-scale classification)
     arcface_easy_margin: bool = False  # Whether to use easier margin computation
     
     # Numerical stability hyperparameters
