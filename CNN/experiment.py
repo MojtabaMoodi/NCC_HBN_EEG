@@ -15,11 +15,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from models import ModelFactory
-from trainer import EEGTrainer
-from evaluator import EEGEvaluator, EvaluationResults
-from config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
-from utils import safe_json_dump, convert_numpy_types
+from CNN.models import ModelFactory
+from CNN.trainer import EEGTrainer
+from CNN.evaluator import EEGEvaluator, EvaluationResults
+from CNN.config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
+from CNN.utils import safe_json_dump, convert_numpy_types
 
 from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
 from data_processing.target_transforms import (

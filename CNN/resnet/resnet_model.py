@@ -12,7 +12,7 @@ import os
 
 # Add parent directory to path to import base model
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.base_model import BaseEEGCNN
+from CNN.models.base_model import BaseEEGCNN
 
 
 class BasicBlock(nn.Module):

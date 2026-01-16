@@ -17,13 +17,13 @@ from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score
 )
 
-from models import BaseEEGCNN
+from CNN.models import BaseEEGCNN
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
 from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
-from utils import safe_json_dump, convert_numpy_types
+from CNN.utils import safe_json_dump, convert_numpy_types
 from gpu_utils import get_underlying_model as gpu_get_underlying_model, get_device
 
 class EvaluationResults:
