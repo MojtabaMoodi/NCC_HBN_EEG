@@ -12,6 +12,7 @@ CNN/report_4s/*
 CNN/results_1s/*
 CNN/results_2s/*
 CNN/results_4s/*
+CNN/resnet/__pycache__/*
 data_processing/__pycache__/*
 data_processing/processed_eeg_data*
 LaBraM/__pycache__/*
