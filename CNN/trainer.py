@@ -16,13 +16,13 @@ from torch.utils.data import DataLoader
 import numpy as np
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-from models import BaseEEGCNN
-from models.arcface_loss import ArcFaceLoss
+from CNN.models import BaseEEGCNN
+from CNN.models.arcface_loss import ArcFaceLoss
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
-from utils import safe_json_dump, convert_numpy_types
-from config import TrainingConfig
-from gpu_utils import (
+from CNN.utils import safe_json_dump, convert_numpy_types
+from CNN.config import TrainingConfig
+from CNN.gpu_utils import (
     get_device, determine_num_gpus_to_use, setup_model_for_gpus,
     get_underlying_model as gpu_get_underlying_model, print_gpu_info
 )
@@ -802,6 +802,21 @@ class EEGTrainer:
                             batch_idx == 0 and 
                             self.use_arcface):
                             self._val_diagnostic_logged = True
+                            # Extract features for diagnostic
+                            with torch.no_grad():
+                                features = self._get_underlying_model().extract_features(inputs)
+                                # Check feature statistics
+                                feature_norm = torch.norm(features, p=2, dim=1)
+                                feature_mean_norm = feature_norm.mean().item()
+                                feature_std_norm = feature_norm.std().item()
+                                # Check feature diversity (how different features are)
+                                feature_cosine = torch.nn.functional.cosine_similarity(
+                                    features.unsqueeze(1), features.unsqueeze(0), dim=2
+                                )
+                                # Remove diagonal (self-similarity)
+                                mask = ~torch.eye(feature_cosine.size(0), dtype=torch.bool, device=feature_cosine.device)
+                                feature_similarity_mean = feature_cosine[mask].mean().item()
+                            
                             print(f"\n🔍 Validation Diagnostic (first batch, epoch 1):")
                             print(f"   Batch size: {labels.size(0)}")
                             print(f"   Outputs shape: {outputs.shape}, dtype: {outputs.dtype}")
@@ -813,6 +828,12 @@ class EEGTrainer:
                             top_pred = unique_preds[counts.argmax()].item()
                             top_count = counts.max().item()
                             print(f"   Most common prediction: class {top_pred} ({top_count}/{labels.size(0)} = {top_count/labels.size(0)*100:.2f}%)")
+                            print(f"   📊 Feature Quality:")
+                            print(f"      Feature norm: mean={feature_mean_norm:.4f}, std={feature_std_norm:.4f}")
+                            print(f"      Feature similarity (cosine): mean={feature_similarity_mean:.4f} (lower is better, <0.5 is good)")
+                            if feature_similarity_mean > 0.7:
+                                print(f"      ⚠️  WARNING: Features are too similar (mean similarity > 0.7)")
+                                print(f"         This suggests features lack discrimination - model may need more capacity or better training")
                             if batch_correct == 0:
                                 print(f"   ⚠️  WARNING: Zero correct predictions in first validation batch!")
                 
