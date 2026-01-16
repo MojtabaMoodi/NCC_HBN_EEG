@@ -99,8 +99,25 @@ class MultiFileEEGDataset(IterableDataset):
             )
             self.datasets.append(dataset)
         
-        logger.info(f"Initialized MultiFileEEGDataset with {len(hdf5_files)} files")
-        logger.info(f"Files: {[Path(f).name for f in hdf5_files]}")
+        logger.info(f"✅ Initialized MultiFileEEGDataset with {len(hdf5_files)} files")
+        logger.info(f"📁 Files: {[Path(f).name for f in hdf5_files]}")
+        
+        # DIAGNOSTIC: Count total samples across all files
+        total_samples = 0
+        for hdf5_file in hdf5_files:
+            try:
+                import h5py
+                with h5py.File(hdf5_file, 'r') as f:
+                    file_samples = 0
+                    for task_type in ['active', 'passive']:
+                        if task_type in f:
+                            samples = len([k for k in f[task_type].keys() if k.startswith('sample_')])
+                            file_samples += samples
+                    total_samples += file_samples
+                    logger.info(f"   {Path(hdf5_file).name}: {file_samples:,} samples")
+            except Exception as e:
+                logger.warning(f"   Could not count samples in {Path(hdf5_file).name}: {e}")
+        logger.info(f"📊 Total samples across all {len(hdf5_files)} files: {total_samples:,}")
     
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         """
@@ -115,20 +132,18 @@ class MultiFileEEGDataset(IterableDataset):
         # Handle worker sharding
         worker_info = get_worker_info()
         
-        # Determine which files this worker should process
+        # CRITICAL: All workers should process ALL files to ensure complete data coverage
+        # The DataLoader will handle sample-level sharding, not file-level sharding
+        # This ensures we use all training/validation files, not just a subset
+        datasets_to_process = self.datasets
+        
         if worker_info is not None:
             num_workers = worker_info.num_workers
             worker_id = worker_info.id
-            
-            # Distribute files across workers
-            files_per_worker = len(self.datasets) // num_workers
-            start_file_idx = worker_id * files_per_worker
-            end_file_idx = start_file_idx + files_per_worker if worker_id < num_workers - 1 else len(self.datasets)
-            
-            datasets_to_process = self.datasets[start_file_idx:end_file_idx]
-            logger.debug(f"Worker {worker_id}/{num_workers}: processing files {start_file_idx}-{end_file_idx} ({len(datasets_to_process)} files)")
+            logger.info(f"🔧 Worker {worker_id}/{num_workers}: processing ALL {len(self.datasets)} files (ensures complete data coverage)")
+            logger.info(f"   All files: {[Path(f).name for f in self.hdf5_files]}")
         else:
-            datasets_to_process = self.datasets
+            logger.info(f"🔧 Single worker: processing all {len(self.datasets)} files")
         
         # Shuffle file order if requested (for better randomization across files)
         if self.shuffle:
