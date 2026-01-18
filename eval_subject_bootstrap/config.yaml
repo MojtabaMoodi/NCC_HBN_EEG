@@ -1,0 +1,94 @@
+# Models configuration file for subject-level bootstrap evaluation
+# This file lists all models to evaluate with their checkpoints and configurations
+
+models:
+  # CNN model for age classification
+  - name: cnn
+    model_type: age_cnn  # Age classification CNN
+    ckpt_path: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/CNN/report_2025-12-16/results_4s/checkpoints/age_classification_4s_best.pth
+    num_classes: 3
+    ctor_kwargs:
+      dropout_rate: 0.5
+      use_layer_norm: true
+    # output_key: logits  # Optional: if model returns dict, specify key
+
+  # ResNet model for age classification
+  - name: resnet
+    model_type: age_resnet34  # Age classification ResNet-34
+    ckpt_path: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet34_4s_best.pth
+    num_classes: 3
+    ctor_kwargs:
+      dropout_rate: 0.5
+    # output_key: logits  # Optional
+
+  # LaBraM model for age classification (finetuned)
+  - name: labram
+    model_type: labram_base_patch200_200  # LaBraM base model
+    ckpt_path: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/report_2025-12-16/outputs/age_baseline_4s/checkpoint-best.pth
+    num_classes: 3
+    ctor_kwargs:
+      drop_rate: 0.5
+      drop_path_rate: 0.1
+      attn_drop_rate: 0.0
+      use_mean_pooling: true
+      init_scale: 0.001
+      use_rel_pos_bias: false
+      use_abs_pos_emb: true
+      init_values: 0.1
+      qkv_bias: false
+      multi_output: false
+    # output_key: logits  # Optional
+
+# Notes:
+# - model_type for CNN/ResNet: see CNN/models/model_factory.py for available types
+# - model_type for LaBraM: see LaBraM/modeling_finetune.py for available models
+# - ckpt_path: absolute paths to checkpoint files
+# - num_classes: 3 for age classification (0: <8.5, 1: 8.5-12.5, 2: >12.5 years)
+# - ctor_kwargs: additional arguments passed to model constructor
+# - output_key: only needed if model forward() returns a dict instead of tensor
+#
+# Available checkpoint paths (all saved models):
+#
+# CNN Models (Age Classification):
+#   - CNN/report_2025-12-16/results_1s/checkpoints/age_classification_1s_best.pth
+#   - CNN/report_2025-12-16/results_2s/checkpoints/age_classification_2s_best.pth
+#   - CNN/report_2025-12-16/results_4s/checkpoints/age_classification_4s_best.pth
+#
+# CNN Models (Gender Classification):
+#   - CNN/report_2025-12-16/results_1s/checkpoints/gender_baseline_1s_best.pth
+#   - CNN/report_2025-12-16/results_2s/checkpoints/gender_baseline_2s_best.pth
+#   - CNN/report_2025-12-16/results_4s/checkpoints/gender_baseline_4s_best.pth
+#
+# CNN Models (Age Regression):
+#   - CNN/report_2025-12-16/results_2s/checkpoints/age_regression_2s_best.pth
+#   - CNN/report_2025-12-16/results_4s/checkpoints/age_regression_4s_best.pth
+#
+# ResNet Models (Age Classification):
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet18_1s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet18_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet18_4s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet34_1s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet34_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet34_4s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet50_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/age_resnet50_4s_best.pth
+#
+# ResNet Models (Gender Classification):
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet18_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet18_4s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet34_1s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet34_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet34_4s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet50_1s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet50_2s_best.pth
+#   - CNN/report_2025-12-16/resnet_experiment_results/checkpoints/gender_resnet50_4s_best.pth
+#
+# LaBraM Models (Age Classification - Finetuned):
+#   - LaBraM/report_2025-12-16/outputs/age_baseline_1s/checkpoint-best.pth
+#   - LaBraM/report_2025-12-16/outputs/age_baseline_2s/checkpoint-best.pth
+#   - LaBraM/report_2025-12-16/outputs/age_baseline_4s/checkpoint-best.pth
+#
+# LaBraM Models (Gender Classification - Finetuned):
+#   - LaBraM/report_2025-12-16/outputs/gender_baseline_1s/checkpoint-best.pth
+#   - LaBraM/report_2025-12-16/outputs/gender_baseline_2s/checkpoint-best.pth
+#   - LaBraM/report_2025-12-16/outputs/gender_baseline_4s/checkpoint-best.pth
