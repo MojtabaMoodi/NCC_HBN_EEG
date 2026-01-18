@@ -15,6 +15,16 @@ import torch.nn as nn
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Union
 from abc import ABC, abstractmethod
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    # Fallback: create a dummy tqdm that just passes through
+    def tqdm(iterable=None, *args, **kwargs):
+        if iterable is None:
+            return lambda x: x
+        return iterable
 
 
 class SaliencyMethod(ABC):
@@ -357,6 +367,8 @@ def compute_batch_saliency(model: nn.Module,
         - 'channel_importance': (num_samples, num_channels) channel-level importance
         - 'labels': (num_samples,) true labels
         - 'predictions': (num_samples,) model predictions
+        - 'task_types': (num_samples,) task types ('active' or 'passive')
+        - 'participant_ids': (num_samples,) participant IDs
     
     Raises:
         ValueError: If target_key is empty
@@ -387,10 +399,91 @@ def compute_batch_saliency(model: nn.Module,
     all_labels = []
     all_predictions = []
     all_task_types = []  # Track task types for per-task analysis
+    all_participant_ids = []  # Track participant IDs for per-participant analysis
     
     num_samples = 0
     
+    # Estimate total number of batches for progress tracking
+    # Note: len(data_loader) might not be accurate if dataset is IterableDataset
+    try:
+        total_batches = len(data_loader)
+        if max_samples is not None:
+            # Estimate batches needed for max_samples
+            batch_size = data_loader.batch_size if hasattr(data_loader, 'batch_size') else 32
+            total_batches = min(total_batches, (max_samples + batch_size - 1) // batch_size)
+    except (TypeError, AttributeError):
+        # IterableDataset or unknown length
+        total_batches = None
+    
+    # Create progress bar
+    # IMPORTANT: Use file=sys.stdout to ensure progress shows in logs
+    # Also set miniters to update more frequently
+    # 
+    # Terminology:
+    # - Sample: One individual EEG segment (one participant's data at one time point)
+    # - Batch: A group of samples loaded together (e.g., 32 or 128 samples per batch)
+    #   The DataLoader loads batches to efficiently process multiple samples at once
+    if TQDM_AVAILABLE:
+        import sys
+        # Determine batch size for display
+        batch_size = data_loader.batch_size if hasattr(data_loader, 'batch_size') else 32
+        
+        if max_samples is not None:
+            # Track by samples when max_samples is specified
+            pbar = tqdm(
+                desc="Computing saliency",
+                total=max_samples,
+                unit="samples",
+                dynamic_ncols=True,
+                disable=False,
+                file=sys.stdout,
+                miniters=1,
+                mininterval=1.0
+            )
+        else:
+            # Track by batches when processing all samples
+            # Note: total_batches might be None for IterableDataset (unknown length)
+            pbar = tqdm(
+                desc="Computing saliency",
+                total=total_batches,  # None = unknown total (will show as increasing number)
+                unit="batches",
+                dynamic_ncols=True,
+                disable=False,
+                file=sys.stdout,
+                miniters=1,
+                mininterval=1.0
+            )
+    else:
+        pbar = None
+        # Print initial message if no tqdm
+        print("Starting saliency computation (no progress bar available, install tqdm for better tracking)...")
+        print(f"  Target: {max_samples if max_samples is not None else 'all'} samples")
+    
+    # Print initial status
+    # Get batch size for display (already defined above if TQDM_AVAILABLE, but define here for fallback)
+    if not TQDM_AVAILABLE:
+        batch_size = data_loader.batch_size if hasattr(data_loader, 'batch_size') else 32
+    # batch_size is already defined above if TQDM_AVAILABLE
+    print(f"Starting to iterate through data loader...")
+    print(f"  Batch size: {batch_size} samples per batch")
+    print(f"  Note: Each batch contains {batch_size} samples loaded together for efficiency")
+    if max_samples is not None:
+        estimated_batches = (max_samples + batch_size - 1) // batch_size
+        print(f"  Will process up to {max_samples} samples (~{estimated_batches} batches)")
+    else:
+        print(f"  Will process all available samples")
+        if total_batches is not None:
+            estimated_samples = total_batches * batch_size
+            print(f"  Estimated: ~{estimated_samples} samples in ~{total_batches} batches")
+        else:
+            print(f"  Total samples unknown (IterableDataset), will process until dataset ends")
+    
     for batch_idx, batch in enumerate(data_loader):
+        # Print first batch status for debugging
+        if batch_idx == 0:
+            print(f"✅ Successfully loaded first batch (batch size: {batch['eeg_data'].size(0)})")
+            print(f"   Starting saliency computation...")
+        
         # Early exit: if we've already processed enough samples, stop loading more batches
         # This prevents unnecessary data loading and processing after reaching the limit
         if max_samples is not None and num_samples >= max_samples:
@@ -434,6 +527,16 @@ def compute_batch_saliency(model: nn.Module,
             )
         task_types = batch['task_types']
         
+        # Get participant IDs (for per-participant analysis)
+        # participant_ids is a list of strings, not a tensor
+        if 'participant_ids' not in batch:
+            raise KeyError(
+                "Batch missing 'participant_ids' key. "
+                "This should always be present from EEGDataset. "
+                "Check dataset configuration."
+            )
+        participant_ids = batch['participant_ids']
+        
         # Validate task_types: should be list of 'active' or 'passive' strings
         if not isinstance(task_types, list):
             raise TypeError(
@@ -470,13 +573,36 @@ def compute_batch_saliency(model: nn.Module,
                 inputs = inputs[:remaining]
                 labels = labels[:remaining]
                 task_types = task_types[:remaining]
+                participant_ids = participant_ids[:remaining]
                 batch_size = remaining
         
         # Compute saliency for each sample in batch
         # Note: We need gradients for saliency computation
+        # Note: This is done sample-by-sample because saliency computation requires gradients
+        # Multi-GPU DataParallel helps with model forward/backward passes, but we still process
+        # samples individually to get per-sample saliency maps
         batch_saliency = []
         batch_channel_importance = []
         batch_predictions = []
+        
+        # Progress indicator for samples within batch (only for large batches)
+        if pbar is not None and batch_size > 8:
+            import sys
+            sample_pbar = tqdm(
+                range(batch_size),
+                desc=f"  Batch {batch_idx+1}",
+                leave=False,
+                unit="sample",
+                disable=False,
+                file=sys.stdout,
+                miniters=1,
+                mininterval=0.5
+            )
+        else:
+            sample_pbar = None
+            # Print status for first sample in batch
+            if batch_idx == 0:
+                print(f"  Processing batch {batch_idx+1} ({batch_size} samples)...")
         
         for i in range(batch_size):
             sample_input = inputs[i:i+1]  # Keep batch dimension: (1, num_channels, timepoints)
@@ -527,6 +653,13 @@ def compute_batch_saliency(model: nn.Module,
             batch_saliency.append(saliency.cpu())
             batch_channel_importance.append(channel_imp.cpu())
             batch_predictions.append(pred_class)
+            
+            # Update sample progress
+            if sample_pbar is not None:
+                sample_pbar.update(1)
+        
+        if sample_pbar is not None:
+            sample_pbar.close()
         
         # Concatenate batch results
         # Note: batch_saliency, batch_channel_importance, and batch_predictions
@@ -535,15 +668,43 @@ def compute_batch_saliency(model: nn.Module,
         all_channel_importance.extend(batch_channel_importance)
         all_predictions.extend(batch_predictions)
         
-        # Ensure labels and task_types match the processed batch size
+        # Ensure labels, task_types, and participant_ids match the processed batch size
         # (they were already truncated above if needed)
         all_labels.extend(labels.cpu().numpy()[:batch_size])
         all_task_types.extend(task_types[:batch_size])
+        all_participant_ids.extend(participant_ids[:batch_size])
         
         num_samples += batch_size
         
-        if batch_idx % 10 == 0:
-            print(f"Processed {num_samples} samples...")
+        # Update progress bar
+        # Note: batch_size is the number of samples in this batch
+        # num_samples is the total number of samples processed so far
+        # batch_idx + 1 is the number of batches processed so far
+        if pbar is not None:
+            if max_samples is not None:
+                # Track by samples: update by batch_size (number of samples in this batch)
+                pbar.update(batch_size)
+                pbar.set_postfix({
+                    'samples': f"{num_samples}/{max_samples}",
+                    'batches': batch_idx + 1,
+                    'batch_size': batch_size
+                })
+            else:
+                # Track by batches: update by 1 (one batch processed)
+                pbar.update(1)
+                # Show samples processed and batch info
+                pbar.set_postfix({
+                    'samples': num_samples,  # Total samples processed so far
+                    'batches': batch_idx + 1,  # Total batches processed so far
+                    'batch_size': batch_size  # Samples per batch
+                })
+        elif batch_idx % 10 == 0:
+            # Fallback progress without tqdm
+            print(f"Processed {num_samples} samples ({batch_idx + 1} batches)...")
+    
+    # Close progress bar
+    if pbar is not None:
+        pbar.close()
     
     # Handle empty result case (no samples processed)
     if num_samples == 0:
@@ -558,7 +719,8 @@ def compute_batch_saliency(model: nn.Module,
         'channel_importance': torch.cat(all_channel_importance, dim=0).numpy(),
         'labels': np.array(all_labels),
         'predictions': np.array(all_predictions),
-        'task_types': np.array(all_task_types)  # Include task types for per-task analysis
+        'task_types': np.array(all_task_types),  # Include task types for per-task analysis
+        'participant_ids': np.array(all_participant_ids)  # Include participant IDs for per-participant analysis
     }
     
     return result
