@@ -174,7 +174,8 @@ def plot_saliency_map_sample(saliency_map: np.ndarray,
                             title: str = "Saliency Map",
                             save_path: Optional[str] = None,
                             figsize: Tuple[int, int] = (16, 8),
-                            cmap: str = 'RdBu_r'):
+                            cmap: Optional[str] = None,
+                            use_absolute: bool = True):
     """
     Plot saliency map for a single sample (channels x timepoints).
     
@@ -184,23 +185,54 @@ def plot_saliency_map_sample(saliency_map: np.ndarray,
         title: Plot title
         save_path: Path to save figure
         figsize: Figure size
-        cmap: Colormap name
+        cmap: Colormap name. If None, automatically chosen based on use_absolute
+        use_absolute: If True, show absolute values (standard for aggregated maps).
+                     If False, show signed values (useful for individual samples).
+                     Default: True (following best practices for aggregated maps)
     """
     num_channels, timepoints = saliency_map.shape
     
     if channel_names is None:
         channel_names = [f'Channel {i+1}' for i in range(num_channels)]
     
+    # Determine if we have negative values
+    has_negative = saliency_map.min() < 0
+    
+    # Auto-select colormap if not specified
+    if cmap is None:
+        if use_absolute or not has_negative:
+            # Absolute values or positive-only: use sequential colormap
+            # This is standard for aggregated maps showing importance magnitude
+            cmap = 'viridis'  # Sequential, perceptually uniform
+        else:
+            # Signed values: use diverging colormap
+            cmap = 'RdBu_r'  # Diverging: red=positive, blue=negative
+    
+    # Apply absolute if requested (standard for aggregated maps)
+    if use_absolute and has_negative:
+        saliency_map = np.abs(saliency_map)
+        title_suffix = " (absolute values)"
+        if title_suffix not in title:
+            title += title_suffix
+    
     # Create figure
     plt.figure(figsize=figsize)
     
     # Normalize for better visualization
-    vmax = np.abs(saliency_map).max()
-    vmin = -vmax
+    if cmap == 'viridis' or saliency_map.min() >= 0:
+        # Sequential colormap or positive-only values (absolute values)
+        vmax = saliency_map.max()
+        vmin = 0
+        colorbar_label = 'Saliency Magnitude' if use_absolute else 'Saliency Value'
+    else:
+        # Diverging colormap (signed values)
+        vmax = np.abs(saliency_map).max()
+        vmin = -vmax
+        colorbar_label = 'Saliency Value (red=positive, blue=negative)'
     
     im = plt.imshow(saliency_map, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax,
                    interpolation='nearest')
-    plt.colorbar(im, label='Saliency Value')
+    plt.colorbar(im, label=colorbar_label)
     plt.xlabel('Time Point', fontsize=12)
     plt.ylabel('EEG Channel', fontsize=12)
     plt.title(title, fontsize=14, fontweight='bold')
