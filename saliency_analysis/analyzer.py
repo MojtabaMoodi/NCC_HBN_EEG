@@ -135,8 +135,28 @@ class SaliencyAnalyzer:
         else:
             raise ValueError(f"Unknown saliency method: {method}")
         
+        print(f"\n{'='*60}")
         print(f"Computing saliency using {method}...")
         print(f"Target type: {self.target_type}")
+        print(f"{'='*60}")
+        
+        # Display device information
+        if self.device.type == 'cuda':
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+            print(f"Device: {self.device} ({gpu_name}, {gpu_memory:.1f} GB)")
+            # Check if model is using DataParallel
+            if isinstance(self.model, torch.nn.DataParallel):
+                num_gpus = torch.cuda.device_count()
+                print(f"Multi-GPU: Model wrapped with DataParallel (using {num_gpus} GPUs)")
+            elif hasattr(self.model, 'module'):
+                # Model might be wrapped in another way
+                num_gpus = torch.cuda.device_count()
+                print(f"Multi-GPU: Model appears to be using multiple GPUs ({num_gpus} GPUs)")
+            else:
+                print(f"Single GPU: Using one GPU for computation")
+        else:
+            print(f"Device: {self.device} (CPU)")
         
         # Compute saliency
         # Note: We need to determine prediction_type from the model or pass it as a parameter
@@ -163,6 +183,15 @@ class SaliencyAnalyzer:
             print(f"Task type distribution:")
             for task_type, count in zip(unique, counts):
                 print(f"  {task_type}: {count} samples")
+        
+        # Print participant distribution if available
+        if 'participant_ids' in results:
+            participant_ids = results['participant_ids']
+            unique_participants, participant_counts = np.unique(participant_ids, return_counts=True)
+            print(f"Participant distribution: {len(unique_participants)} unique participants")
+            print(f"  Total samples: {len(participant_ids)}")
+            print(f"  Samples per participant: min={participant_counts.min()}, "
+                  f"max={participant_counts.max()}, mean={participant_counts.mean():.1f}")
         
         return results
     
@@ -255,6 +284,8 @@ class SaliencyAnalyzer:
         
         channel_importance = analysis['channel_importance']
         labels = analysis['labels']
+        saliency_maps = results['saliency_maps']  # Get saliency maps for aggregated visualization
+        participant_ids = results.get('participant_ids', None)  # Get participant IDs if available
         
         print(f"\nGenerating visualizations...")
         
@@ -287,18 +318,56 @@ class SaliencyAnalyzer:
                 top_k=top_k
             )
         
-        # 4. Sample saliency maps (first few samples)
+        # 4. Aggregated saliency map (across all participants)
+        # BEST PRACTICE: Average first, then plot (following standard practice in literature)
         saliency_maps = results['saliency_maps']
-        num_samples_to_plot = min(5, len(saliency_maps))
+        
+        # Generate aggregated saliency map across all participants
+        if 'participant_ids' in results:
+            aggregated = self.aggregate_across_participants(method=method, aggregation='mean')
+            aggregated_saliency_map = aggregated['saliency_maps']
+            aggregated_variance = aggregated.get('saliency_maps_variance', None)
+            
+            # Plot mean aggregated saliency map
+            # BEST PRACTICE: Use absolute values for aggregated maps (standard in literature)
+            # This shows importance magnitude regardless of sign, which is clearer for population-level patterns
+            norm_info = " (L2-normalized per sample before averaging)" if aggregated.get('normalized_before_aggregation', False) else ""
+            plot_saliency_map_sample(
+                aggregated_saliency_map,
+                channel_names=channel_names,
+                title=f"Aggregated Saliency Map - All Participants ({self.target_type.capitalize()}){norm_info}\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples, method={aggregated['aggregation_method']}\n(Absolute values - showing importance magnitude)",
+                save_path=os.path.join(output_dir, f"saliency_aggregated_all_participants_{method}.png"),
+                use_absolute=True  # Standard practice: absolute values for aggregated maps
+            )
+            print(f"  ✅ Saved aggregated saliency map (all {aggregated['num_participants']} participants)")
+            
+            # Also plot variance/consistency map to show how consistent patterns are
+            if aggregated_variance is not None:
+                plot_saliency_map_sample(
+                    aggregated_variance,
+                    channel_names=channel_names,
+                    title=f"Saliency Map Consistency (Std Dev) - All Participants ({self.target_type.capitalize()})\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples",
+                    save_path=os.path.join(output_dir, f"saliency_consistency_all_participants_{method}.png"),
+                    cmap='viridis'  # Use different colormap for variance (no negative values)
+                )
+                print(f"  ✅ Saved consistency map (shows variance across participants)")
+        
+        # 5. Sample saliency maps (first few samples for reference)
+        # Note: These are individual samples, not aggregated
+        # For individual samples, we can show absolute values (standard) or signed values (shows directionality)
+        num_samples_to_plot = min(3, len(saliency_maps))  # Reduced to 3 since we have aggregated map
         for i in range(num_samples_to_plot):
+            # Use absolute values for consistency with aggregated maps (standard practice)
+            # If you want to see signed values (directionality), set use_absolute=False
             plot_saliency_map_sample(
                 saliency_maps[i],
                 channel_names=channel_names,
-                title=f"Saliency Map - Sample {i+1} ({self.target_type.capitalize()})",
-                save_path=os.path.join(output_dir, f"saliency_sample_{i+1}_{method}.png")
+                title=f"Saliency Map - Individual Sample {i+1} ({self.target_type.capitalize()})\n(Absolute values - showing importance magnitude)",
+                save_path=os.path.join(output_dir, f"saliency_sample_{i+1}_{method}.png"),
+                use_absolute=True  # Standard: absolute values show importance magnitude
             )
         
-        # 5. Save channel ranking (overall)
+        # 6. Save channel ranking (overall)
         save_channel_ranking(
             channel_importance,
             channel_names=channel_names,
@@ -306,7 +375,7 @@ class SaliencyAnalyzer:
             top_k=None  # Save all channels
         )
         
-        # 6. Per-task-type visualizations (if requested and available)
+        # 7. Per-task-type visualizations (if requested and available)
         if by_task_type and 'task_types' in results:
             task_types = results['task_types']
             unique_task_types = np.unique(task_types)
@@ -358,6 +427,42 @@ class SaliencyAnalyzer:
                     save_path=os.path.join(task_output_dir, f"channel_ranking_{method}.csv"),
                     top_k=None
                 )
+                
+                # Aggregated saliency map for this task type (across all participants)
+                # BEST PRACTICE: Normalize before aggregation (same as overall aggregation)
+                if participant_ids is not None:
+                    task_saliency_maps = saliency_maps[task_mask]
+                    task_participant_ids = participant_ids[task_mask]
+                    task_unique_participants = len(np.unique(task_participant_ids))
+                    
+                    # Normalize each sample's saliency map before aggregation (best practice)
+                    task_saliency_maps_normalized = task_saliency_maps.copy()
+                    for i in range(len(task_saliency_maps)):
+                        sample_map = task_saliency_maps[i]
+                        l2_norm = np.linalg.norm(sample_map)
+                        if l2_norm > 0:
+                            task_saliency_maps_normalized[i] = sample_map / l2_norm
+                    
+                    # Aggregate across all samples for this task type
+                    task_aggregated_saliency = task_saliency_maps_normalized.mean(axis=0)
+                    task_aggregated_variance = task_saliency_maps_normalized.std(axis=0)
+                    
+                    plot_saliency_map_sample(
+                        task_aggregated_saliency,
+                        channel_names=channel_names,
+                        title=f"Aggregated Saliency Map - {task_type.capitalize()} Tasks ({self.target_type.capitalize()}) (L2-normalized)\n{task_unique_participants} participants, {len(task_saliency_maps)} samples\n(Absolute values - showing importance magnitude)",
+                        save_path=os.path.join(task_output_dir, f"saliency_aggregated_all_participants_{method}.png"),
+                        use_absolute=True  # Standard practice: absolute values for aggregated maps
+                    )
+                    
+                    # Also plot consistency map for this task type
+                    plot_saliency_map_sample(
+                        task_aggregated_variance,
+                        channel_names=channel_names,
+                        title=f"Saliency Consistency (Std Dev) - {task_type.capitalize()} Tasks ({self.target_type.capitalize()})\n{task_unique_participants} participants, {len(task_saliency_maps)} samples",
+                        save_path=os.path.join(task_output_dir, f"saliency_consistency_all_participants_{method}.png"),
+                        cmap='viridis'
+                    )
                 
                 print(f"  ✅ {task_type.capitalize()} task visualizations saved to {task_output_dir}")
         
@@ -455,6 +560,104 @@ class SaliencyAnalyzer:
         
         return task_analyses
     
+    def aggregate_across_participants(self,
+                                     method: str = 'integrated_gradients',
+                                     aggregation: str = 'mean') -> Dict[str, np.ndarray]:
+        """
+        Aggregate channel importance across all participants to get a single
+        saliency map representing the average importance across all participants.
+        
+        This is useful for understanding general patterns that apply across
+        the entire population, rather than participant-specific patterns.
+        
+        Args:
+            method: Method name to aggregate
+            aggregation: Aggregation method ('mean', 'median', or 'std')
+        
+        Returns:
+            Dictionary with aggregated results:
+            - 'channel_importance': (num_channels,) aggregated channel importance
+            - 'saliency_maps': (num_channels, timepoints) aggregated saliency maps
+            - 'num_participants': Number of unique participants
+            - 'num_samples': Total number of samples
+        """
+        if method not in self.results:
+            raise ValueError(f"No results found for method: {method}")
+        
+        results = self.results[method]
+        
+        if 'participant_ids' not in results:
+            raise ValueError(
+                "Participant IDs not available in results. "
+                "This method requires participant tracking. "
+                "Ensure compute_saliency() was called with a dataset that includes participant_ids."
+            )
+        
+        channel_importance = results['channel_importance']
+        saliency_maps = results['saliency_maps']
+        participant_ids = results['participant_ids']
+        
+        # BEST PRACTICE: Normalize each sample's saliency map before aggregation
+        # This prevents samples with high-magnitude gradients from dominating the average
+        # Normalization options:
+        # - 'none': No normalization (raw aggregation) - may be dominated by high-magnitude samples
+        # - 'l2': L2 normalize each sample (preserves relative patterns)
+        # - 'max_abs': Normalize by max absolute value (preserves sign, scales to [-1, 1])
+        # - 'zscore': Z-score normalization (mean=0, std=1 per sample)
+        normalize_before_aggregation = True  # Best practice: normalize before aggregating
+        
+        if normalize_before_aggregation:
+            # Normalize each saliency map by its L2 norm to preserve relative patterns
+            # This ensures each sample contributes equally regardless of gradient magnitude
+            saliency_maps_normalized = saliency_maps.copy()
+            for i in range(len(saliency_maps)):
+                sample_map = saliency_maps[i]
+                l2_norm = np.linalg.norm(sample_map)
+                if l2_norm > 0:
+                    saliency_maps_normalized[i] = sample_map / l2_norm
+                # If norm is 0, keep as is (all zeros)
+        else:
+            saliency_maps_normalized = saliency_maps
+        
+        # Aggregate across all samples (all participants)
+        # Note: We aggregate the normalized maps to ensure equal contribution from each sample
+        if aggregation == 'mean':
+            aggregated_channel_importance = channel_importance.mean(axis=0)
+            aggregated_saliency_maps = saliency_maps_normalized.mean(axis=0)
+        elif aggregation == 'median':
+            aggregated_channel_importance = np.median(channel_importance, axis=0)
+            aggregated_saliency_maps = np.median(saliency_maps_normalized, axis=0)
+        elif aggregation == 'std':
+            aggregated_channel_importance = channel_importance.std(axis=0)
+            aggregated_saliency_maps = saliency_maps_normalized.std(axis=0)
+        else:
+            raise ValueError(f"Unknown aggregation method: {aggregation}. "
+                           "Must be 'mean', 'median', or 'std'")
+        
+        # Also compute variance/consistency map to show how consistent patterns are
+        saliency_maps_variance = saliency_maps_normalized.std(axis=0)
+        
+        unique_participants = np.unique(participant_ids)
+        
+        aggregated_results = {
+            'channel_importance': aggregated_channel_importance,
+            'saliency_maps': aggregated_saliency_maps,
+            'saliency_maps_variance': saliency_maps_variance,  # Consistency map
+            'num_participants': len(unique_participants),
+            'num_samples': len(participant_ids),
+            'aggregation_method': aggregation,
+            'normalized_before_aggregation': normalize_before_aggregation
+        }
+        
+        print(f"\nAggregated saliency map across all participants:")
+        print(f"  Aggregation method: {aggregation}")
+        print(f"  Normalization: {'L2 normalized per sample before aggregation' if normalize_before_aggregation else 'No normalization (raw aggregation)'}")
+        print(f"  Number of participants: {len(unique_participants)}")
+        print(f"  Total samples: {len(participant_ids)}")
+        print(f"  Note: Each sample's saliency map was normalized before averaging to ensure equal contribution")
+        
+        return aggregated_results
+    
     def save_results(self, output_dir: str, method: str = 'integrated_gradients'):
         """
         Save saliency results to disk.
@@ -481,6 +684,10 @@ class SaliencyAnalyzer:
         # Include task_types if available
         if 'task_types' in results:
             save_dict['task_types'] = results['task_types']
+        
+        # Include participant_ids if available
+        if 'participant_ids' in results:
+            save_dict['participant_ids'] = results['participant_ids']
         
         np.savez_compressed(
             os.path.join(output_dir, f"saliency_results_{method}.npz"),
