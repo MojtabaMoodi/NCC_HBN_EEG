@@ -92,9 +92,13 @@ def parse_args():
                        help='Number of GPUs to use (1 = single GPU/CPU, >1 = multi-GPU)')
     
     # Saliency method arguments
-    parser.add_argument('--method', type=str, default='integrated_gradients',
+    # NOTE: Using vanilla_gradients as default for faster testing
+    # Integrated gradients is more accurate but ~50x slower (50 steps per sample)
+    # Uncomment integrated_gradients when ready for production analysis
+    parser.add_argument('--method', type=str, default='vanilla_gradients',  # Changed from 'integrated_gradients' for faster testing
                        choices=['vanilla_gradients', 'integrated_gradients', 'both'],
-                       help='Saliency computation method. Use "both" to compute and compare both methods.')
+                       help='Saliency computation method. Use "both" to compute and compare both methods. '
+                            'vanilla_gradients is faster (~50x), integrated_gradients is more accurate but slower.')
     parser.add_argument('--num_steps', type=int, default=50,
                        help='Number of steps for integrated gradients')
     parser.add_argument('--max_samples', type=int, default=None,
@@ -324,12 +328,20 @@ def process_single_model(args):
     
     if args.num_gpus > 1 and available_gpus > 0:
         print(f"\nSetting up multi-GPU ({args.num_gpus} GPUs)...")
+        print(f"  Using PyTorch DataParallel for multi-GPU acceleration")
+        print(f"  Note: Saliency computation processes samples individually, but model forward/backward")
+        print(f"        passes will be distributed across {args.num_gpus} GPUs for faster computation.")
         model = setup_model_for_gpus(model, args.num_gpus, device)
         print_gpu_info(args.num_gpus, args.num_gpus, device)
+        print(f"  ✅ Multi-GPU setup complete. Model will use {args.num_gpus} GPUs for computation.")
     else:
         if args.num_gpus > 1:
             print(f"\n⚠️  Requested {args.num_gpus} GPUs but only {available_gpus} available. Using single GPU/CPU.")
         model = model.to(device)
+        if device.type == 'cuda':
+            print(f"  ✅ Using single GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            print(f"  ✅ Using CPU")
     
     # Create analyzer
     analyzer = SaliencyAnalyzer(
@@ -379,12 +391,20 @@ def process_single_model(args):
         shuffle=False  # Don't shuffle for consistent analysis
     )
     
+    # For saliency computation, use fewer workers to avoid hanging issues
+    # Saliency computation is CPU-bound per sample, so too many workers can cause issues
+    # Also, IterableDataset with many workers can sometimes hang
+    num_workers = 0 if device.type == 'cuda' else 0  # Use 0 workers to avoid multiprocessing issues
+    print(f"\nCreating data loader (batch_size={args.batch_size}, num_workers={num_workers})...")
+    
     data_loader = EEGDataLoader.create_dataloader(
         dataset,
         batch_size=args.batch_size,
-        num_workers=2 if device.type == 'cuda' else 0,
+        num_workers=num_workers,  # Use 0 to avoid hanging with IterableDataset
         pin_memory=(device.type == 'cuda')
     )
+    
+    print(f"✅ Data loader created successfully")
     
     # Determine which methods to run
     if args.method == 'both':
@@ -433,9 +453,19 @@ def process_single_model(args):
         )
         
         # Analyze channel importance
-        print(f"\nAnalyzing channel importance...")
+        # Note: This analyzes channel importance across ALL participants (aggregated)
+        # The current implementation generates one saliency map aggregated across all participants
+        # by computing the mean channel importance across all samples.
+        print(f"\nAnalyzing channel importance (aggregated across all participants)...")
         analysis = analyzer.analyze_channel_importance(method=method)
         all_analyses[method] = analysis
+        
+        # Generate aggregated saliency map across all participants
+        # This provides a single representative saliency map for the entire population
+        print(f"\nGenerating aggregated saliency map across all participants...")
+        aggregated = analyzer.aggregate_across_participants(method=method, aggregation='mean')
+        print(f"  ✅ Aggregated map represents {aggregated['num_participants']} participants "
+              f"with {aggregated['num_samples']} total samples")
         
         # Save results
         print(f"\nSaving results to: {output_dir}")
@@ -552,12 +582,42 @@ def process_batch_models(args):
     print(f"\nProcessing {len(models_to_process)} model(s)...")
     print("=" * 80)
     
+    # Import tqdm for progress tracking
+    try:
+        from tqdm import tqdm
+        TQDM_AVAILABLE = True
+    except ImportError:
+        TQDM_AVAILABLE = False
+        def tqdm(iterable, *args, **kwargs):
+            return iterable
+    
     # Process each model
     successful = 0
     failed = 0
     
-    for i, config in enumerate(models_to_process, 1):
+    # Create progress bar for models
+    if TQDM_AVAILABLE:
+        model_pbar = tqdm(
+            enumerate(models_to_process, 1),
+            total=len(models_to_process),
+            desc="Processing models",
+            unit="model",
+            dynamic_ncols=True
+        )
+    else:
+        model_pbar = enumerate(models_to_process, 1)
+    
+    for i, config in model_pbar:
         model_name = get_model_name_from_checkpoint(config['checkpoint'])
+        
+        # Update progress bar
+        if TQDM_AVAILABLE:
+            model_pbar.set_description(f"Processing: {model_name}")
+            model_pbar.set_postfix({
+                'successful': successful,
+                'failed': failed
+            })
+        
         print(f"\n[{i}/{len(models_to_process)}] Processing: {model_name}")
         print("-" * 80)
         
@@ -585,6 +645,14 @@ def process_batch_models(args):
             process_single_model(model_args)
             successful += 1
             
+            # Update progress
+            if TQDM_AVAILABLE:
+                model_pbar.set_postfix({
+                    'successful': successful,
+                    'failed': failed,
+                    'status': '✓'
+                })
+            
             # Clear CUDA cache after each model to prevent state corruption
             if args.device == 'cuda' or (args.device == 'auto' and torch.cuda.is_available()):
                 torch.cuda.empty_cache()
@@ -597,10 +665,22 @@ def process_batch_models(args):
             traceback.print_exc()
             failed += 1
             
+            # Update progress
+            if TQDM_AVAILABLE:
+                model_pbar.set_postfix({
+                    'successful': successful,
+                    'failed': failed,
+                    'status': '✗'
+                })
+            
             # Clear CUDA cache on error to reset state
             if args.device == 'cuda' or (args.device == 'auto' and torch.cuda.is_available()):
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
+    
+    # Close progress bar
+    if TQDM_AVAILABLE:
+        model_pbar.close()
     
     # Summary
     print("\n" + "=" * 80)
