@@ -162,7 +162,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     metric_logger = labram_utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', labram_utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('min_lr', labram_utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
+    header = 'Epoch: [{}]'.format(epoch + 1)  # Display as 1-indexed for user clarity
     print_freq = 500
     
     # Diagnostic: Count samples and batches in first epoch

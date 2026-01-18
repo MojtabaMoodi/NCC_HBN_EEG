@@ -40,12 +40,21 @@ if [ -n "$SLURM_JOB_ID" ] && [ -n "$SLURM_NTASKS" ] && [ "$SLURM_NTASKS" != "" ]
     export RANK=$SLURM_PROCID
     export LOCAL_RANK=$SLURM_LOCALID
     
+    # Check if best_model.pth exists to resume training
+    if [ -f "./results_user_id_4s_labram_arcface/best_model.pth" ]; then
+        echo "Found best_model.pth - resuming training from checkpoint"
+        RESUME_ARG="--resume best_model.pth"
+    else
+        RESUME_ARG=""
+        echo "No checkpoint found - starting training from scratch"
+    fi
+    
     # Use srun for distributed training
     srun python user_identification/train_labram_arcface.py \
         --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification \
         --segment_length 4s \
         --pretrained_path LaBraM/checkpoints/labram-base.pth \
-        --epochs 50 \
+        --epochs 100 \
         --lr 5e-4 \
         --batch_size 192 \
         --num_workers 8 \
@@ -57,8 +66,11 @@ if [ -n "$SLURM_JOB_ID" ] && [ -n "$SLURM_NTASKS" ] && [ "$SLURM_NTASKS" != "" ]
         --arcface_scale 256.0 \
         --output_dir ./results_user_id_4s_labram_arcface \
         --save_ckpt_freq 5 \
+        --early_stopping_patience 10 \
+        --early_stopping_min_delta 0.0001 \
         --seed 42 \
-        --distributed
+        --distributed \
+        $RESUME_ARG
 else
     # Interactive session (SLURM or non-SLURM) - use torchrun
     # For multi-GPU, set CUDA_VISIBLE_DEVICES and use torchrun
@@ -66,11 +78,20 @@ else
         # Multiple GPUs available - use torchrun for distributed training
         num_gpus=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
         echo "Using torchrun with $num_gpus GPUs (interactive session)"
+        # Check if best_model.pth exists to resume training
+        if [ -f "./results_user_id_4s_labram_arcface/best_model.pth" ]; then
+            echo "Found best_model.pth - resuming training from checkpoint"
+            RESUME_ARG="--resume best_model.pth"
+        else
+            RESUME_ARG=""
+            echo "No checkpoint found - starting training from scratch"
+        fi
+        
         torchrun --nproc_per_node=$num_gpus user_identification/train_labram_arcface.py \
             --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification \
             --segment_length 4s \
             --pretrained_path LaBraM/checkpoints/labram-base.pth \
-            --epochs 50 \
+            --epochs 100 \
             --lr 5e-4 \
             --batch_size 192 \
             --num_workers 8 \
@@ -83,15 +104,25 @@ else
             --output_dir ./results_user_id_4s_labram_arcface \
             --save_ckpt_freq 5 \
             --seed 42 \
-            --distributed
+            --distributed \
+            $RESUME_ARG
     else
         # Single GPU
         echo "Using single GPU"
+        # Check if best_model.pth exists to resume training
+        if [ -f "./results_user_id_4s_labram_arcface/best_model.pth" ]; then
+            echo "Found best_model.pth - resuming training from checkpoint"
+            RESUME_ARG="--resume best_model.pth"
+        else
+            RESUME_ARG=""
+            echo "No checkpoint found - starting training from scratch"
+        fi
+        
         python user_identification/train_labram_arcface.py \
             --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification \
             --segment_length 4s \
             --pretrained_path LaBraM/checkpoints/labram-base.pth \
-            --epochs 50 \
+            --epochs 100 \
             --lr 5e-4 \
             --batch_size 192 \
             --num_workers 8 \
@@ -103,7 +134,8 @@ else
             --arcface_scale 256.0 \
             --output_dir ./results_user_id_4s_labram_arcface \
             --save_ckpt_freq 5 \
-            --seed 42
+            --seed 42 \
+            $RESUME_ARG
     fi
 fi
 

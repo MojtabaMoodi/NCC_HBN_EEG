@@ -63,7 +63,7 @@ def get_args():
                        help='Dropout rate')
     
     # Training parameters
-    parser.add_argument('--epochs', type=int, default=50,
+    parser.add_argument('--epochs', type=int, default=200,
                        help='Number of epochs')
     parser.add_argument('--lr', type=float, default=5e-4,
                        help='Learning rate')
@@ -93,6 +93,14 @@ def get_args():
                        help='Output directory for checkpoints and logs')
     parser.add_argument('--save_ckpt_freq', type=int, default=5,
                        help='Save checkpoint frequency')
+    parser.add_argument('--resume', type=str, default=None,
+                       help='Path to checkpoint to resume from (e.g., best_model.pth or checkpoint_epoch_X.pth)')
+    
+    # Early stopping parameters
+    parser.add_argument('--early_stopping_patience', type=int, default=10,
+                       help='Number of epochs to wait before early stopping (0 to disable)')
+    parser.add_argument('--early_stopping_min_delta', type=float, default=1e-4,
+                       help='Minimum change in validation accuracy to qualify as improvement')
     
     # System parameters
     parser.add_argument('--device', type=str, default='cuda',
@@ -322,21 +330,100 @@ def main():
         print(f"✅ Optimizer and schedules created")
         print(f"   Max LR: {max(lr_schedule_values):.6f}, Min LR: {min(lr_schedule_values):.6f}")
     
+    # Resume from checkpoint if specified
+    start_epoch = 0
+    max_accuracy = 0.0
+    patience_counter = 0  # For early stopping (tracks epochs without improvement)
+    if args.resume:
+        if not args.distributed or labram_utils.is_main_process():
+            print(f"🔍 Resume argument received: {args.resume}")
+            print(f"🔍 Output directory: {output_dir}")
+            print(f"🔍 Checking for checkpoint in: {output_dir / args.resume}")
+        resume_path = Path(args.resume)
+        if not resume_path.is_absolute():
+            # If relative path, check multiple locations:
+            # 1. First try: in output_dir (most common case - just filename like "best_model.pth")
+            if (output_dir / resume_path).exists():
+                resume_path = output_dir / resume_path
+            # 2. Second try: as-is in current directory
+            elif Path(resume_path).exists():
+                resume_path = Path(resume_path)
+            # 3. Third try: if path contains output_dir name, extract just filename
+            elif (output_dir / resume_path.name).exists():
+                resume_path = output_dir / resume_path.name
+            else:
+                raise FileNotFoundError(
+                    f"Checkpoint not found: {args.resume}\n"
+                    f"  Checked: {output_dir / resume_path}\n"
+                    f"  Checked: {Path(resume_path)}\n"
+                    f"  Checked: {output_dir / resume_path.name}"
+                )
+        
+        if not args.distributed or labram_utils.is_main_process():
+            print(f"📂 Resuming from checkpoint: {resume_path}")
+        
+        checkpoint = torch.load(resume_path, map_location=device, weights_only=False)
+        
+        # Load model state
+        model_without_ddp.load_state_dict(checkpoint['model_state_dict'])
+        
+        # Load optimizer state
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+        # Load loss scaler state if available
+        if 'loss_scaler_state_dict' in checkpoint and loss_scaler is not None:
+            loss_scaler.load_state_dict(checkpoint['loss_scaler_state_dict'])
+        
+        # Load ArcFace state if available
+        if 'arcface_state_dict' in checkpoint:
+            criterion.load_state_dict(checkpoint['arcface_state_dict'])
+        
+        # Get starting epoch and max accuracy
+        # Note: checkpoint saves 'epoch' as 1-indexed (epoch + 1 after completing the epoch)
+        # Training loop uses 0-indexed epochs (range(0, args.epochs))
+        # If checkpoint has epoch 50 (1-indexed), it means we completed epoch 49 (0-indexed)
+        # So we should start from epoch 50 (0-indexed) = epoch 51 (1-indexed)
+        if 'epoch' in checkpoint:
+            checkpoint_epoch_1indexed = checkpoint['epoch']  # 1-indexed: last completed epoch + 1
+            # Convert to 0-indexed: if checkpoint says 50 (completed epoch 49), start from 50
+            start_epoch = checkpoint_epoch_1indexed  # Keep as-is: checkpoint epoch 50 means start from 50 (0-indexed)
+        if 'val_accuracy' in checkpoint:
+            max_accuracy = checkpoint['val_accuracy']
+        
+        # Reset patience counter when resuming (we'll start counting from the resumed epoch)
+        patience_counter = 0
+        
+        # Warn if resuming from last epoch (no more training will happen)
+        if start_epoch >= args.epochs:
+            if not args.distributed or labram_utils.is_main_process():
+                print(f"   ⚠️  WARNING: Checkpoint is from epoch {start_epoch}, but --epochs={args.epochs}")
+                print(f"   ⚠️  No training will occur. Increase --epochs to continue training.")
+        
+        if not args.distributed or labram_utils.is_main_process():
+            print(f"   ✅ Loaded checkpoint from epoch {checkpoint_epoch_1indexed} (completed)")
+            print(f"   ✅ Best validation accuracy so far: {max_accuracy:.4f}%")
+            if start_epoch < args.epochs:
+                print(f"   ✅ Continuing training from epoch {start_epoch + 1} to {args.epochs}")
+            else:
+                print(f"   ⚠️  Already completed {args.epochs} epochs. Increase --epochs to continue.")
+    
     # Training loop
     if not args.distributed or labram_utils.is_main_process():
         print(f"\n{'='*80}")
-        print(f"Starting training for {args.epochs} epochs")
+        if args.resume:
+            print(f"Continuing training from epoch {start_epoch + 1} to {args.epochs}")
+        else:
+            print(f"Starting training for {args.epochs} epochs")
         if args.distributed:
             print(f"Using {num_tasks} GPUs (distributed training)")
         print(f"{'='*80}\n")
     
-    max_accuracy = 0.0
     start_time = time.time()
     
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         epoch_start_time = time.time()
         
-        # Train
+        # Train (epoch is 0-indexed in the loop, but we display as 1-indexed)
         train_stats = train_one_epoch(
             model, criterion, train_loader, optimizer,
             device, epoch, loss_scaler, args.clip_grad,
@@ -386,10 +473,15 @@ def main():
                   f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
                   f"Test Acc: {test_acc:.4f}% | LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
         
-        # Save checkpoint (only on main process)
+        # Save checkpoint and check for early stopping (only on main process)
         if not args.distributed or labram_utils.is_main_process():
-            if val_acc > max_accuracy:
+            # Check for improvement (early stopping logic)
+            improvement_threshold = max_accuracy + args.early_stopping_min_delta
+            if val_acc > improvement_threshold:
+                # Significant improvement - save new best and reset patience
+                improvement = val_acc - max_accuracy
                 max_accuracy = val_acc
+                patience_counter = 0
                 checkpoint = {
                     'epoch': epoch + 1,
                     'model_state_dict': model_without_ddp.state_dict(),
@@ -403,7 +495,21 @@ def main():
                 }
                 checkpoint_path = output_dir / 'best_model.pth'
                 torch.save(checkpoint, checkpoint_path)
-                print(f"  ✅ Best model saved (val_acc: {val_acc:.4f}%)")
+                print(f"  ✅ Best model saved (val_acc: {val_acc:.4f}%, improvement: {improvement:.4f}%)")
+            else:
+                # No improvement - increment patience counter
+                patience_counter += 1
+                if args.early_stopping_patience > 0:
+                    print(f"  ⏳ No improvement for {patience_counter}/{args.early_stopping_patience} epochs (val_acc: {val_acc:.4f}%, best: {max_accuracy:.4f}%)")
+            
+            # Early stopping check
+            if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
+                print(f"\n{'='*80}")
+                print(f"⏹️  Early stopping triggered at epoch {epoch+1}")
+                print(f"   No improvement for {patience_counter} epochs")
+                print(f"   Best validation accuracy: {max_accuracy:.4f}%")
+                print(f"{'='*80}\n")
+                break
             
             # Periodic checkpoint
             if (epoch + 1) % args.save_ckpt_freq == 0:
