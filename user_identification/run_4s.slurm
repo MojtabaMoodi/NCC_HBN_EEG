@@ -98,7 +98,7 @@ srun python user_identification/train_labram_arcface.py \
     --hdf5_dir /home/mojtabam/scratch/processed_eeg_data_user_identification \
     --segment_length 4s \
     --pretrained_path LaBraM/checkpoints/labram-base.pth \
-    --epochs 100 \
+    --epochs 200 \
     --lr 5e-4 \
     --batch_size 192 \
     --num_workers 8 \

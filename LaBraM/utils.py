@@ -958,9 +958,12 @@ def get_metrics(output, target, metrics, is_binary, threshold=0.5):
     else:
         # Suppress sklearn warnings during per-batch evaluation
         # Warnings occur because batches don't contain all classes (expected behavior)
+        # Also suppress warning about unique classes > 50% of samples (expected for large-scale classification)
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='.*y_pred contains classes not in y_true.*')
             warnings.filterwarnings('ignore', message=".*A single label was found.*")
+            warnings.filterwarnings('ignore', message='.*The number of unique classes is greater than 50% of the number of samples.*')
+            warnings.filterwarnings('ignore', category=UserWarning, module='sklearn.metrics._classification')
             results = multiclass_metrics_fn(
                 target, output, metrics=metrics
             )
