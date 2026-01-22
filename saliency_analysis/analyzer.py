@@ -33,8 +33,10 @@ from visualization import (
     plot_channel_importance_distribution,
     plot_saliency_map_sample,
     plot_comparison_by_class,
-    save_channel_ranking
+    save_channel_ranking,
+    plot_topography
 )
+from utils.eeg_constants import STANDARD_CHANNEL_NAMES
 
 from CNN.trainer import load_checkpoint as trainer_load_checkpoint
 from CNN.gpu_utils import get_underlying_model as gpu_get_underlying_model, get_device
@@ -298,6 +300,21 @@ class SaliencyAnalyzer:
             top_k=top_k
         )
         
+        # 1b. Topography plot (scalp map) - overall
+        # Use standard channel names if not provided
+        if channel_names is None:
+            if self.num_channels == len(STANDARD_CHANNEL_NAMES):
+                channel_names = STANDARD_CHANNEL_NAMES.copy()
+        
+        plot_topography(
+            channel_importance,
+            channel_names=channel_names,
+            title=f"Channel Importance Topography ({self.target_type.capitalize()}) - All Tasks",
+            save_path=os.path.join(output_dir, f"topography_{method}.png"),
+            cmap='viridis'
+        )
+        print(f"  ✅ Saved topography plot")
+        
         # 2. Channel importance distribution (overall)
         plot_channel_importance_distribution(
             channel_importance,
@@ -398,6 +415,15 @@ class SaliencyAnalyzer:
                     title=f"Average Channel Importance ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
                     save_path=os.path.join(task_output_dir, f"average_importance_{method}.png"),
                     top_k=top_k
+                )
+                
+                # Topography plot for this task type
+                plot_topography(
+                    task_channel_importance,
+                    channel_names=channel_names,
+                    title=f"Channel Importance Topography ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
+                    save_path=os.path.join(task_output_dir, f"topography_{method}.png"),
+                    cmap='viridis'
                 )
                 
                 # Distribution for this task type
