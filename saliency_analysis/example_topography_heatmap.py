@@ -1,98 +1,131 @@
 #!/usr/bin/env python3
+"""
+Example script for creating topography plots using MNE with accurate 10-20 system electrode positions.
+
+This script demonstrates how to create topography plots from saliency results
+using the plot_topography function with MNE support. The plots include:
+- Accurate electrode positions based on the 10-20 system
+- Electrode labels on the scalp
+- Full scalp coverage with continuous heatmaps
+- Professional-quality visualization
+
+Requirements:
+- MNE must be installed
+- Conda environment must be activated: conda activate eeg_env
+"""
+
 import numpy as np
-import mne
-import matplotlib.pyplot as plt
+import sys
 from pathlib import Path
 
-# --- Constants ---
-STANDARD_CHANNEL_NAMES = [
-    'FP1', 'FP2', 'F7', 'F3', 'FZ', 'F4', 'F8', 'F1', 'F2', 'F5', 'F6', 'F9', 'F10',
-    'AF3', 'AF4', 'AF7', 'AF8', 'AFZ', 'FC1', 'FC2', 'FC3', 'FC4', 'FC5', 'FC6',
-    'FT7', 'FT8', 'T7', 'T8', 'T9', 'T10', 'P7', 'P3', 'PZ', 'P4', 'P8', 'P1', 'P2',
-    'P5', 'P6', 'PO3', 'PO4', 'PO7', 'PO8', 'POZ', 'OZ', 'O1', 'O2', 'C3', 'C4',
-    'C1', 'C2', 'C5', 'C6', 'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CPZ'
-]
+# Add parent directory to path for imports
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
 
+from saliency_analysis.visualization import plot_topography
 
-def plot_mne_evoked_topo(data, channel_names, title, save_path=None):
-    if data.ndim == 2:
-        data = np.mean(data, axis=0)
-
-    # Correct naming for MNE
-    renamed_channels = [name.replace('FP', 'Fp').replace('Z', 'z') for name in channel_names]
-
-    info = mne.create_info(ch_names=renamed_channels, sfreq=200, ch_types='eeg')
-    montage = mne.channels.make_standard_montage('standard_1020')
-    info.set_montage(montage, on_missing='warn')
-
-    evoked = mne.EvokedArray(data.reshape(-1, 1), info, tmin=0)
-
-    # Final tweak for "Exact Scalp" look:
-    fig = evoked.plot_topomap(
-        times=[0],
-        ch_type='eeg',
-        cmap='Spectral_r',
-        res=128,
-        outlines='head',
-        contours=4,
-        time_unit='s',
-        colorbar=True,
-        show=False,
-        extrapolate='head',    # <--- Adds the "Exact Scalp" constraint
-        sphere=(0, 0, 0, 0.09) # <--- Standard head radius in meters
-    )
-
-    plt.suptitle(title, fontweight='bold')
-
-    if save_path:
-        plt.savefig(save_path, dpi=300) # dpi=300 for high-quality publication output
-        print(f"✅ Topography saved to: {save_path}")
-
-    plt.show()
+# Import STANDARD_CHANNEL_NAMES with fallback handling
+try:
+    from utils.eeg_constants import STANDARD_CHANNEL_NAMES
+except ImportError:
+    try:
+        # Try importing from visualization module which has it as fallback
+        from saliency_analysis.visualization import STANDARD_CHANNEL_NAMES
+    except ImportError:
+        # Final fallback: define locally
+        STANDARD_CHANNEL_NAMES = [
+            'FP1', 'FP2', 'F7', 'F3', 'FZ', 'F4', 'F8', 'F1', 'F2', 'F5', 'F6', 'F9', 'F10', 
+            'AF3', 'AF4', 'AF7', 'AF8', 'AFZ', 'FC1', 'FC2', 'FC3', 'FC4', 'FC5', 'FC6', 
+            'FT7', 'FT8', 'T7', 'T8', 'T9', 'T10', 'P7', 'P3', 'PZ', 'P4', 'P8', 'P1', 'P2', 
+            'P5', 'P6', 'PO3', 'PO4', 'PO7', 'PO8', 'POZ', 'OZ', 'O1', 'O2', 'C3', 'C4', 
+            'C1', 'C2', 'C5', 'C6', 'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CPZ'
+        ]
 
 
 def example_1_from_saved_results():
+    """
+    Example 1: Create topography plot from saved saliency results.
+    """
     print("=" * 80)
-    print("Example 1: MNE Evoked Plot from Saved Results")
+    print("Example 1: Topography Plot from Saved Results")
     print("=" * 80)
 
     results_path = "saliency_results/gender_baseline_4s/saliency_results_vanilla_gradients.npz"
+    
     try:
         data = np.load(results_path)
         channel_importance = data['channel_importance']
-
-        plot_mne_evoked_topo(
+        
+        print(f"Loaded results from: {results_path}")
+        print(f"Channel importance shape: {channel_importance.shape}")
+        
+        # Use the existing plot_topography function which handles MNE properly
+        # The function now includes explicit head outline visualization and full scalp coverage
+        plot_topography(
             channel_importance,
-            STANDARD_CHANNEL_NAMES,
-            title="Importance: Gender Classification",
-            save_path="mne_evoked_saved.png"
+            channel_names=STANDARD_CHANNEL_NAMES,
+            title="Channel Importance Topography - Gender Classification",
+            save_path="mne_evoked_saved.png",
+            cmap='Spectral_r',  # Use Spectral_r colormap like the original
+            figsize=(10, 8),
+            outlines='head',  # Show head outline clearly
+            sensors=True,  # Show sensor locations
+            extrapolate='auto',  # Auto extrapolation for full scalp coverage
+            border='mean',  # Extend to head boundary
+            res=128  # High resolution for smooth heatmap
         )
-    except FileNotFoundError:
-        print(f"⚠️  Results file not found: {results_path}")
+        print("✅ Topography plot saved successfully")
+        
+    except FileNotFoundError as e:
+        print(f"❌ Error: Results file not found: {results_path}")
         print("   Run saliency analysis first, or adjust the path to your results file.")
+        raise
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def example_2_custom_data():
+    """
+    Example 2: Create topography plot from custom channel importance data.
+    """
     print("\n" + "=" * 80)
-    print("Example 2: MNE Evoked Plot from Custom Data")
+    print("Example 2: Topography Plot from Custom Data")
     print("=" * 80)
 
     np.random.seed(42)
     num_channels = len(STANDARD_CHANNEL_NAMES)
-    channel_importance = np.random.rand(num_channels)
+    channel_importance = np.random.rand(num_channels) * 0.5
 
     # Boost frontal and central indices
-    frontal_indices = [0, 1, 2, 3, 4]
+    frontal_indices = [0, 1, 2, 3, 4]  # FP1, FP2, F7, F3, FZ
     channel_importance[frontal_indices] += 0.5
+    
+    print(f"Created custom channel importance for {num_channels} channels")
+    print(f"Top 5 most important channels:")
+    top_5_indices = np.argsort(channel_importance)[::-1][:5]
+    for rank, idx in enumerate(top_5_indices, 1):
+        print(f"  {rank}. {STANDARD_CHANNEL_NAMES[idx]}: {channel_importance[idx]:.4f}")
 
-    plot_mne_evoked_topo(
+    # Use the existing plot_topography function
+    # The function now includes explicit head outline visualization and full scalp coverage
+    plot_topography(
         channel_importance,
-        STANDARD_CHANNEL_NAMES,
-        title="Custom Importance Topography",
-        save_path="mne_evoked_custom.png"
+        channel_names=STANDARD_CHANNEL_NAMES,
+        title="Custom Channel Importance Topography",
+        save_path="mne_evoked_custom.png",
+        cmap='Spectral_r',  # Use Spectral_r colormap like the original
+        figsize=(10, 8),
+        outlines='head',  # Show head outline clearly
+        sensors=True,  # Show sensor locations
+        extrapolate='auto',  # Auto extrapolation for full scalp coverage
+        border='mean',  # Extend to head boundary
+        res=128  # High resolution for smooth heatmap
     )
+    print("✅ Topography plot saved successfully")
 
 
 def main():
