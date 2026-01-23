@@ -8,7 +8,7 @@ and generate summary statistics.
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 import pandas as pd
 import sys
 from pathlib import Path
@@ -37,14 +37,72 @@ except ImportError:
             'C1', 'C2', 'C5', 'C6', 'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CPZ'
         ]
 
-# Try to import MNE for topography plotting
+# MNE is REQUIRED for topography plotting
+# Make sure to activate conda environment: conda activate eeg_env
 try:
     import mne
     from mne.channels import make_standard_montage
+    from mne.channels.layout import _find_topomap_coords
+    try:
+        from mne.viz import add_colorbar as mne_add_colorbar
+        MNE_COLORBAR_AVAILABLE = True
+    except ImportError:
+        MNE_COLORBAR_AVAILABLE = False
     MNE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     MNE_AVAILABLE = False
-    print("Warning: MNE not available. Topography plots will use a simplified matplotlib-based approach.")
+    MNE_COLORBAR_AVAILABLE = False
+    raise ImportError(
+        "MNE is required for topography plotting. "
+        "Please install MNE and activate the conda environment: "
+        "conda activate eeg_env\n"
+        f"Original error: {e}"
+    )
+
+# Constants for plotting
+# Font sizes
+FONT_SIZE_TITLE = 14
+FONT_SIZE_AXIS_LABEL = 12
+FONT_SIZE_SUBTITLE = 12
+FONT_SIZE_SMALL = 10
+FONT_SIZE_TINY = 8
+FONT_SIZE_ELECTRODE_LABEL = 7
+
+# Figure settings
+FIGURE_DPI = 300
+FIGURE_BBOX = 'tight'
+
+# Colorbar settings
+COLORBAR_PAD = 0.1
+COLORBAR_SHRINK = 0.8
+COLORBAR_LABEL = 'Channel Importance'
+
+# Topography-specific constants
+TOPOGRAPHY_COLORBAR_PAD = COLORBAR_PAD
+TOPOGRAPHY_COLORBAR_SHRINK = COLORBAR_SHRINK
+TOPOGRAPHY_COLORBAR_LABEL = COLORBAR_LABEL
+TOPOGRAPHY_LABEL_FONTSIZE = FONT_SIZE_ELECTRODE_LABEL
+TOPOGRAPHY_TITLE_FONTSIZE = FONT_SIZE_TITLE
+TOPOGRAPHY_TITLE_PAD = 20
+TOPOGRAPHY_DPI = FIGURE_DPI
+
+# Interpolation settings for matplotlib fallback
+INTERPOLATION_GRID_RESOLUTION = 300
+INTERPOLATION_GRID_RANGE = 1.1
+INTERPOLATION_NORMALIZATION_FACTOR = 0.95
+
+
+def _save_figure(save_path: Optional[str], figure_name: str = "plot") -> None:
+    """
+    Save figure with consistent settings.
+    
+    Args:
+        save_path: Path to save figure (None = don't save)
+        figure_name: Name of the figure type for logging
+    """
+    if save_path:
+        plt.savefig(save_path, dpi=FIGURE_DPI, bbox_inches=FIGURE_BBOX)
+        print(f"Saved {figure_name} to {save_path}")
 
 
 def plot_channel_importance_heatmap(channel_importance: np.ndarray,
@@ -81,14 +139,11 @@ def plot_channel_importance_heatmap(channel_importance: np.ndarray,
     sns.heatmap(df, cmap=cmap, cbar_kws={'label': 'Importance'}, 
                 xticklabels=show_x_labels,
                 yticklabels=True)
-    plt.title(title, fontsize=14, fontweight='bold')
-    plt.xlabel('Sample Index', fontsize=12)
-    plt.ylabel('EEG Channel', fontsize=12)
+    plt.title(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
+    plt.xlabel('Sample Index', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.ylabel('EEG Channel', fontsize=FONT_SIZE_AXIS_LABEL)
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved heatmap to {save_path}")
+    _save_figure(save_path, "heatmap")
     
     return plt.gcf()
 
@@ -132,9 +187,9 @@ def plot_average_channel_importance(channel_importance: np.ndarray,
     # Create figure
     plt.figure(figsize=figsize)
     bars = plt.bar(range(len(sorted_names)), sorted_importance, color=color, alpha=0.7)
-    plt.xlabel('EEG Channel', fontsize=12)
-    plt.ylabel('Average Importance', fontsize=12)
-    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('EEG Channel', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.ylabel('Average Importance', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.title(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
     plt.xticks(range(len(sorted_names)), sorted_names, rotation=45, ha='right')
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
@@ -142,11 +197,9 @@ def plot_average_channel_importance(channel_importance: np.ndarray,
     # Add value labels on bars
     for i, (bar, val) in enumerate(zip(bars, sorted_importance)):
         plt.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
-                f'{val:.4f}', ha='center', va='bottom', fontsize=8)
+                f'{val:.4f}', ha='center', va='bottom', fontsize=FONT_SIZE_TINY)
     
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved bar chart to {save_path}")
+    _save_figure(save_path, "bar chart")
     
     return plt.gcf()
 
@@ -190,16 +243,13 @@ def plot_channel_importance_distribution(channel_importance: np.ndarray,
     # Create figure
     plt.figure(figsize=figsize)
     sns.boxplot(data=df, x='Channel', y='Importance', palette='Set2')
-    plt.title(title, fontsize=14, fontweight='bold')
-    plt.xlabel('EEG Channel', fontsize=12)
-    plt.ylabel('Importance Value', fontsize=12)
+    plt.title(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
+    plt.xlabel('EEG Channel', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.ylabel('Importance Value', fontsize=FONT_SIZE_AXIS_LABEL)
     plt.xticks(rotation=45, ha='right')
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved distribution plot to {save_path}")
+    _save_figure(save_path, "distribution plot")
     
     return plt.gcf()
 
@@ -268,15 +318,12 @@ def plot_saliency_map_sample(saliency_map: np.ndarray,
     im = plt.imshow(saliency_map, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax,
                    interpolation='nearest')
     plt.colorbar(im, label=colorbar_label)
-    plt.xlabel('Time Point', fontsize=12)
-    plt.ylabel('EEG Channel', fontsize=12)
-    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('Time Point', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.ylabel('EEG Channel', fontsize=FONT_SIZE_AXIS_LABEL)
+    plt.title(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
     plt.yticks(range(num_channels), channel_names)
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved saliency map to {save_path}")
+    _save_figure(save_path, "saliency map")
     
     return plt.gcf()
 
@@ -362,17 +409,14 @@ def plot_comparison_by_class(channel_importance: np.ndarray,
         ax.barh(range(len(channels)), importance, color=f'C{cls_idx}', alpha=0.7)
         ax.set_yticks(range(len(channels)))
         ax.set_yticklabels(channels)
-        ax.set_xlabel('Average Importance', fontsize=10)
-        ax.set_title(f'{cls_name}', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Average Importance', fontsize=FONT_SIZE_SMALL)
+        ax.set_title(f'{cls_name}', fontsize=FONT_SIZE_SUBTITLE, fontweight='bold')
         ax.grid(axis='x', alpha=0.3)
         ax.invert_yaxis()  # Top channel at top
     
-    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.suptitle(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved comparison plot to {save_path}")
+    _save_figure(save_path, "comparison plot")
     
     return fig
 
@@ -461,9 +505,9 @@ def plot_method_comparison(channel_importance_vg: np.ndarray,
     width = 0.35
     ax1.bar(x - width/2, avg_vg[top_k_indices], width, label='Vanilla Gradients', alpha=0.8, color='steelblue')
     ax1.bar(x + width/2, avg_ig[top_k_indices], width, label='Integrated Gradients', alpha=0.8, color='coral')
-    ax1.set_xlabel('Channel', fontsize=11)
-    ax1.set_ylabel('Average Importance', fontsize=11)
-    ax1.set_title(f'Top {top_k} Channels Comparison', fontsize=12, fontweight='bold')
+    ax1.set_xlabel('Channel', fontsize=FONT_SIZE_SMALL)
+    ax1.set_ylabel('Average Importance', fontsize=FONT_SIZE_SMALL)
+    ax1.set_title(f'Top {top_k} Channels Comparison', fontsize=FONT_SIZE_SUBTITLE, fontweight='bold')
     ax1.set_xticks(x)
     ax1.set_xticklabels([channel_names[i] for i in top_k_indices], rotation=45, ha='right')
     ax1.legend()
@@ -476,16 +520,16 @@ def plot_method_comparison(channel_importance_vg: np.ndarray,
     max_val = max(avg_vg.max(), avg_ig.max())
     min_val = min(avg_vg.min(), avg_ig.min())
     ax2.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5, label='y=x')
-    ax2.set_xlabel('Vanilla Gradients Importance', fontsize=11)
-    ax2.set_ylabel('Integrated Gradients Importance', fontsize=11)
-    ax2.set_title('Method Correlation (All Channels)', fontsize=12, fontweight='bold')
+    ax2.set_xlabel('Vanilla Gradients Importance', fontsize=FONT_SIZE_SMALL)
+    ax2.set_ylabel('Integrated Gradients Importance', fontsize=FONT_SIZE_SMALL)
+    ax2.set_title('Method Correlation (All Channels)', fontsize=FONT_SIZE_SUBTITLE, fontweight='bold')
     ax2.legend()
     ax2.grid(alpha=0.3)
     
     # Compute correlation
     correlation = np.corrcoef(avg_vg, avg_ig)[0, 1]
     ax2.text(0.05, 0.95, f'Correlation: {correlation:.3f}', 
-             transform=ax2.transAxes, fontsize=11,
+             transform=ax2.transAxes, fontsize=FONT_SIZE_SMALL,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     # 3. Difference plot (IG - VG)
@@ -496,8 +540,8 @@ def plot_method_comparison(channel_importance_vg: np.ndarray,
     ax3.barh(range(len(sorted_indices)), diff[sorted_indices], color=colors, alpha=0.7)
     ax3.set_yticks(range(len(sorted_indices)))
     ax3.set_yticklabels([channel_names[i] for i in sorted_indices])
-    ax3.set_xlabel('Difference (IG - VG)', fontsize=11)
-    ax3.set_title(f'Top {top_k} Channels by Absolute Difference', fontsize=12, fontweight='bold')
+    ax3.set_xlabel('Difference (IG - VG)', fontsize=FONT_SIZE_SMALL)
+    ax3.set_title(f'Top {top_k} Channels by Absolute Difference', fontsize=FONT_SIZE_SUBTITLE, fontweight='bold')
     ax3.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
     ax3.grid(axis='x', alpha=0.3)
     
@@ -523,22 +567,19 @@ def plot_method_comparison(channel_importance_vg: np.ndarray,
     for i, ch_idx in enumerate(top_channels_combined):
         ax4.annotate(channel_names[ch_idx], 
                     (rank_vg[ch_idx], rank_ig[ch_idx]),
-                    fontsize=8, alpha=0.7)
+                    fontsize=FONT_SIZE_TINY, alpha=0.7)
     ax4.plot([1, top_k_for_ranking], [1, top_k_for_ranking], 'r--', alpha=0.5, label='Same ranking')
-    ax4.set_xlabel('Vanilla Gradients Rank', fontsize=11)
-    ax4.set_ylabel('Integrated Gradients Rank', fontsize=11)
-    ax4.set_title('Ranking Comparison (Lower = Better)', fontsize=12, fontweight='bold')
+    ax4.set_xlabel('Vanilla Gradients Rank', fontsize=FONT_SIZE_SMALL)
+    ax4.set_ylabel('Integrated Gradients Rank', fontsize=FONT_SIZE_SMALL)
+    ax4.set_title('Ranking Comparison (Lower = Better)', fontsize=FONT_SIZE_SUBTITLE, fontweight='bold')
     ax4.invert_xaxis()
     ax4.invert_yaxis()
     ax4.legend()
     ax4.grid(alpha=0.3)
     
-    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.suptitle(title, fontsize=FONT_SIZE_TITLE, fontweight='bold')
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved method comparison plot to {save_path}")
+    _save_figure(save_path, "method comparison plot")
     
     return fig
 
@@ -621,7 +662,14 @@ def plot_topography(channel_importance: np.ndarray,
                    vmax: Optional[float] = None,
                    show_colorbar: bool = True,
                    sensors: bool = True,
-                   contours: int = 6):
+                   contours: int = 6,
+                   outlines: str = 'head',
+                   head_pos: Optional[dict] = None,
+                   res: int = 128,
+                   extrapolate: str = 'auto',
+                   interp: str = 'cubic',
+                   sphere: Optional[Union[float, tuple]] = None,
+                   border: Union[str, float] = 'mean'):
     """
     Plot channel importance as a topography map on the scalp.
     
@@ -642,6 +690,13 @@ def plot_topography(channel_importance: np.ndarray,
         show_colorbar: Whether to show colorbar
         sensors: Whether to show sensor locations (MNE only)
         contours: Number of contour lines (MNE only)
+        outlines: Head outline style ('head', 'skirt', 'head+skirt', or dict for custom) (MNE only)
+        head_pos: Dictionary for head outline position (MNE only)
+        res: Resolution of interpolation grid (higher = smoother, default: 128) (MNE only)
+        extrapolate: Extrapolation method ('auto' for full scalp, 'box', 'head', or 'local') (MNE only)
+        interp: Interpolation method ('cubic', 'linear', 'nearest') (MNE only)
+        sphere: Sphere size for head model (None = auto, or tuple of (x, y, z, radius)) (MNE only)
+        border: Border style ('mean' for full coverage, or float for padding) (MNE only)
     
     Returns:
         matplotlib figure object
@@ -671,22 +726,97 @@ def plot_topography(channel_importance: np.ndarray,
     if vmax is None:
         vmax = channel_importance.max()
     
-    # Try to use MNE for high-quality topography
-    if MNE_AVAILABLE:
-        try:
-            return _plot_topography_mne(
-                channel_importance, channel_names, title, save_path,
-                figsize, cmap, vmin, vmax, show_colorbar, sensors, contours
-            )
-        except Exception as e:
-            print(f"Warning: MNE topography plotting failed ({e}). Falling back to matplotlib approach.")
-            # Fall through to matplotlib approach
+    # MNE is REQUIRED for topography plotting
+    if not MNE_AVAILABLE:
+        raise RuntimeError(
+            "MNE is required for topography plotting. "
+            "Please install MNE and activate the conda environment: conda activate eeg_env"
+        )
     
-    # Fallback: matplotlib-based approach
-    return _plot_topography_matplotlib(
+    # Use MNE for high-quality topography with accurate 10-20 system positions
+    return _plot_topography_mne(
         channel_importance, channel_names, title, save_path,
-        figsize, cmap, vmin, vmax, show_colorbar
+        figsize, cmap, vmin, vmax, show_colorbar, sensors, contours,
+        outlines, head_pos, res, extrapolate, interp, sphere, border
     )
+
+
+def _add_colorbar_to_topography(im, ax: plt.Axes, show_colorbar: bool) -> None:
+    """
+    Add colorbar to topography plot.
+    
+    Args:
+        im: Image/contour object from MNE plot
+        ax: Matplotlib axes
+        show_colorbar: Whether to show colorbar
+    """
+    if not show_colorbar:
+        return
+    
+    try:
+        if MNE_COLORBAR_AVAILABLE:
+            mne_add_colorbar(im, ax=ax, pad=TOPOGRAPHY_COLORBAR_PAD, shrink=TOPOGRAPHY_COLORBAR_SHRINK)
+        else:
+            raise ImportError("MNE colorbar not available")
+    except (ImportError, AttributeError, TypeError):
+        # Fallback: use matplotlib's colorbar
+        cbar = plt.colorbar(im, ax=ax, pad=TOPOGRAPHY_COLORBAR_PAD, shrink=TOPOGRAPHY_COLORBAR_SHRINK)
+        cbar.set_label(TOPOGRAPHY_COLORBAR_LABEL, fontsize=FONT_SIZE_SMALL)
+
+
+def _add_electrode_labels(ax: plt.Axes, info: mne.Info) -> None:
+    """
+    Add electrode labels to topography plot at their exact positions.
+    
+    Args:
+        ax: Matplotlib axes
+        info: MNE Info object with channel information
+    """
+    try:
+        # Get 2D positions for all channels in info
+        pos_2d = _find_topomap_coords(info, picks='eeg')
+        
+        # Get the channel names that are actually plotted
+        plotted_ch_names = info.ch_names
+        
+        # Add text labels for each electrode at their exact positions
+        for ch_name, (x, y) in zip(plotted_ch_names, pos_2d):
+            # Place label directly at the electrode position (x, y)
+            # Use a white background with transparency for visibility over the heatmap
+            ax.text(x, y, ch_name, 
+                   ha='center', va='center',
+                   fontsize=TOPOGRAPHY_LABEL_FONTSIZE, fontweight='bold',
+                   color='black', zorder=10,
+                   bbox=dict(boxstyle='round,pad=0.15', facecolor='white', 
+                            edgecolor='black', alpha=0.85, linewidth=0.5))
+    except Exception as e:
+        print(f"Warning: Could not add electrode labels: {e}")
+
+
+def _match_channels_to_montage(channel_names: List[str], montage) -> Tuple[List[str], List[int]]:
+    """
+    Match channel names to MNE montage channels (case-insensitive).
+    
+    Args:
+        channel_names: List of channel names to match
+        montage: MNE montage object
+        
+    Returns:
+        Tuple of (matched_channel_names, matched_indices)
+    """
+    montage_ch_names_lower = [ch.lower() for ch in montage.ch_names]
+    matched_chs = []
+    matched_indices = []
+    
+    for i, ch in enumerate(channel_names):
+        ch_lower = ch.lower()
+        if ch_lower in montage_ch_names_lower:
+            # Find the actual montage channel name (preserving case)
+            montage_idx = montage_ch_names_lower.index(ch_lower)
+            matched_chs.append(montage.ch_names[montage_idx])
+            matched_indices.append(i)
+    
+    return matched_chs, matched_indices
 
 
 def _plot_topography_mne(channel_importance: np.ndarray,
@@ -699,7 +829,14 @@ def _plot_topography_mne(channel_importance: np.ndarray,
                         vmax: float,
                         show_colorbar: bool,
                         sensors: bool,
-                        contours: int):
+                        contours: int,
+                        outlines: str = 'head',
+                        head_pos: Optional[dict] = None,
+                        res: int = 128,
+                        extrapolate: str = 'auto',
+                        interp: str = 'cubic',
+                        sphere: Optional[Union[float, tuple]] = None,
+                        border: Union[str, float] = 'mean'):
     """
     Plot topography using MNE (high-quality, standard approach).
     """
@@ -711,45 +848,98 @@ def _plot_topography_mne(channel_importance: np.ndarray,
     info = mne.create_info(ch_names=channel_names, sfreq=200, ch_types='eeg')
     
     # Set montage (this assigns 3D positions to channels)
+    # Use match_case=False and on_missing='warn' to handle channel name variations
     try:
         info.set_montage(montage, match_case=False, on_missing='warn')
     except Exception as e:
         print(f"Warning: Could not set montage for all channels: {e}")
         print("Trying to match available channels...")
-        # Try to match available channels in the montage
-        available_chs = [ch for ch in channel_names if ch in montage.ch_names]
-        if len(available_chs) < len(channel_names):
-            print(f"Warning: Only {len(available_chs)}/{len(channel_names)} channels found in montage.")
+        # Try to match available channels in the montage using helper function
+        matched_chs, matched_indices = _match_channels_to_montage(channel_names, montage)
+        
+        if len(matched_chs) < len(channel_names):
+            print(f"Warning: Only {len(matched_chs)}/{len(channel_names)} channels found in montage.")
+            print(f"Missing channels: {set(channel_names) - set([ch.lower() for ch in matched_chs])}")
             # Create a subset info with only available channels
-            subset_indices = [i for i, ch in enumerate(channel_names) if ch in available_chs]
-            channel_importance = channel_importance[subset_indices]
-            channel_names = available_chs
+            channel_importance = channel_importance[matched_indices]
+            channel_names = matched_chs
             info = mne.create_info(ch_names=channel_names, sfreq=200, ch_types='eeg')
+            info.set_montage(montage, match_case=False, on_missing='warn')
+        else:
+            # All channels found, but montage setting failed - try again with matched names
+            info = mne.create_info(ch_names=matched_chs, sfreq=200, ch_types='eeg')
             info.set_montage(montage, match_case=False, on_missing='warn')
     
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
     
-    # Plot topography
-    im, _ = mne.viz.plot_topomap(
-        channel_importance,
-        info,
-        axes=ax,
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        show=False,
-        sensors=sensors,
-        contours=contours,
-        colorbar=show_colorbar
-    )
+    # Plot topography with head outline
+    # Handle matplotlib compatibility issues (e.g., QuadContourSet.collections)
+    # Set default head position if not provided to ensure head outline is visible
+    if head_pos is None:
+        head_pos = dict(head_radius=0.5, head_width=0.2, head_length=0.2)
     
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    # Set default sphere if not provided (standard head radius)
+    if sphere is None:
+        sphere = (0.0, 0.0, 0.0, 0.095)  # Standard head radius in meters
+    
+    # Build plot_topomap arguments
+    # MNE API: plot_topomap(data, pos, *, ...) where pos can be Info object or array
+    # Use 'auto' extrapolation to ensure full scalp coverage
+    # Note: MNE uses vlim=(vmin, vmax) instead of separate vmin/vmax
+    # Build plot_kwargs - only include valid MNE parameters
+    # Note: MNE's plot_topomap doesn't accept 'head_pos' - it's handled via 'outlines' parameter
+    plot_kwargs = {
+        'axes': ax,
+        'cmap': cmap,
+        'vlim': (vmin, vmax),  # MNE uses vlim tuple, not separate vmin/vmax
+        'show': False,
+        'sensors': sensors,
+        'contours': contours,
+        'outlines': outlines,  # 'head', 'skirt', 'head+skirt', or dict for custom outlines
+        'res': res,
+        'extrapolate': extrapolate,  # 'auto' automatically determines best extrapolation for full scalp
+        'image_interp': interp,  # Note: parameter name is 'image_interp', not 'interp'
+        'sphere': sphere,
+        'border': border  # 'mean' extends to head boundary for full coverage
+    }
+    
+    # Note: 'head_pos' is not a valid parameter for plot_topomap
+    # If custom head position is needed, it should be passed via 'outlines' as a dict
+    
+    try:
+        # Correct API: plot_topomap(data, pos, ...) where pos is Info object
+        # Note: MNE's plot_topomap doesn't accept colorbar/cbar parameter
+        im, _ = mne.viz.plot_topomap(channel_importance, info, **plot_kwargs)
+        
+        # Add colorbar manually if requested (MNE doesn't have a direct colorbar parameter)
+        _add_colorbar_to_topography(im, ax, show_colorbar)
+    except AttributeError as e:
+        if 'collections' in str(e) or 'QuadContourSet' in str(e):
+            # Matplotlib version compatibility issue - try without contours
+            print(f"Warning: Matplotlib compatibility issue detected ({e}). "
+                  "Trying without contour lines...")
+            try:
+                # Retry with contours disabled
+                plot_kwargs['contours'] = 0
+                im, _ = mne.viz.plot_topomap(channel_importance, info, **plot_kwargs)
+                # Add colorbar if requested
+                _add_colorbar_to_topography(im, ax, show_colorbar)
+            except Exception as e2:
+                raise RuntimeError(
+                    f"MNE topography plotting failed due to matplotlib compatibility: {e2}. "
+                    "Consider updating MNE or matplotlib, or the code will fall back to matplotlib-based plotting."
+                ) from e2
+        else:
+            raise
+    
+    # Add electrode labels directly at their electrode positions on the scalp
+    _add_electrode_labels(ax, info)
+    
+    ax.set_title(title, fontsize=TOPOGRAPHY_TITLE_FONTSIZE, fontweight='bold', pad=TOPOGRAPHY_TITLE_PAD)
     plt.tight_layout()
     
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved topography plot to {save_path}")
+    _save_figure(save_path, "topography plot")
     
     return fig
 
@@ -764,131 +954,322 @@ def _plot_topography_matplotlib(channel_importance: np.ndarray,
                                 vmax: float,
                                 show_colorbar: bool):
     """
-    Plot topography using matplotlib (simplified fallback when MNE is not available).
+    Plot topography using matplotlib with MNE positions.
     
-    This creates a circular scalp plot with approximate channel positions.
+    This function uses MNE's standard_1020 montage to get accurate 10-20 system positions.
+    MNE is REQUIRED - this function will not work without it.
     """
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(projection='polar'))
+    if not MNE_AVAILABLE:
+        raise RuntimeError(
+            "MNE is required for topography plotting. "
+            "Please install MNE and activate the conda environment: conda activate eeg_env"
+        )
     
-    # Define approximate positions for standard 10-20 channels
-    # This is a simplified mapping - MNE provides more accurate positions
-    channel_positions = _get_approximate_channel_positions(channel_names)
+    try:
+        from scipy.interpolate import griddata
+        SCIPY_AVAILABLE = True
+    except ImportError:
+        SCIPY_AVAILABLE = False
+        print("Warning: scipy not available. Using scatter plot instead of continuous heatmap.")
     
-    if channel_positions is None:
-        # If we can't map channels, create a simple circular layout
-        print("Warning: Could not map channel names to positions. Using circular layout.")
-        angles = np.linspace(0, 2 * np.pi, len(channel_names), endpoint=False)
-        radii = np.ones(len(channel_names)) * 0.8
+    # Get actual channel positions from MNE standard_1020 montage
+    # This ensures accurate positioning covering full scalp according to 10-20 system
+    use_mne_positions = False
+    
+    try:
+        montage = make_standard_montage('standard_1020')
+        # Try to match channels and get their 2D positions
+        valid_channels = []
+        valid_indices = []
+        valid_channel_importance = []
+        
+        # Use helper function to match channels
+        valid_channels, valid_indices = _match_channels_to_montage(channel_names, montage)
+        valid_channel_importance = [channel_importance[i] for i in valid_indices]
+        
+        if len(valid_channels) < len(channel_names) * 0.8:  # Less than 80% match
+            raise ValueError(
+                f"Only {len(valid_channels)}/{len(channel_names)} channels matched in MNE standard_1020 montage. "
+                f"Missing channels: {set(channel_names) - set([ch.lower() for ch in valid_channels])}. "
+                "Please check channel names match the 10-20 system."
+            )
+        
+        # Use MNE positions for matched channels
+        info_temp = mne.create_info(ch_names=valid_channels, sfreq=200, ch_types='eeg')
+        info_temp.set_montage(montage, match_case=False, on_missing='warn')
+        pos_2d = _find_topomap_coords(info_temp, picks='eeg')
+        
+        # Extract x, y coordinates
+        x_coords = pos_2d[:, 0]
+        y_coords = pos_2d[:, 1]
+        
+        # Normalize to fit in unit circle (preserve aspect ratio)
+        max_dist = np.sqrt(x_coords**2 + y_coords**2).max()
+        if max_dist > 0:
+            x_coords = x_coords / max_dist * INTERPOLATION_NORMALIZATION_FACTOR
+            y_coords = y_coords / max_dist * INTERPOLATION_NORMALIZATION_FACTOR
+        
+        points = np.column_stack([x_coords, y_coords])
+        values = np.array(valid_channel_importance)
+        use_mne_positions = True
+        print(f"Using MNE standard_1020 positions for {len(valid_channels)}/{len(channel_names)} channels.")
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to extract MNE positions: {e}. "
+            "MNE with standard_1020 montage is required for accurate 10-20 system electrode positions. "
+            "Please ensure MNE is installed and the conda environment is activated: conda activate eeg_env"
+        ) from e
+    
+    # MNE positions should always be used - if we get here, something went wrong
+    if not use_mne_positions:
+        raise RuntimeError(
+            "Failed to obtain MNE positions. This should not happen. "
+            "Please ensure MNE is properly installed and the conda environment is activated: conda activate eeg_env"
+        )
+    
+    # Use MNE positions - already converted above
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    if SCIPY_AVAILABLE:
+        # Create a fine grid for continuous heatmap covering full circular scalp
+        # Create circular grid that covers full scalp (symmetric around origin)
+        x_grid = np.linspace(-INTERPOLATION_GRID_RANGE, INTERPOLATION_GRID_RANGE, INTERPOLATION_GRID_RESOLUTION)
+        y_grid = np.linspace(-INTERPOLATION_GRID_RANGE, INTERPOLATION_GRID_RANGE, INTERPOLATION_GRID_RESOLUTION)
+        X_grid, Y_grid = np.meshgrid(x_grid, y_grid)
+        grid_points = np.column_stack([X_grid.ravel(), Y_grid.ravel()])
+        
+        # Calculate distance from center for each grid point
+        R_grid = np.sqrt(X_grid**2 + Y_grid**2)
+        
+        # Interpolate values onto the grid (cubic interpolation for smoothness)
+        try:
+            Z_grid = griddata(points, values, grid_points, method='cubic', fill_value=np.nan)
+            Z_grid = Z_grid.reshape(X_grid.shape)
+            
+            # For areas outside sensor coverage but inside head, use nearest neighbor extrapolation
+            # This ensures full scalp coverage across entire circular scalp
+            mask_outside = R_grid > 1.0
+            mask_inside = R_grid <= 1.0
+            mask_no_data = np.isnan(Z_grid) & mask_inside
+            
+            if mask_no_data.any():
+                # Fill gaps inside head with nearest neighbor interpolation to ensure full coverage
+                try:
+                    # Get valid data points (not NaN)
+                    valid_mask = ~np.isnan(Z_grid.ravel())
+                    valid_points = grid_points[valid_mask]
+                    valid_values = Z_grid.ravel()[valid_mask]
+                    
+                    if len(valid_points) > 0:
+                        # Fill gaps with nearest neighbor
+                        Z_grid_filled = griddata(
+                            valid_points, valid_values, 
+                            grid_points[mask_no_data.ravel()], 
+                            method='nearest', 
+                            fill_value=np.nan
+                        )
+                        Z_grid_flat = Z_grid.ravel()
+                        Z_grid_flat[mask_no_data.ravel()] = Z_grid_filled
+                        Z_grid = Z_grid_flat.reshape(X_grid.shape)
+                except Exception as e:
+                    print(f"Warning: Gap filling failed ({e}), some areas may not be covered.")
+            
+            # Mask values outside the head (radius > 1.0) - full circular scalp
+            Z_grid[mask_outside] = np.nan
+            
+            # Ensure we have data covering the full circular area
+            # If there are still large gaps, use a fallback approach
+            if np.isnan(Z_grid[mask_inside]).sum() > mask_inside.sum() * 0.3:
+                # Too many gaps - try filling with a smoother approach
+                from scipy.ndimage import gaussian_filter
+                try:
+                    # Create a mask for valid data
+                    valid_data = ~np.isnan(Z_grid)
+                    if valid_data.sum() > 0:
+                        # Smooth and extrapolate
+                        Z_filled = Z_grid.copy()
+                        Z_filled[~valid_data & mask_inside] = np.nanmean(Z_grid[valid_data])
+                        Z_filled = gaussian_filter(Z_filled, sigma=2)
+                        Z_filled[mask_outside] = np.nan
+                        Z_grid = Z_filled
+                except Exception:
+                    pass  # If smoothing fails, use original
+            
+        except Exception as e:
+            # Fallback to linear interpolation if cubic fails
+            print(f"Warning: Cubic interpolation failed ({e}), using linear interpolation.")
+            Z_grid = griddata(points, values, grid_points, method='linear', fill_value=np.nan)
+            Z_grid = Z_grid.reshape(X_grid.shape)
+            R_grid = np.sqrt(X_grid**2 + Y_grid**2)
+            Z_grid[R_grid > 1.0] = np.nan
+        
+        # Create continuous heatmap covering full circular scalp
+        # Use many levels for smooth gradient
+        im = ax.contourf(X_grid, Y_grid, Z_grid, levels=100, cmap=cmap, 
+                         vmin=vmin, vmax=vmax, extend='both', alpha=0.9)
+        
+        # Add channel locations as points
+        scatter = ax.scatter(x_coords, y_coords, c=values, cmap=cmap, 
+                            s=100, edgecolors='black', linewidths=1.5,
+                            vmin=vmin, vmax=vmax, zorder=5)
     else:
-        angles, radii = channel_positions
-    
-    # Normalize importance values for visualization
-    normalized_importance = (channel_importance - vmin) / (vmax - vmin + 1e-10)
-    
-    # Create scatter plot with color-coded importance
-    scatter = ax.scatter(angles, radii, c=normalized_importance, 
-                        cmap=cmap, s=200, alpha=0.8, edgecolors='black', linewidths=1.5)
+        # Fallback: use scatter plot if scipy is not available
+        scatter = ax.scatter(x_coords, y_coords, c=values, cmap=cmap, 
+                            s=200, edgecolors='black', linewidths=1.5,
+                            vmin=vmin, vmax=vmax, zorder=5, alpha=0.8)
+        im = scatter  # For colorbar compatibility
     
     # Add channel labels
-    for angle, radius, name, importance in zip(angles, radii, channel_names, channel_importance):
-        # Position label slightly outside the circle
-        label_radius = radius + 0.15
-        ax.text(angle, label_radius, name, ha='center', va='center', 
-               fontsize=8, fontweight='bold')
+    for x, y, name in zip(x_coords, y_coords, channel_names):
+        # Position label slightly outside the head
+        label_radius = np.sqrt(x**2 + y**2) + 0.15
+        label_x = (x / np.sqrt(x**2 + y**2 + 1e-10)) * label_radius
+        label_y = (y / np.sqrt(x**2 + y**2 + 1e-10)) * label_radius
+        ax.text(label_x, label_y, name, ha='center', va='center', 
+               fontsize=FONT_SIZE_ELECTRODE_LABEL, fontweight='bold', zorder=6)
     
-    # Draw head outline (circle) - for polar plot, we draw it as a circle at radius 1
+    # Draw head outline (circle)
     theta_head = np.linspace(0, 2 * np.pi, 100)
-    ax.plot(theta_head, np.ones_like(theta_head), 'k-', linewidth=2)
+    x_head = np.cos(theta_head)
+    y_head = np.sin(theta_head)
+    ax.plot(x_head, y_head, 'k-', linewidth=3, zorder=4)
     
-    # Draw nose (top of circle) - at angle 0 (front)
-    ax.plot([0, 0], [0.95, 1.05], 'k-', linewidth=2)
+    # Draw nose (top of circle)
+    nose_y = 1.05
+    nose_x = 0
+    ax.plot([nose_x - 0.05, nose_x, nose_x + 0.05], 
+            [nose_y, nose_y + 0.1, nose_y], 'k-', linewidth=3, zorder=4)
     
-    # Set limits
-    ax.set_ylim(0, 1.3)
-    ax.set_theta_zero_location('N')  # Nose at top
-    ax.set_theta_direction(-1)  # Clockwise
+    # Draw ears (left and right sides)
+    # Left ear
+    ear_theta_left = np.linspace(np.pi/2 - 0.15, np.pi/2 + 0.15, 20)
+    ear_x_left = np.cos(ear_theta_left) * 1.02
+    ear_y_left = np.sin(ear_theta_left) * 1.02
+    ax.plot(ear_x_left, ear_y_left, 'k-', linewidth=2, zorder=4)
+    
+    # Right ear
+    ear_theta_right = np.linspace(-np.pi/2 - 0.15, -np.pi/2 + 0.15, 20)
+    ear_x_right = np.cos(ear_theta_right) * 1.02
+    ear_y_right = np.sin(ear_theta_right) * 1.02
+    ax.plot(ear_x_right, ear_y_right, 'k-', linewidth=2, zorder=4)
+    
+    # Set equal aspect and limits
+    ax.set_aspect('equal')
+    ax.set_xlim(-1.3, 1.3)
+    ax.set_ylim(-1.3, 1.3)
+    ax.axis('off')
     
     # Add colorbar
     if show_colorbar:
-        cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.8)
-        cbar.set_label('Channel Importance', fontsize=10)
+        cbar = plt.colorbar(im, ax=ax, pad=COLORBAR_PAD, shrink=COLORBAR_SHRINK)
+        cbar.set_label(COLORBAR_LABEL, fontsize=FONT_SIZE_SMALL)
     
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
-    ax.axis('off')  # Hide polar axis lines
+    ax.set_title(title, fontsize=FONT_SIZE_TITLE, fontweight='bold', pad=TOPOGRAPHY_TITLE_PAD)
     
     plt.tight_layout()
     
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved topography plot to {save_path}")
+    _save_figure(save_path, "topography plot")
     
     return fig
 
 
 def _get_approximate_channel_positions(channel_names: List[str]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """
-    Get approximate polar coordinates (angles, radii) for channel names.
+    Get approximate polar coordinates (angles, radii) for channel names based on 10-20 system.
+    
+    This function provides approximate positions when MNE is not available.
+    For accurate positions, MNE's standard_1020 montage should be used.
     
     Returns:
         Tuple of (angles, radii) in radians, or None if mapping fails
     """
-    # Simplified mapping based on standard 10-20 system
-    # Angles: 0 = front (nose), increasing clockwise
+    # 10-20 system mapping based on standard electrode placement
+    # Coordinate system: Standard mathematical polar coordinates
+    # Angles: 0 = right (x>0, y=0), π/2 = top/front (x=0, y>0), π = left (x<0, y=0), 3π/2 = bottom/back (x=0, y<0)
     # Radii: 0 = center, 1 = edge
+    # 
+    # Standard 10-20 system layout:
+    # - Front to back: FP (front) → F → C → P → O (back)
+    # - Left to right: odd numbers (left, negative x) → Z (midline, x=0) → even numbers (right, positive x)
+    # - Number indicates distance from midline: 1,2 (close), 3,4 (medium), 5,6,7,8 (lateral)
     
-    position_map = {
-        # Frontal
-        'FP1': (np.pi * 0.25, 0.95), 'FP2': (np.pi * 0.75, 0.95),
-        'F1': (np.pi * 0.3, 0.85), 'F2': (np.pi * 0.7, 0.85),
-        'F3': (np.pi * 0.2, 0.8), 'F4': (np.pi * 0.8, 0.8),
-        'FZ': (0, 0.85), 'F5': (np.pi * 0.15, 0.75), 'F6': (np.pi * 0.85, 0.75),
-        'F7': (np.pi * 0.1, 0.7), 'F8': (np.pi * 0.9, 0.7),
-        'F9': (np.pi * 0.05, 0.65), 'F10': (np.pi * 0.95, 0.65),
+    # 10-20 system positions using a more systematic approach
+    # Key principle: Use Cartesian-like positioning then convert to polar
+    # Front-to-back axis: y coordinate (positive = front, negative = back)
+    # Left-to-right axis: x coordinate (negative = left, positive = right)
+    
+    # Helper function to convert (x, y) to (angle, radius)
+    def xy_to_polar(x, y):
+        angle = np.arctan2(y, x)  # Standard: atan2(y, x) gives angle from positive x-axis
+        radius = np.sqrt(x**2 + y**2)
+        return angle, radius
+    
+    # Define positions in (x, y) coordinates first, then convert
+    # x: negative = left, positive = right, 0 = midline
+    # y: positive = front, negative = back, 0 = center
+    # Values normalized to roughly fit in unit circle
+    
+    position_map_xy = {
+        # Frontal Pole (very front)
+        'FP1': (-0.3, 0.95), 'FP2': (0.3, 0.95),
         
         # Anterior Frontal
-        'AF3': (np.pi * 0.25, 0.9), 'AF4': (np.pi * 0.75, 0.9),
-        'AF7': (np.pi * 0.15, 0.8), 'AF8': (np.pi * 0.85, 0.8),
-        'AFZ': (0, 0.9),
+        'AF3': (-0.25, 0.9), 'AF4': (0.25, 0.9),
+        'AF7': (-0.4, 0.85), 'AF8': (0.4, 0.85),
+        'AFZ': (0.0, 0.9),
+        
+        # Frontal
+        'F1': (-0.2, 0.85), 'F2': (0.2, 0.85),
+        'F3': (-0.35, 0.8), 'F4': (0.35, 0.8),
+        'FZ': (0.0, 0.85),
+        'F5': (-0.45, 0.75), 'F6': (0.45, 0.75),
+        'F7': (-0.55, 0.7), 'F8': (0.55, 0.7),
+        'F9': (-0.6, 0.65), 'F10': (0.6, 0.65),
         
         # Frontal-Central
-        'FC1': (np.pi * 0.3, 0.7), 'FC2': (np.pi * 0.7, 0.7),
-        'FC3': (np.pi * 0.2, 0.65), 'FC4': (np.pi * 0.8, 0.65),
-        'FC5': (np.pi * 0.15, 0.6), 'FC6': (np.pi * 0.85, 0.6),
+        'FC1': (-0.2, 0.7), 'FC2': (0.2, 0.7),
+        'FC3': (-0.35, 0.65), 'FC4': (0.35, 0.65),
+        'FC5': (-0.5, 0.6), 'FC6': (0.5, 0.6),
         
-        # Temporal
-        'FT7': (np.pi * 0.1, 0.5), 'FT8': (np.pi * 0.9, 0.5),
-        'T7': (np.pi * 0.05, 0.4), 'T8': (np.pi * 0.95, 0.4),
-        'T9': (np.pi * 0.02, 0.3), 'T10': (np.pi * 0.98, 0.3),
+        # Frontal-Temporal / Temporal
+        'FT7': (-0.7, 0.5), 'FT8': (0.7, 0.5),
+        'T7': (-0.75, 0.4), 'T8': (0.75, 0.4),
+        'T9': (-0.8, 0.3), 'T10': (0.8, 0.3),
         
         # Central
-        'C1': (np.pi * 0.3, 0.5), 'C2': (np.pi * 0.7, 0.5),
-        'C3': (np.pi * 0.2, 0.45), 'C4': (np.pi * 0.8, 0.45),
-        'C5': (np.pi * 0.15, 0.4), 'C6': (np.pi * 0.85, 0.4),
-        'CZ': (0, 0.5),
+        'C1': (-0.2, 0.5), 'C2': (0.2, 0.5),
+        'C3': (-0.4, 0.45), 'C4': (0.4, 0.45),
+        'C5': (-0.55, 0.4), 'C6': (0.55, 0.4),
+        'CZ': (0.0, 0.5),
         
-        # Central-Parietal
-        'CP1': (np.pi * 0.3, 0.3), 'CP2': (np.pi * 0.7, 0.3),
-        'CP3': (np.pi * 0.2, 0.35), 'CP4': (np.pi * 0.8, 0.35),
-        'CP5': (np.pi * 0.15, 0.4), 'CP6': (np.pi * 0.85, 0.4),
-        'CPZ': (0, 0.3),
+        # Central-Parietal (transitioning to back)
+        'CP1': (-0.2, 0.3), 'CP2': (0.2, 0.3),
+        'CP3': (-0.35, 0.25), 'CP4': (0.35, 0.25),
+        'CP5': (-0.5, 0.2), 'CP6': (0.5, 0.2),
+        'CPZ': (0.0, 0.3),
         
-        # Parietal
-        'P1': (np.pi * 0.3, 0.2), 'P2': (np.pi * 0.7, 0.2),
-        'P3': (np.pi * 0.2, 0.25), 'P4': (np.pi * 0.8, 0.25),
-        'P5': (np.pi * 0.15, 0.3), 'P6': (np.pi * 0.85, 0.3),
-        'P7': (np.pi * 0.1, 0.35), 'P8': (np.pi * 0.9, 0.35),
-        'PZ': (0, 0.2),
+        # Parietal (back of head)
+        'P1': (-0.2, 0.1), 'P2': (0.2, 0.1),
+        'P3': (-0.35, 0.05), 'P4': (0.35, 0.05),
+        'P5': (-0.5, 0.0), 'P6': (0.5, 0.0),
+        'P7': (-0.6, -0.05), 'P8': (0.6, -0.05),
+        'PZ': (0.0, 0.1),
         
         # Parietal-Occipital
-        'PO3': (np.pi * 0.25, 0.15), 'PO4': (np.pi * 0.75, 0.15),
-        'PO7': (np.pi * 0.15, 0.2), 'PO8': (np.pi * 0.85, 0.2),
-        'POZ': (0, 0.15),
+        'PO3': (-0.3, -0.1), 'PO4': (0.3, -0.1),
+        'PO7': (-0.45, -0.15), 'PO8': (0.45, -0.15),
+        'POZ': (0.0, -0.1),
         
-        # Occipital
-        'O1': (np.pi * 0.25, 0.05), 'O2': (np.pi * 0.75, 0.05),
-        'OZ': (0, 0.05),
+        # Occipital (very back)
+        'O1': (-0.25, -0.2), 'O2': (0.25, -0.2),
+        'OZ': (0.0, -0.2),
     }
+    
+    # Convert (x, y) positions to (angle, radius)
+    position_map = {}
+    for ch_name, (x, y) in position_map_xy.items():
+        angle, radius = xy_to_polar(x, y)
+        position_map[ch_name] = (angle, radius)
     
     angles = []
     radii = []
