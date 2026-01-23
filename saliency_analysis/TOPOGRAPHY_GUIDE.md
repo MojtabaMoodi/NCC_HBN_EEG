@@ -2,6 +2,13 @@
 
 This guide explains how to create topography plots (scalp maps) showing EEG channel importance.
 
+**Important:** MNE is now **required** for topography plotting. Make sure to activate the conda environment:
+```bash
+conda activate eeg_env
+```
+
+The topography plots use MNE's `standard_1020` montage for accurate 10-20 system electrode positions, ensuring all electrodes are placed correctly on the scalp with proper labels.
+
 ## Quick Start
 
 ### Method 1: Automatic (Recommended)
@@ -75,14 +82,20 @@ plot_topography(
     title="...",             # Optional: Plot title
     save_path=None,          # Optional: Path to save figure (None = don't save)
     figsize=(10, 8),         # Optional: Figure size
-    cmap='viridis',          # Optional: Colormap name
+    cmap='viridis',          # Optional: Colormap name ('viridis', 'Spectral_r', 'hot', etc.)
     vmin=None,               # Optional: Min value for colormap (None = auto)
     vmax=None,               # Optional: Max value for colormap (None = auto)
     show_colorbar=True,      # Optional: Show colorbar
-    sensors=True,            # Optional: Show sensor locations (MNE only)
-    contours=6               # Optional: Number of contour lines (MNE only)
+    sensors=True,            # Optional: Show sensor locations
+    contours=6,              # Optional: Number of contour lines
+    outlines='head',         # Optional: Head outline style ('head', 'skirt', 'head+skirt')
+    extrapolate='auto',      # Optional: Extrapolation method for full scalp coverage
+    border='mean',           # Optional: Border style for full coverage
+    res=128                  # Optional: Resolution of interpolation grid (higher = smoother)
 )
 ```
+
+**Note:** All parameters use MNE's `standard_1020` montage for accurate 10-20 system electrode positions. Electrode labels are automatically added at their correct positions on the scalp.
 
 ## Examples
 
@@ -148,32 +161,36 @@ plot_topography(
 
 ## Requirements
 
-### MNE (Recommended - High Quality)
+### MNE (Required)
 
-For best quality topography plots, install MNE:
+**MNE is now REQUIRED** for topography plotting. The code will raise an error if MNE is not available.
 
+**Installation:**
 ```bash
-pip install mne
+conda activate eeg_env
+# MNE should already be installed in eeg_env
+# If not: pip install mne
 ```
 
 **With MNE:**
-- High-quality scalp plots with accurate channel positions
+- High-quality scalp plots with accurate 10-20 system electrode positions
 - Smooth interpolation between channels
-- Professional appearance
-
-### Without MNE (Fallback)
-
-If MNE is not installed, the code automatically uses a matplotlib-based fallback:
-- Simplified circular scalp plot
-- Approximate channel positions
-- Still functional but less polished
+- Full scalp coverage (front to back, left to right)
+- Electrode labels positioned correctly on the scalp
+- Professional appearance matching standard EEG visualization practices
 
 ## Troubleshooting
 
-### Issue: "MNE not available"
+### Issue: "MNE is required for topography plotting"
 
-**Solution:** Install MNE or use the matplotlib fallback (automatic):
+**Solution:** MNE is now required. Activate the conda environment:
 ```bash
+conda activate eeg_env
+```
+
+If MNE is not installed in the environment:
+```bash
+conda activate eeg_env
 pip install mne
 ```
 
@@ -185,8 +202,23 @@ pip install mne
 
 **Solution:** Ensure your `channel_importance` array has exactly 60 values (or matches your number of channels).
 
+## Example Script
+
+Run the example script to see topography plotting in action:
+
+```bash
+conda activate eeg_env
+python saliency_analysis/example_topography_heatmap.py
+```
+
+This script demonstrates:
+1. Creating topography plots from saved saliency results
+2. Creating topography plots from custom channel importance data
+
+The script uses MNE's `standard_1020` montage for accurate 10-20 system electrode positions and includes electrode labels on the scalp.
+
 ## See Also
 
-- `example_topography.py` - Complete examples with different use cases
+- `example_topography_heatmap.py` - Complete working examples with MNE support
 - `visualization.py` - Full function documentation
 - `README.md` - General saliency analysis documentation
