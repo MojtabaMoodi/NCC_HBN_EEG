@@ -204,21 +204,21 @@ pip install mne
 
 ## Example Script
 
-Run the example script to see topography plotting in action:
+Run the script to create topography plots:
 
 ```bash
 conda activate eeg_env
-python saliency_analysis/example_topography_heatmap.py
+python saliency_analysis/create_topography.py
 ```
 
-This script demonstrates:
-1. Creating topography plots from saved saliency results
-2. Creating topography plots from custom channel importance data
+This script provides an interactive interface to:
+1. Create topography plots from saved saliency results (prompts for file path)
+2. Create topography plots from custom channel importance data
 
 The script uses MNE's `standard_1020` montage for accurate 10-20 system electrode positions and includes electrode labels on the scalp.
 
 ## See Also
 
-- `example_topography_heatmap.py` - Complete working examples with MNE support
+- `create_topography.py` - Interactive script for creating topography plots with MNE support
 - `visualization.py` - Full function documentation
 - `README.md` - General saliency analysis documentation

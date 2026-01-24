@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Example script for creating topography plots using MNE with accurate 10-20 system electrode positions.
+Script for creating topography plots from saliency results using MNE.
 
-This script demonstrates how to create topography plots from saliency results
-using the plot_topography function with MNE support. The plots include:
-- Accurate electrode positions based on the 10-20 system
-- Electrode labels on the scalp
-- Full scalp coverage with continuous heatmaps
+This script creates topography plots (scalp maps) showing EEG channel importance
+with accurate 10-20 system electrode positions. The plots include:
+- Accurate electrode positions based on the 10-20 system (via MNE standard_1020 montage)
+- Electrode labels positioned correctly on the scalp
+- Full scalp coverage with continuous heatmaps (front to back, left to right)
 - Professional-quality visualization
+
+Usage:
+    conda activate eeg_env
+    python saliency_analysis/create_topography.py
 
 Requirements:
 - MNE must be installed
@@ -51,14 +55,33 @@ def example_1_from_saved_results():
     print("Example 1: Topography Plot from Saved Results")
     print("=" * 80)
 
-    results_path = "saliency_results/gender_baseline_4s/saliency_results_vanilla_gradients.npz"
+    # Get path from user input
+    default_path = "saliency_results/gender_baseline_4s/saliency_results_vanilla_gradients.npz"
+    print(f"\nDefault path: {default_path}")
+    results_path = input("Enter path to saliency results file (or press Enter for default): ").strip()
+    
+    if not results_path:
+        results_path = default_path
+    
+    # Validate path exists
+    results_path_obj = Path(results_path)
+    if not results_path_obj.exists():
+        print(f"❌ Error: Results file not found: {results_path}")
+        print("   Run saliency analysis first, or provide a valid path to your results file.")
+        return
     
     try:
         data = np.load(results_path)
         channel_importance = data['channel_importance']
         
-        print(f"Loaded results from: {results_path}")
+        print(f"\nLoaded results from: {results_path}")
         print(f"Channel importance shape: {channel_importance.shape}")
+        
+        # Get output filename from user
+        default_output = "topography_from_results.png"
+        output_path = input(f"\nEnter output filename (or press Enter for '{default_output}'): ").strip()
+        if not output_path:
+            output_path = default_output
         
         # Use the existing plot_topography function which handles MNE properly
         # The function now includes explicit head outline visualization and full scalp coverage
@@ -66,7 +89,7 @@ def example_1_from_saved_results():
             channel_importance,
             channel_names=STANDARD_CHANNEL_NAMES,
             title="Channel Importance Topography - Gender Classification",
-            save_path="mne_evoked_saved.png",
+            save_path=output_path,
             cmap='Spectral_r',  # Use Spectral_r colormap like the original
             figsize=(10, 8),
             outlines='head',  # Show head outline clearly
@@ -75,17 +98,16 @@ def example_1_from_saved_results():
             border='mean',  # Extend to head boundary
             res=128  # High resolution for smooth heatmap
         )
-        print("✅ Topography plot saved successfully")
+        print(f"✅ Topography plot saved successfully to: {output_path}")
         
-    except FileNotFoundError as e:
-        print(f"❌ Error: Results file not found: {results_path}")
-        print("   Run saliency analysis first, or adjust the path to your results file.")
-        raise
+    except KeyError as e:
+        print(f"❌ Error: Required key not found in results file: {e}")
+        print("   Expected key: 'channel_importance'")
+        print("   Available keys:", list(data.keys()) if 'data' in locals() else "N/A")
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        raise
 
 
 def example_2_custom_data():
@@ -104,11 +126,17 @@ def example_2_custom_data():
     frontal_indices = [0, 1, 2, 3, 4]  # FP1, FP2, F7, F3, FZ
     channel_importance[frontal_indices] += 0.5
     
-    print(f"Created custom channel importance for {num_channels} channels")
+    print(f"\nCreated custom channel importance for {num_channels} channels")
     print(f"Top 5 most important channels:")
     top_5_indices = np.argsort(channel_importance)[::-1][:5]
     for rank, idx in enumerate(top_5_indices, 1):
         print(f"  {rank}. {STANDARD_CHANNEL_NAMES[idx]}: {channel_importance[idx]:.4f}")
+
+    # Get output filename from user
+    default_output = "topography_custom.png"
+    output_path = input(f"\nEnter output filename (or press Enter for '{default_output}'): ").strip()
+    if not output_path:
+        output_path = default_output
 
     # Use the existing plot_topography function
     # The function now includes explicit head outline visualization and full scalp coverage
@@ -116,7 +144,7 @@ def example_2_custom_data():
         channel_importance,
         channel_names=STANDARD_CHANNEL_NAMES,
         title="Custom Channel Importance Topography",
-        save_path="mne_evoked_custom.png",
+        save_path=output_path,
         cmap='Spectral_r',  # Use Spectral_r colormap like the original
         figsize=(10, 8),
         outlines='head',  # Show head outline clearly
@@ -125,7 +153,7 @@ def example_2_custom_data():
         border='mean',  # Extend to head boundary
         res=128  # High resolution for smooth heatmap
     )
-    print("✅ Topography plot saved successfully")
+    print(f"✅ Topography plot saved successfully to: {output_path}")
 
 
 def main():
