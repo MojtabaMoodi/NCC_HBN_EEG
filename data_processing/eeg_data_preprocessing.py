@@ -36,10 +36,15 @@ logger = logging.getLogger(__name__)
 # Constants
 SEGMENT_LENGTHS = ['1s', '2s', '4s']
 SPLIT_NAMES = ['train', 'val', 'test']
+UNKNOWN_SPLIT_NAME = 'unknown'  # Split for held-out "unknown" users when consider_unknown_users=True
 TASK_TYPES = ['active', 'passive']
 
 # Maximum samples per file to prevent HDF5 B-tree performance degradation
 # For all segment lengths, we split into multiple files when needed
+# Maximum samples per file to prevent HDF5 B-tree performance degradation
+# NOTE: This means participant data CAN span multiple files, which is acceptable
+# because: (1) training data is shuffled, (2) participant filtering works across files,
+# (3) this prevents very large files that become slow to process
 MAX_SAMPLES_PER_FILE = 100000  # ~100K samples per file for optimal performance
 SHUFFLE_BUFFER_SIZE = 10000  # Buffer size for global shuffling (10K samples = ~1.8GB for 4s segments)
 # Reduced to 10K to prevent OOM - still provides good global shuffling with ~32GB worst case
@@ -50,17 +55,28 @@ PERIODIC_FLUSH_INTERVAL = 100  # Flush all buffers every N participants to preve
 class EEGDataPreprocessor:
     """Class to handle EEG data preprocessing and organization."""
     
-    def __init__(self, data_root: str, output_dir: str):
+    def __init__(self, data_root: str, output_dir: str, num_channels: int = 60, window_sizes: List[str] = None):
         """
         Initialize the preprocessor.
         
         Args:
-            data_root: Path to the preprocessed_new directory
+            data_root: Path to the preprocessed_new directory or preprocessed_128_channels directory
             output_dir: Directory to save HDF5 files
+            num_channels: Number of EEG channels (60 for old data, 128 for new data)
+            window_sizes: List of window sizes to process (e.g., ['1s', '2s', '4s']). 
+                         If None, defaults to ['1s', '2s', '4s'] for backward compatibility.
         """
         self.data_root = Path(data_root)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.num_channels = num_channels
+        self.window_sizes = window_sizes if window_sizes is not None else ['1s', '2s', '4s']
+        
+        # Validate window_sizes
+        valid_sizes = ['1s', '2s', '4s']
+        for ws in self.window_sizes:
+            if ws not in valid_sizes:
+                raise ValueError(f"Invalid window size: {ws}. Must be one of {valid_sizes}")
         
     def load_demographics(self, participant_dir: Path) -> Dict[str, Any]:
         """
@@ -137,7 +153,7 @@ class EEGDataPreprocessor:
         Process a single EEG file and create segments of specified length.
         
         This method merges file loading and segment creation:
-        1. Loads the .npy file (shape: N, 60, timepoints)
+        1. Loads the .npy or .h5 file (shape: N, num_channels, timepoints)
         2. Concatenates all runs along the time axis
         3. Checks if total timepoints are divisible by segment_length * 200
         4. Handles remainder using unified logic for all segment lengths:
@@ -159,30 +175,59 @@ class EEGDataPreprocessor:
               * If remainder >= 400: zero pad at end
         
         Args:
-            file_path: Path to the .npy file
+            file_path: Path to the .npy or .h5 file
             segment_length: Length of segments in seconds (1, 2, or 4)
             
         Returns:
             Tuple of (list of segments, task_number)
-            - For 1s: list of (60, 200) arrays
-            - For 2s: list of (60, 400) arrays
-            - For 4s: list of (60, 800) arrays
+            - For 1s: list of (num_channels, 200) arrays
+            - For 2s: list of (num_channels, 400) arrays
+            - For 4s: list of (num_channels, 800) arrays
         """
         try:
-            data = np.load(file_path)
+            # Load data from .npy or .h5 file
+            if file_path.suffix == '.h5':
+                # Load from HDF5 file (new format with 128 channels)
+                # Note: Some files use 'data' key, others use 'eeg_data' key
+                with h5py.File(file_path, 'r') as f:
+                    if 'data' in f:
+                        data = f['data'][:]  # Shape: (N, num_channels, timepoints)
+                    elif 'eeg_data' in f:
+                        data = f['eeg_data'][:]  # Shape: (N, num_channels, timepoints)
+                    else:
+                        available_keys = list(f.keys())
+                        raise ValueError(
+                            f"HDF5 file {file_path} does not contain 'data' or 'eeg_data' key. "
+                            f"Available keys: {available_keys}"
+                        )
+            elif file_path.suffix == '.npy':
+                # Load from numpy file (old format with 60 channels)
+                data = np.load(file_path)
+            else:
+                raise ValueError(f"Unsupported file format: {file_path.suffix}. Expected .npy or .h5")
+            
             num_runs, num_channels, num_timepoints = data.shape
             
             # Validate expected dimensions
-            if num_channels != 60:
-                logger.error(f"Unexpected number of channels {num_channels} (expected 60) for file {file_path}")
-                raise ValueError(f"Unexpected number of channels {num_channels} (expected 60) for file {file_path}")
+            if num_channels != self.num_channels:
+                logger.error(f"Unexpected number of channels {num_channels} (expected {self.num_channels}) for file {file_path}")
+                raise ValueError(f"Unexpected number of channels {num_channels} (expected {self.num_channels}) for file {file_path}")
             
             # Extract task number from filename
             task_number = self.extract_task_number(file_path.name)
             
+            # Handle timepoints: if we have 240 timepoints, drop first 40 (same as old code)
+            # This is consistent with the old preprocessing that expected 200 timepoints per run
+            if num_timepoints == 240:
+                # Drop first 40 timepoints to get 200 per run
+                data = data[:, :, 40:]
+                num_timepoints = 200
+            elif num_timepoints != 200:
+                logger.warning(f"Unexpected number of timepoints {num_timepoints} (expected 200 or 240) for file {file_path}")
+            
             # Concatenate all runs along time axis
             # Reshape to (num_channels, num_runs * num_timepoints)
-            concatenated = data.transpose(1, 0, 2).reshape(num_channels, -1)  # Shape: (60, total_timepoints)
+            concatenated = data.transpose(1, 0, 2).reshape(num_channels, -1)  # Shape: (num_channels, total_timepoints)
             total_timepoints = concatenated.shape[1]
             segment_samples = segment_length * 200  # 200 for 1s, 400 for 2s, 800 for 4s
             half_segment = segment_samples // 2  # 100 for 1s, 200 for 2s, 400 for 4s
@@ -249,10 +294,10 @@ class EEGDataPreprocessor:
                        4: {'segments': [], 'task_numbers': []}}
         }
         
-        # Process all .npy files
-        npy_files = list(participant_dir.glob("*.npy"))
+        # Process all .npy and .h5 files
+        data_files = list(participant_dir.glob("*.npy")) + list(participant_dir.glob("*.h5"))
 
-        for file_path in npy_files:
+        for file_path in data_files:
             filename = file_path.stem  # e.g., "ccd_data_trial_0", "ccd_1_data_trial_0", "sus_data_trial_0", "sus_2_data_trial_0"
             
             # Determine task type - check if starts with "ccd" (with or without number) or "sus" (with or without number)
@@ -263,8 +308,9 @@ class EEGDataPreprocessor:
             else:
                 raise ValueError(f"Unknown file type: {filename}")
             
-            # Process EEG file to create segments for all lengths (1s, 2s, 4s)
-            segment_lengths = [1, 2, 4]
+            # Process EEG file to create segments for specified window sizes
+            # Convert window_sizes from ['1s', '2s', '4s'] to [1, 2, 4]
+            segment_lengths = [int(ws.replace('s', '')) for ws in self.window_sizes]
             
             for seg_len in segment_lengths:
                 segments, task_number = self.process_eeg_file_to_segments(file_path, segment_length=seg_len)
@@ -274,24 +320,24 @@ class EEGDataPreprocessor:
                     data[task_type][seg_len]['task_numbers'].extend([task_number] * len(segments))
 
         
-        return {
+        # Build result dictionary dynamically based on window_sizes
+        result = {
             'participant_id': participant_id,
             'gender': demographics['gender'],
             'age': demographics['age'],
-            'passive_eeg_1s': data['passive'][1]['segments'],  # 1-second segments (list of arrays)
-            'active_eeg_1s': data['active'][1]['segments'],    # 1-second segments (list of arrays)
-            'passive_eeg_2s': data['passive'][2]['segments'],  # 2-second segments (list of arrays)
-            'active_eeg_2s': data['active'][2]['segments'],    # 2-second segments (list of arrays)
-            'passive_eeg_4s': data['passive'][4]['segments'],  # 4-second segments (list of arrays)
-            'active_eeg_4s': data['active'][4]['segments'],    # 4-second segments (list of arrays)
-            'passive_task_numbers_1s': data['passive'][1]['task_numbers'],  # Task numbers for 1s segments
-            'active_task_numbers_1s': data['active'][1]['task_numbers'],    # Task numbers for 1s segments
-            'passive_task_numbers_2s': data['passive'][2]['task_numbers'],  # Task numbers for 2s segments
-            'active_task_numbers_2s': data['active'][2]['task_numbers'],    # Task numbers for 2s segments
-            'passive_task_numbers_4s': data['passive'][4]['task_numbers'],  # Task numbers for 4s segments
-            'active_task_numbers_4s': data['active'][4]['task_numbers'],    # Task numbers for 4s segments
             'demographics': demographics
         }
+        
+        # Add segments and task numbers for each window size
+        segment_lengths = [int(ws.replace('s', '')) for ws in self.window_sizes]
+        for seg_len in segment_lengths:
+            ws_key = f'{seg_len}s'
+            result[f'passive_eeg_{ws_key}'] = data['passive'][seg_len]['segments']
+            result[f'active_eeg_{ws_key}'] = data['active'][seg_len]['segments']
+            result[f'passive_task_numbers_{ws_key}'] = data['passive'][seg_len]['task_numbers']
+            result[f'active_task_numbers_{ws_key}'] = data['active'][seg_len]['task_numbers']
+        
+        return result
     
     def _collect_participant_metadata(self, participant_dir: Path) -> Optional[Dict[str, Any]]:
         """
@@ -445,10 +491,32 @@ class EEGDataPreprocessor:
         logger.info(f"  Test:  {dict(test_dist)}")
         
         # Initialize HDF5 files for train/val/test splits (create empty files with structure)
-        logger.info("Initializing HDF5 files...")
-        for segment_length in SEGMENT_LENGTHS:
+        # Use multi-part file approach for all segment lengths to prevent large file issues
+        logger.info("Initializing HDF5 files (multi-part structure)...")
+        for segment_length in self.window_sizes:
             for split_name in SPLIT_NAMES:
-                self._initialize_hdf5_file(split_name, segment_length)
+                # Initialize first part file (will create more parts as needed)
+                self._initialize_hdf5_file_part(split_name, segment_length, part_idx=0)
+        
+        # Track current sample indices per split/segment_length/task_type for file rotation
+        sample_counters = {}
+        total_counters = {}  # Track total samples per split/segment_length across all task types
+        
+        for segment_length in self.window_sizes:
+            for split_name in SPLIT_NAMES:
+                # Initialize total counter for file rotation (across all task types)
+                total_key = f"{split_name}_{segment_length}_total"
+                total_counters[total_key] = self._get_current_total_sample_idx(
+                    split_name, segment_length
+                )
+                
+                # Initialize per-task-type counters for local indexing
+                for task_type in TASK_TYPES:
+                    key = f"{split_name}_{segment_length}_{task_type}"
+                    # Initialize by counting existing samples (only once at start)
+                    sample_counters[key] = self._get_current_global_sample_idx_for_task(
+                        split_name, segment_length, task_type
+                    )
         
         # SECOND PASS: Process participants and save directly to split files (memory-efficient)
         logger.info("Second pass: Processing participants and saving to split files...")
@@ -481,9 +549,13 @@ class EEGDataPreprocessor:
                     tqdm.write(f"Warning: Participant {participant_id} not found in any train/val/test split. Skipping.")
                     continue
                 
-                # Save to split file (participant_id is stored with each segment in metadata)
-                for segment_length in SEGMENT_LENGTHS:
-                    self._append_participant_to_hdf5(participant_data, split_name, segment_length)
+                # Save to split file using multi-part file approach
+                # (participant_id is stored with each segment in metadata)
+                for segment_length in self.window_sizes:
+                    self._append_participant_to_hdf5_multipart(
+                        participant_data, split_name, segment_length,
+                        sample_counters, total_counters
+                    )
                 processed_count += 1
                 
             except Exception as e:
@@ -492,7 +564,7 @@ class EEGDataPreprocessor:
         
         # Update participant counts in HDF5 files
         logger.info("Updating participant counts in HDF5 files...")
-        for segment_length in SEGMENT_LENGTHS:
+        for segment_length in self.window_sizes:
             for split_name in SPLIT_NAMES:
                 self._update_participant_count(split_name, segment_length)
         
@@ -652,6 +724,84 @@ class EEGDataPreprocessor:
         
         return file_path, part_idx
     
+    def _save_single_sample_to_file(self, eeg_segment: np.ndarray, participant_data: Dict[str, Any],
+                                   task_type: str, task_number: int, split_name: str, 
+                                   segment_length: str, current_global_idx: int, 
+                                   current_total_idx: int) -> None:
+        """
+        Save a single sample to the appropriate HDF5 file (with automatic file rotation).
+        
+        This is a DRY helper method that consolidates the common logic for saving samples
+        across multiple methods. It handles:
+        - File path determination and rotation
+        - File initialization if needed
+        - Sample and metadata storage
+        - Counter management (caller must update counters after calling)
+        
+        NOTE: Participant data CAN span multiple files. This is acceptable because:
+        - Training data is shuffled anyway, so file boundaries don't matter
+        - Participant filtering works across files via metadata
+        - This allows optimal file size management
+        
+        Args:
+            eeg_segment: EEG segment array to save
+            participant_data: Dictionary containing participant metadata (must have 'participant_id', 'gender', 'age')
+            task_type: Task type ('active' or 'passive')
+            task_number: Task number for this segment
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            current_global_idx: Current global sample index for this task_type (for local indexing)
+            current_total_idx: Current total sample index across all task types (for file rotation)
+        """
+        # Get current file path based on total_idx (for file rotation)
+        file_path, part_idx = self._get_current_hdf5_file_and_part(
+            split_name, segment_length, current_total_idx
+        )
+        
+        # Initialize file if it doesn't exist
+        if not file_path.exists():
+            self._initialize_hdf5_file_part(split_name, segment_length, part_idx)
+        
+        with h5py.File(file_path, 'r+') as f:
+            # Ensure task group exists
+            if task_type not in f:
+                f.create_group(task_type)
+            task_group = f[task_type]
+            
+            # Get local sample index within this file for this task type
+            local_sample_idx = current_global_idx % MAX_SAMPLES_PER_FILE
+            
+            # Save segment
+            dataset_name = f'sample_{local_sample_idx:06d}'
+            
+            # Check if dataset already exists (shouldn't happen in sequential processing)
+            if dataset_name in task_group:
+                error_msg = (
+                    f"Dataset {dataset_name} already exists in {file_path}. "
+                    f"Participant: {participant_data['participant_id']}, "
+                    f"Task type: {task_type}, "
+                    f"Sample index (task): {current_global_idx}, "
+                    f"Total index: {current_total_idx}, "
+                    f"Local index: {local_sample_idx}. "
+                    f"This indicates a logic error in sample indexing."
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            task_group.create_dataset(dataset_name, data=eeg_segment, compression=None)
+            
+            # Store metadata
+            sample_group = task_group.create_group(f'metadata_{local_sample_idx:06d}')
+            sample_group.attrs['participant_id'] = participant_data['participant_id']
+            sample_group.attrs['task_type'] = task_type
+            sample_group.attrs['task_number'] = task_number
+            
+            # Add gender and age if present (for age/gender classification tasks)
+            if 'gender' in participant_data:
+                sample_group.attrs['gender'] = participant_data['gender']
+            if 'age' in participant_data:
+                sample_group.attrs['age'] = participant_data['age']
+    
     def _get_current_global_sample_idx_for_task(self, split_name: str, segment_length: str, task_type: str) -> int:
         """
         Get the current global sample index for a specific task_type across all part files.
@@ -810,52 +960,21 @@ class EEGDataPreprocessor:
             )
         current_total_idx = total_counters[total_key]
         
-        # Save shuffled samples
+        # Save shuffled samples using DRY helper method
         for idx in indices:
             sample = buffer[idx]
             
-            # Get current file path based on total_idx (for file rotation)
-            file_path, part_idx = self._get_current_hdf5_file_and_part(
-                split_name, segment_length, current_total_idx
+            # Use shared helper method to save sample
+            self._save_single_sample_to_file(
+                eeg_segment=sample['segment'],
+                participant_data=sample['participant_data'],
+                task_type=task_type,
+                task_number=sample['task_number'],
+                split_name=split_name,
+                segment_length=segment_length,
+                current_global_idx=current_global_idx,
+                current_total_idx=current_total_idx
             )
-            
-            # Initialize file if it doesn't exist
-            if not file_path.exists():
-                self._initialize_hdf5_file_part(split_name, segment_length, part_idx)
-            
-            with h5py.File(file_path, 'r+') as f:
-                # Ensure task group exists
-                if task_type not in f:
-                    f.create_group(task_type)
-                task_group = f[task_type]
-                
-                # Get local sample index within this file for this task type
-                local_sample_idx = current_global_idx % MAX_SAMPLES_PER_FILE
-                
-                # Save segment
-                dataset_name = f'sample_{local_sample_idx:06d}'
-                
-                # Check if dataset already exists (shouldn't happen, but check for logic errors)
-                if dataset_name in task_group:
-                    error_msg = (
-                        f"Dataset {dataset_name} already exists in {file_path}. "
-                        f"Participant: {sample['participant_data']['participant_id']}, "
-                        f"Task type: {task_type}, "
-                        f"Sample index (task): {current_global_idx}, "
-                        f"Total index: {current_total_idx}, "
-                        f"Local index: {local_sample_idx}. "
-                        f"This indicates a logic error in sample indexing."
-                    )
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
-                
-                task_group.create_dataset(dataset_name, data=sample['segment'], compression=None)
-                
-                # Store metadata
-                sample_group = task_group.create_group(f'metadata_{local_sample_idx:06d}')
-                sample_group.attrs['participant_id'] = sample['participant_data']['participant_id']
-                sample_group.attrs['task_type'] = task_type
-                sample_group.attrs['task_number'] = sample['task_number']
             
             # Increment both counters
             current_global_idx += 1
@@ -912,53 +1031,20 @@ class EEGDataPreprocessor:
         """
         
         # Save each segment, rotating files as needed
+        # CRITICAL: Use total_idx for file rotation to ensure MAX_SAMPLES_PER_FILE
+        # is enforced across ALL task types, not per task type
         for idx in split_indices:
-            # CRITICAL: Use total_idx for file rotation to ensure MAX_SAMPLES_PER_FILE
-            # is enforced across ALL task types, not per task type
-            file_path, part_idx = self._get_current_hdf5_file_and_part(
-                split_name, segment_length, current_total_idx
+            # Use shared helper method to save sample
+            self._save_single_sample_to_file(
+                eeg_segment=segments[idx],
+                participant_data=participant_data,
+                task_type=task_type,
+                task_number=task_numbers[idx],
+                split_name=split_name,
+                segment_length=segment_length,
+                current_global_idx=current_global_idx,
+                current_total_idx=current_total_idx
             )
-            
-            # Initialize file if it doesn't exist
-            if not file_path.exists():
-                self._initialize_hdf5_file_part(split_name, segment_length, part_idx)
-            
-            with h5py.File(file_path, 'r+') as f:
-                # Ensure task group exists (should exist from initialization, but check to be safe)
-                if task_type not in f:
-                    f.create_group(task_type)
-                task_group = f[task_type]
-                
-                # Get local sample index within this file for this task type
-                # Use current_global_idx (per-task-type) for local indexing within the task group
-                local_sample_idx = current_global_idx % MAX_SAMPLES_PER_FILE
-                
-                # Save segment
-                dataset_name = f'sample_{local_sample_idx:06d}'
-                
-                # Check if dataset already exists (shouldn't happen in sequential processing)
-                # If it does exist, this indicates a serious logic error (duplicate sample indices)
-                if dataset_name in task_group:
-                    error_msg = (
-                        f"Dataset {dataset_name} already exists in {file_path}. "
-                        f"Participant: {participant_data['participant_id']}, "
-                        f"Task type: {task_type}, "
-                        f"Sample index (task): {current_global_idx}, "
-                        f"Total index: {current_total_idx}, "
-                        f"Local index: {local_sample_idx}. "
-                        f"This indicates a logic error in sample indexing - duplicate indices detected. "
-                        f"This should not happen in sequential processing."
-                    )
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
-                
-                task_group.create_dataset(dataset_name, data=segments[idx], compression=None)
-                
-                # Store metadata
-                sample_group = task_group.create_group(f'metadata_{local_sample_idx:06d}')
-                sample_group.attrs['participant_id'] = participant_data['participant_id']
-                sample_group.attrs['task_type'] = task_type
-                sample_group.attrs['task_number'] = task_numbers[idx]
             
             # Increment both counters
             current_global_idx += 1  # Per-task-type counter for local indexing
@@ -1094,6 +1180,20 @@ class EEGDataPreprocessor:
         logger.info(f"Saved participant_id to class_idx mapping to: {mapping_file}")
         logger.info(f"Total number of user classes: {len(sorted_mapping)}")
     
+    def _save_unknown_participant_ids(self, unknown_participant_ids: List[str]) -> None:
+        """
+        Save list of unknown participant IDs to a JSON file.
+        Used when consider_unknown_users=True for evaluation on unseen users.
+        
+        Args:
+            unknown_participant_ids: List of participant IDs held out as "unknown"
+        """
+        unknown_file = self.output_dir / 'unknown_participant_ids.json'
+        with open(unknown_file, 'w') as f:
+            json.dump(sorted(unknown_participant_ids), f, indent=2)
+        logger.info(f"Saved unknown participant IDs to: {unknown_file}")
+        logger.info(f"Total unknown participants: {len(unknown_participant_ids)}")
+    
     def process_participant_user_identification(self, participant_dir: Path) -> Optional[Dict[str, Any]]:
         """
         Process all EEG files for a single participant for user identification.
@@ -1121,23 +1221,21 @@ class EEGDataPreprocessor:
         
         # Initialize data structures using nested dictionaries
         # Structure: {task_type: {segment_length: {'segments': [], 'task_numbers': []}}}
+        # Convert window_sizes from ['1s', '2s', '4s'] to [1, 2, 4]
+        segment_lengths = [int(ws.replace('s', '')) for ws in self.window_sizes]
         data = {
-            'active': {1: {'segments': [], 'task_numbers': []},
-                      2: {'segments': [], 'task_numbers': []},
-                      4: {'segments': [], 'task_numbers': []}},
-            'passive': {1: {'segments': [], 'task_numbers': []},
-                       2: {'segments': [], 'task_numbers': []},
-                       4: {'segments': [], 'task_numbers': []}}
+            'active': {seg_len: {'segments': [], 'task_numbers': []} for seg_len in segment_lengths},
+            'passive': {seg_len: {'segments': [], 'task_numbers': []} for seg_len in segment_lengths}
         }
         
-        # Process all .npy files
-        npy_files = list(participant_dir.glob("*.npy"))
+        # Process all .npy and .h5 files
+        data_files = list(participant_dir.glob("*.npy")) + list(participant_dir.glob("*.h5"))
         
-        if not npy_files:
-            logger.warning(f"No .npy files found for participant {participant_id}")
+        if not data_files:
+            logger.warning(f"No .npy or .h5 files found for participant {participant_id}")
             return None
 
-        for file_path in npy_files:
+        for file_path in data_files:
             filename = file_path.stem  # e.g., "ccd_data_trial_0", "ccd_1_data_trial_0", "sus_data_trial_0", "sus_2_data_trial_0"
             
             # Determine task type - check if starts with "ccd" (with or without number) or "sus" (with or without number)
@@ -1149,8 +1247,7 @@ class EEGDataPreprocessor:
                 logger.warning(f"Unknown file type: {filename} for participant {participant_id}. Skipping.")
                 continue
             
-            # Process EEG file to create segments for all lengths (1s, 2s, 4s)
-            segment_lengths = [1, 2, 4]
+            # Process EEG file to create segments for specified window sizes
             
             for seg_len in segment_lengths:
                 try:
@@ -1171,38 +1268,40 @@ class EEGDataPreprocessor:
                     continue
         
         # Check if we have any data
+        segment_lengths = [int(ws.replace('s', '')) for ws in self.window_sizes]
         has_data = any(
             len(data[task_type][seg_len]['segments']) > 0
             for task_type in ['active', 'passive']
-            for seg_len in [1, 2, 4]
+            for seg_len in segment_lengths
         )
         
         if not has_data:
             logger.warning(f"No valid EEG segments found for participant {participant_id}")
             return None
         
-        return {
+        # Build result dictionary dynamically based on window_sizes
+        result = {
             'participant_id': participant_id,
             'gender': demographics['gender'],
             'age': demographics['age'],
-            'passive_eeg_1s': data['passive'][1]['segments'],
-            'active_eeg_1s': data['active'][1]['segments'],
-            'passive_eeg_2s': data['passive'][2]['segments'],
-            'active_eeg_2s': data['active'][2]['segments'],
-            'passive_eeg_4s': data['passive'][4]['segments'],
-            'active_eeg_4s': data['active'][4]['segments'],
-            'passive_task_numbers_1s': data['passive'][1]['task_numbers'],
-            'active_task_numbers_1s': data['active'][1]['task_numbers'],
-            'passive_task_numbers_2s': data['passive'][2]['task_numbers'],
-            'active_task_numbers_2s': data['active'][2]['task_numbers'],
-            'passive_task_numbers_4s': data['passive'][4]['task_numbers'],
-            'active_task_numbers_4s': data['active'][4]['task_numbers'],
             'demographics': demographics
         }
+        
+        # Add segments and task numbers for each window size
+        for seg_len in segment_lengths:
+            ws_key = f'{seg_len}s'
+            result[f'passive_eeg_{ws_key}'] = data['passive'][seg_len]['segments']
+            result[f'active_eeg_{ws_key}'] = data['active'][seg_len]['segments']
+            result[f'passive_task_numbers_{ws_key}'] = data['passive'][seg_len]['task_numbers']
+            result[f'active_task_numbers_{ws_key}'] = data['active'][seg_len]['task_numbers']
+        
+        return result
     
     def process_all_participants_user_identification(self, train_ratio: float = 0.7, val_ratio: float = 0.15, 
                                                       test_ratio: float = 0.15, 
-                                                      random_seed: int = 42) -> None:
+                                                      random_seed: int = 42,
+                                                      consider_unknown_users: bool = False,
+                                                      unknown_user_ratio: float = 0.2) -> None:
         """
         Process all participants for user identification task.
         
@@ -1211,20 +1310,25 @@ class EEGDataPreprocessor:
         - 15% of each participant's samples -> val
         - 15% of each participant's samples -> test
         
-        This ensures ALL participants appear in ALL splits, which is correct for closed-set user identification:
-        - Model learns features for all 3145 users during training
-        - Validation/test check if model can identify these known users on new samples
-        - This is different from open-set identification where test users are completely unseen
+        When consider_unknown_users=True:
+        - A fraction (unknown_user_ratio, default 20%) of participants are held out as "unknown"
+        - Unknown participants' samples go entirely into an "unknown" split (no train/val/test)
+        - Only the remaining "known" participants get train/val/test splits and class indices
+        - Saves unknown_participant_ids.json for evaluation on unseen users
         
         Args:
             train_ratio: Ratio of each participant's samples for training (default: 0.7)
             val_ratio: Ratio of each participant's samples for validation (default: 0.15)
             test_ratio: Ratio of each participant's samples for testing (default: 0.15)
             random_seed: Random seed for reproducible splits
+            consider_unknown_users: If True, hold out unknown_user_ratio of users as "unknown" (default: False)
+            unknown_user_ratio: Fraction of participants to treat as unknown when consider_unknown_users=True (default: 0.2)
         """
         # Validate ratios
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
+        if consider_unknown_users and (unknown_user_ratio <= 0 or unknown_user_ratio >= 1.0):
+            raise ValueError(f"unknown_user_ratio must be in (0, 1), got {unknown_user_ratio}")
         
         # Set random seed
         np.random.seed(random_seed)
@@ -1244,22 +1348,43 @@ class EEGDataPreprocessor:
         total_participants = len(all_participant_dirs)
         logger.info(f"Found {total_participants} total participants")
         
-        # For user identification, we process ALL participants regardless of demographics
-        logger.info("Processing all participants for user identification")
-        logger.info(f"Total participants to process: {total_participants}")
-        logger.info("CRITICAL: All participants will appear in ALL splits (train/val/test)")
-        logger.info("  This allows model to learn features for all users during training")
+        # Split into known vs unknown when consider_unknown_users is True
+        if consider_unknown_users:
+            # Shuffle with seed for reproducibility
+            rng = np.random.RandomState(random_seed)
+            indices = np.arange(total_participants)
+            rng.shuffle(indices)
+            n_unknown = max(1, int(round(total_participants * unknown_user_ratio)))
+            n_known = total_participants - n_unknown
+            known_indices = indices[:n_known]
+            unknown_indices = indices[n_known:]
+            known_participant_dirs = [all_participant_dirs[i] for i in known_indices]
+            unknown_participant_dirs = [all_participant_dirs[i] for i in unknown_indices]
+            unknown_participant_ids = [d.name for d in unknown_participant_dirs]
+            logger.info(f"consider_unknown_users=True: {n_known} known, {n_unknown} unknown ({unknown_user_ratio:.1%})")
+        else:
+            known_participant_dirs = all_participant_dirs
+            unknown_participant_dirs = []
+            unknown_participant_ids = []
+            logger.info("Processing all participants for user identification (no unknown users)")
         
-        if total_participants == 0:
-            raise ValueError("No participants found!")
+        logger.info(f"Known participants to process: {len(known_participant_dirs)}")
+        if consider_unknown_users:
+            logger.info(f"Unknown participants (held out): {len(unknown_participant_dirs)}")
+        
+        if len(known_participant_dirs) == 0:
+            raise ValueError("No known participants to process!")
         
         # Initialize HDF5 files for train/val/test splits
-        # For all segment lengths, we'll create multiple files to improve performance
         logger.info("Initializing HDF5 files...")
-        for segment_length in SEGMENT_LENGTHS:
+        for segment_length in self.window_sizes:
             for split_name in SPLIT_NAMES:
-                # For all segment lengths, initialize first part file
                 self._initialize_hdf5_file_part(split_name, segment_length, part_idx=0)
+        
+        # Initialize HDF5 for "unknown" split when we have unknown users
+        if unknown_participant_dirs:
+            for segment_length in self.window_sizes:
+                self._initialize_hdf5_file_part(UNKNOWN_SPLIT_NAME, segment_length, part_idx=0)
         
         # Sequential processing (parallel processing removed due to HDF5 file locking issues)
         logger.info("Processing participants sequentially...")
@@ -1279,8 +1404,12 @@ class EEGDataPreprocessor:
         # Track flush count per buffer for seed variation
         buffer_flush_counts = {}
         
-        for segment_length in SEGMENT_LENGTHS:
-            for split_name in SPLIT_NAMES:
+        split_names_to_init = list(SPLIT_NAMES)
+        if unknown_participant_dirs:
+            split_names_to_init.append(UNKNOWN_SPLIT_NAME)
+        
+        for segment_length in self.window_sizes:
+            for split_name in split_names_to_init:
                 # Initialize total counter for file rotation (across all task types)
                 total_key = f"{split_name}_{segment_length}_total"
                 total_counters[total_key] = self._get_current_total_sample_idx(
@@ -1299,7 +1428,7 @@ class EEGDataPreprocessor:
                     # Initialize flush count for seed variation
                     buffer_flush_counts[key] = 0
         
-        for participant_dir in tqdm(all_participant_dirs, desc="Processing participants", unit="participant"):
+        for participant_dir in tqdm(known_participant_dirs, desc="Processing known participants", unit="participant"):
             participant_id = participant_dir.name
             
             try:
@@ -1318,7 +1447,7 @@ class EEGDataPreprocessor:
                 
                 # Split each participant's samples across train/val/test
                 # Process each segment length separately
-                for segment_length in SEGMENT_LENGTHS:
+                for segment_length in self.window_sizes:
                     active_key, passive_key, active_task_key, passive_task_key = self._get_segment_keys(segment_length)
                     
                     # Split active task samples
@@ -1421,6 +1550,63 @@ class EEGDataPreprocessor:
                 tqdm.write(traceback.format_exc())
                 continue
         
+        # Process unknown participants: put ALL their samples into "unknown" split
+        # Flush unknown buffers after every participant to avoid OOM (no large shuffle buffer)
+        if unknown_participant_dirs:
+            logger.info("Processing unknown participants (all samples -> unknown split)...")
+            for participant_dir in tqdm(unknown_participant_dirs, desc="Processing unknown participants", unit="participant"):
+                participant_id = participant_dir.name
+                try:
+                    participant_data = self.process_participant_user_identification(participant_dir)
+                    if participant_data is None:
+                        tqdm.write(f"Warning: Unknown participant {participant_id} returned None. Skipping.")
+                        continue
+                    # Do NOT assign class index; save all samples to "unknown" split
+                    for segment_length in self.window_sizes:
+                        active_key, passive_key, active_task_key, passive_task_key = self._get_segment_keys(segment_length)
+                        for task_type, eeg_key, task_key in [
+                            ('active', active_key, active_task_key),
+                            ('passive', passive_key, passive_task_key)
+                        ]:
+                            if eeg_key not in participant_data or task_key not in participant_data:
+                                continue
+                            segments = participant_data[eeg_key]
+                            task_numbers = participant_data[task_key]
+                            if not segments:
+                                continue
+                            buffer_key = f"{UNKNOWN_SPLIT_NAME}_{segment_length}_{task_type}"
+                            self._add_samples_to_buffer(
+                                segments=segments,
+                                task_numbers=task_numbers,
+                                participant_data=participant_data,
+                                split_indices=np.arange(len(segments)),
+                                buffer=buffers[buffer_key]
+                            )
+                            # Flush unknown buffers after every participant to avoid memory buildup
+                            # (avoids holding SHUFFLE_BUFFER_FLUSH_THRESHOLD segments = ~1.5GB per buffer)
+                            if len(buffers[buffer_key]) > 0:
+                                buffer_hash = abs(hash(buffer_key)) % (2**32)
+                                flush_count = buffer_flush_counts.get(buffer_key, 0)
+                                flush_seed = (random_seed + buffer_hash + flush_count) % (2**32)
+                                buffer_flush_counts[buffer_key] = flush_count + 1
+                                self._flush_sample_buffer(
+                                    buffer=buffers[buffer_key],
+                                    split_name=UNKNOWN_SPLIT_NAME,
+                                    segment_length=segment_length,
+                                    task_type=task_type,
+                                    sample_counters=sample_counters,
+                                    total_counters=total_counters,
+                                    random_seed=flush_seed
+                                )
+                                # Free segment arrays we just wrote so we don't hold full participant in memory
+                                participant_data[eeg_key] = []
+                                participant_data[task_key] = []
+                except Exception as e:
+                    tqdm.write(f"Error processing unknown participant {participant_id}: {e}")
+                    import traceback
+                    tqdm.write(traceback.format_exc())
+                    continue
+        
         # Flush all remaining buffers (samples that didn't reach SHUFFLE_BUFFER_SIZE)
         logger.info("Flushing remaining sample buffers with global shuffling...")
         for buffer_key, buffer in buffers.items():
@@ -1452,17 +1638,25 @@ class EEGDataPreprocessor:
                         random_seed=flush_seed
                     )
         
-        # Save participant_id to class_idx mapping
+        # Save participant_id to class_idx mapping (known users only)
         self._save_participant_id_mapping(participant_id_to_class_idx)
+        
+        # Save unknown participant IDs when consider_unknown_users was used
+        if unknown_participant_ids:
+            self._save_unknown_participant_ids(unknown_participant_ids)
         
         # Update participant counts in HDF5 files
         logger.info("Updating participant counts in HDF5 files...")
-        for segment_length in SEGMENT_LENGTHS:
+        for segment_length in self.window_sizes:
             for split_name in SPLIT_NAMES:
                 self._update_participant_count(split_name, segment_length)
+            if unknown_participant_dirs:
+                self._update_participant_count(UNKNOWN_SPLIT_NAME, segment_length)
         
-        logger.info(f"Processing completed! Processed {processed_count} participants.")
-        logger.info(f"Total number of user classes: {len(participant_id_to_class_idx)}")
+        logger.info(f"Processing completed! Processed {processed_count} known participants.")
+        logger.info(f"Total number of user classes (known): {len(participant_id_to_class_idx)}")
+        if unknown_participant_ids:
+            logger.info(f"Unknown participants (held out): {len(unknown_participant_ids)}")
         logger.info("All splits saved successfully with global shuffling to prevent participant-level clustering!")
     
     def _save_segments_to_hdf5_group(self, group: h5py.Group, eeg_list: List[np.ndarray], 
@@ -1520,14 +1714,106 @@ class EEGDataPreprocessor:
         
         return sample_idx
     
-    def _append_participant_to_hdf5(self, participant_data: Dict[str, Any], 
-                                    split_name: str, segment_length: str) -> None:
+    def _append_participant_to_hdf5_multipart(self, participant_data: Dict[str, Any], 
+                                             split_name: str, segment_length: str,
+                                             sample_counters: Dict[str, int],
+                                             total_counters: Dict[str, int]) -> None:
         """
-        Append a single participant's data to an HDF5 file.
+        Append a single participant's data to HDF5 files using multi-part file approach.
         This is memory-efficient as it processes one participant at a time.
+        Supports automatic file rotation when MAX_SAMPLES_PER_FILE is reached.
         
         Each segment is stored with participant_id in its metadata, enabling
         participant-level filtering during training (isolation or mixing).
+        
+        IMPORTANT: A participant's data CAN span multiple files if they have many segments.
+        This is by design and acceptable because:
+        - Training data is shuffled anyway, so file boundaries don't matter
+        - Participant filtering works across files via metadata (see EEGDataset)
+        - This allows optimal file size management (prevents very large files)
+        - The MultiFileEEGDataset handles this transparently
+        
+        Args:
+            participant_data: Dictionary containing processed participant data
+            split_name: Name of the split ('train', 'val', 'test')
+            segment_length: Length of segments ('1s', '2s', or '4s')
+            sample_counters: Dictionary tracking per-task-type sample counts (for local indexing)
+            total_counters: Dictionary tracking total sample counts per split/segment_length (for file rotation)
+        """
+        active_key, passive_key, active_task_key, passive_task_key = self._get_segment_keys(segment_length)
+        
+        # Process active and passive tasks
+        # process_participant always returns these keys, so raise error if missing
+        for task_type, eeg_key, task_key in [
+            ('active', active_key, active_task_key),
+            ('passive', passive_key, passive_task_key)
+        ]:
+            if eeg_key not in participant_data:
+                raise KeyError(
+                    f"Missing key '{eeg_key}' in participant_data. "
+                    f"This indicates a bug in process_participant."
+                )
+            if task_key not in participant_data:
+                raise KeyError(
+                    f"Missing key '{task_key}' in participant_data. "
+                    f"This indicates a bug in process_participant."
+                )
+            
+            eeg_list = participant_data[eeg_key]
+            task_numbers = participant_data[task_key]
+            
+            if len(eeg_list) == 0:
+                continue  # Skip if no segments for this task type
+            
+            # Get current counters
+            counter_key = f"{split_name}_{segment_length}_{task_type}"
+            if counter_key not in sample_counters:
+                sample_counters[counter_key] = self._get_current_global_sample_idx_for_task(
+                    split_name, segment_length, task_type
+                )
+            
+            total_key = f"{split_name}_{segment_length}_total"
+            if total_key not in total_counters:
+                total_counters[total_key] = self._get_current_total_sample_idx(
+                    split_name, segment_length
+                )
+            
+            current_global_idx = sample_counters[counter_key]
+            current_total_idx = total_counters[total_key]
+            
+            # Save all segments for this task type
+            # NOTE: A participant's data CAN span multiple files if they have many segments.
+            # This is acceptable because:
+            # - Training data is shuffled anyway, so file boundaries don't matter
+            # - Participant filtering works across files via metadata
+            # - This allows optimal file size management
+            for seg_idx, eeg_segment in enumerate(eeg_list):
+                # Use shared helper method to save sample
+                self._save_single_sample_to_file(
+                    eeg_segment=eeg_segment,
+                    participant_data=participant_data,
+                    task_type=task_type,
+                    task_number=task_numbers[seg_idx],
+                    split_name=split_name,
+                    segment_length=segment_length,
+                    current_global_idx=current_global_idx,
+                    current_total_idx=current_total_idx
+                )
+                
+                # Increment both counters
+                current_global_idx += 1  # Per-task-type counter for local indexing
+                current_total_idx += 1    # Total counter for file rotation
+            
+            # Update counters
+            sample_counters[counter_key] = current_global_idx
+            total_counters[total_key] = current_total_idx
+    
+    def _append_participant_to_hdf5(self, participant_data: Dict[str, Any], 
+                                    split_name: str, segment_length: str) -> None:
+        """
+        Append a single participant's data to an HDF5 file (single file, backward compatibility).
+        This method is kept for backward compatibility but is deprecated in favor of
+        _append_participant_to_hdf5_multipart which supports multi-part files.
         
         Args:
             participant_data: Dictionary containing processed participant data
@@ -1580,26 +1866,59 @@ class EEGDataPreprocessor:
 
 def main():
     """Main function to run the preprocessing pipeline."""
-    data_root = "/home/mojtabam/projects/aip-aghodsib/mojtabam/preprocessed_new"
-    output_dir = "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='EEG Data Preprocessing')
+    parser.add_argument('--data_root', type=str, 
+                       default="/home/mojtabam/projects/aip-aghodsib/mojtabam/preprocessed_new",
+                       help='Path to input data directory')
+    parser.add_argument('--output_dir', type=str,
+                       default="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
+                       help='Path to output directory for HDF5 files')
+    parser.add_argument('--num_channels', type=int, default=60,
+                       help='Number of EEG channels (60 for old data, 128 for new data)')
+    parser.add_argument('--window_sizes', type=str, nargs='+', default=['1s', '2s', '4s'],
+                       choices=['1s', '2s', '4s'],
+                       help='Window sizes to process (e.g., --window_sizes 1s 4s)')
+    parser.add_argument('--train_ratio', type=float, default=0.7,
+                       help='Ratio of data for training')
+    parser.add_argument('--val_ratio', type=float, default=0.15,
+                       help='Ratio of data for validation')
+    parser.add_argument('--test_ratio', type=float, default=0.15,
+                       help='Ratio of data for testing')
+    parser.add_argument('--random_seed', type=int, default=42,
+                       help='Random seed for reproducible splits')
+    parser.add_argument('--stratify_by', type=str, default='gender',
+                       choices=['gender', 'age', 'both'],
+                       help='Field to stratify by')
+    
+    args = parser.parse_args()
     
     # Record start time
     start_time = time.time()
     
     # Create preprocessor
-    preprocessor = EEGDataPreprocessor(data_root, output_dir)
+    preprocessor = EEGDataPreprocessor(
+        data_root=args.data_root,
+        output_dir=args.output_dir,
+        num_channels=args.num_channels,
+        window_sizes=args.window_sizes
+    )
     
     # Process all participants and create train/val/test splits
     logger.info("Starting EEG data preprocessing...")
-    logger.info(f"Data will be saved to: {output_dir}")
-    logger.info("Creating 1s, 2s, and 4s segments with train/val/test splits")
+    logger.info(f"Data root: {args.data_root}")
+    logger.info(f"Output directory: {args.output_dir}")
+    logger.info(f"Number of channels: {args.num_channels}")
+    logger.info(f"Window sizes: {args.window_sizes}")
+    logger.info("Creating segments with train/val/test splits")
     logger.info("Each segment will have participant_id stored in metadata for participant-level isolation/mixing")
     preprocessor.process_all_participants(
-        train_ratio=0.7,
-        val_ratio=0.15,
-        test_ratio=0.15,
-        random_seed=42,
-        stratify_by="gender"
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        test_ratio=args.test_ratio,
+        random_seed=args.random_seed,
+        stratify_by=args.stratify_by
     )
     
     # Calculate and log elapsed time
@@ -1609,7 +1928,7 @@ def main():
     seconds = int(elapsed_time % 60)
     
     logger.info("Preprocessing completed successfully!")
-    logger.info(f"All data saved to: {output_dir}")
+    logger.info(f"All data saved to: {args.output_dir}")
     logger.info(f"Total processing time: {hours:02d}:{minutes:02d}:{seconds:02d} ({elapsed_time:.2f} seconds)")
 
 if __name__ == "__main__":

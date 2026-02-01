@@ -13,7 +13,7 @@ from pathlib import Path
 import h5py
 import torch
 import numpy as np
-from typing import Union, Callable, Any, List, Dict, Tuple
+from typing import Union, Callable, Any, List, Dict, Tuple, Optional
 from constants import (
     AGE_CLASS_1_MAX, AGE_CLASS_2_MAX, DEFAULT_MIN_AGE, DEFAULT_MAX_AGE,
     get_age_class, get_gender_class, get_combined_class, validate_gender
@@ -146,14 +146,20 @@ class UserIdentificationTransform:
     Picklable user identification transform class for multiprocessing compatibility.
     Maps participant_id to class index for user identification task.
     """
-    def __init__(self, participant_id_to_class_idx: Dict[str, int]):
+    # Sentinel label for unknown (held-out) users when consider_unknown_users=True
+    UNKNOWN_LABEL = -1
+
+    def __init__(self, participant_id_to_class_idx: Dict[str, int], unknown_label: Optional[int] = None):
         """
         Initialize user identification transform.
         
         Args:
             participant_id_to_class_idx: Dictionary mapping participant_id to class index
+            unknown_label: If set, return this label for participant_id not in mapping (e.g. -1 for unknown split).
+                          If None, raise KeyError for unknown participant_id (default).
         """
         self.participant_id_to_class_idx = participant_id_to_class_idx
+        self.unknown_label = unknown_label
         # Create reverse mapping for validation
         self.class_idx_to_participant_id = {v: k for k, v in participant_id_to_class_idx.items()}
     
@@ -165,12 +171,14 @@ class UserIdentificationTransform:
             participant_id: Participant ID string
             
         Returns:
-            Class index tensor
+            Class index tensor (or unknown_label if participant not in mapping and unknown_label is set)
             
         Raises:
-            KeyError: If participant_id is not in the mapping
+            KeyError: If participant_id is not in the mapping and unknown_label is None
         """
         if participant_id not in self.participant_id_to_class_idx:
+            if self.unknown_label is not None:
+                return torch.tensor(self.unknown_label, dtype=torch.long)
             raise KeyError(
                 f"Participant ID '{participant_id}' not found in participant_id_to_class_idx mapping. "
                 f"This indicates a data inconsistency issue."
@@ -216,18 +224,22 @@ def create_user_identification_transform_from_mapping_file(mapping_file_path: st
     
     return UserIdentificationTransform(participant_id_to_class_idx)
 
-def create_user_identification_transform_from_hdf5(hdf5_dir: str) -> Tuple[UserIdentificationTransform, int]:
+def create_user_identification_transform_from_hdf5(
+    hdf5_dir: str,
+    unknown_label: Optional[int] = None
+) -> Tuple[UserIdentificationTransform, int]:
     """
     Create user identification transform from HDF5 directory.
     Looks for participant_id_to_class_idx.json in the HDF5 directory.
     
     Args:
         hdf5_dir: Directory containing HDF5 files and mapping JSON
+        unknown_label: If set (e.g. UserIdentificationTransform.UNKNOWN_LABEL), return this label
+                      for participant_id not in mapping. Use when loading "unknown" split.
         
     Returns:
         Tuple of (transform, num_classes)
     """
-    
     hdf5_dir_path = Path(hdf5_dir)
     mapping_file = hdf5_dir_path / 'participant_id_to_class_idx.json'
     
@@ -237,7 +249,13 @@ def create_user_identification_transform_from_hdf5(hdf5_dir: str) -> Tuple[UserI
             f"Please run preprocessing with process_all_participants_user_identification() first."
         )
     
-    transform = create_user_identification_transform_from_mapping_file(str(mapping_file))
+    with open(mapping_file, 'r') as f:
+        participant_id_to_class_idx = json.load(f)
+    
+    transform = UserIdentificationTransform(
+        participant_id_to_class_idx,
+        unknown_label=unknown_label
+    )
     num_classes = transform.get_num_classes()
     
     return transform, num_classes

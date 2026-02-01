@@ -447,6 +447,22 @@ class EEGDataLoader:
         else:
             # Multi-file structure, return as lists
             return train_files, val_files, test_files
+
+    @staticmethod
+    def _get_unknown_hdf5_file_paths(hdf5_dir: Path, segment_length: str):
+        """
+        Get HDF5 file path(s) for the "unknown" split when consider_unknown_users was used.
+        
+        Returns:
+            List of paths if multi-file, single path if single file, or empty list if no unknown split.
+        """
+        part_files = sorted(hdf5_dir.glob(f"eeg_data_unknown_{segment_length}_part*.h5"))
+        if part_files:
+            return part_files[0] if len(part_files) == 1 else part_files
+        single = hdf5_dir / f"eeg_data_unknown_{segment_length}.h5"
+        if single.exists():
+            return single
+        return []
     
     @staticmethod
     def _verify_hdf5_files(train_files, val_files, test_files) -> None:

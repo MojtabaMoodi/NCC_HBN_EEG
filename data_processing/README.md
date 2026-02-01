@@ -2,9 +2,19 @@
 
 This comprehensive guide covers the entire EEG data processing pipeline, from raw data preprocessing to model training with PyTorch. The system uses HDF5 format for efficient storage and streaming of large EEG datasets.
 
+## Recent Updates
+
+- **128-Channel Support**: Now supports both 60-channel `.npy` files and 128-channel `.h5` files
+- **Configurable Window Sizes**: Choose which segment lengths to process (1s, 2s, 4s) to save time and storage
+- **Multi-Part File Support**: Automatic file splitting for all window sizes prevents large file performance issues
+- **Improved Performance**: Large datasets are automatically split into multiple files (100K samples per file)
+- **Command-Line Script**: New `preprocess_128channels.py` script for easy preprocessing of 128-channel data
+
 ## Quick Start
 
 ### Basic Usage
+
+**For 60-channel .npy files (legacy format)**:
 ```python
 from eeg_data_preprocessing import EEGDataPreprocessor
 from eeg_dataset import EEGDataset, EEGDataLoader
@@ -13,12 +23,19 @@ from eeg_dataset import EEGDataset, EEGDataLoader
 preprocessor = EEGDataPreprocessor(
     data_root="/path/to/preprocessed_new",
     output_dir="/path/to/processed_eeg_data_hdf5"
+    # Default: num_channels=60, window_sizes=['1s', '2s', '4s']
 )
-participants = preprocessor.process_all_participants(n_jobs=64)  # Use all CPU cores
+preprocessor.process_all_participants(
+    train_ratio=0.7,
+    val_ratio=0.15,
+    test_ratio=0.15,
+    random_seed=42,
+    stratify_by="gender"
+)
 
-# 2. Create dataset from HDF5 file
+# 2. Create dataset from HDF5 file (automatically handles multi-part files)
 dataset = EEGDataset(
-    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s.h5",
+    hdf5_file="/path/to/processed_eeg_data_hdf5/eeg_data_train_1s_part00.h5",
     task_type="both",  # "active", "passive", or "both"
     shuffle=True  # Shuffle for training
 )
@@ -32,7 +49,48 @@ dataloader = EEGDataLoader.create_dataloader(
 
 # 4. Use in training
 for batch in dataloader:
-    eeg_data = batch['eeg_data']      # Shape: (batch_size, 60, 200) or (batch_size, 60, 800)
+    eeg_data = batch['eeg_data']      # Shape: (batch_size, 60, timepoints)
+    gender = batch['gender']          # Shape: (batch_size,)
+    age = batch['age']                # Shape: (batch_size,)
+    participant_ids = batch['participant_ids']
+    task_types = batch['task_types']
+```
+
+**For 128-channel .h5 files (new format)**:
+```python
+from eeg_data_preprocessing import EEGDataPreprocessor
+from eeg_dataset import EEGDataset, EEGDataLoader
+
+# 1. Preprocess 128-channel data
+preprocessor = EEGDataPreprocessor(
+    data_root="/path/to/preprocessed_128_channels",
+    output_dir="/path/to/processed_eeg_data_128ch",
+    num_channels=128,
+    window_sizes=['1s', '4s']  # Choose which windows to process
+)
+preprocessor.process_all_participants(
+    train_ratio=0.7,
+    val_ratio=0.15,
+    test_ratio=0.15,
+    random_seed=42,
+    stratify_by="both"
+)
+
+# 2. Create dataset (automatically handles multi-part files)
+# The loader automatically detects and loads from all part files
+train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
+    hdf5_dir="/path/to/processed_eeg_data_128ch",
+    segment_length="4s",
+    task_type="both",
+    target_type="both",
+    batch_size=32,
+    num_workers=4,
+    shuffle_train=True
+)
+
+# 3. Use in training
+for batch in train_loader:
+    eeg_data = batch['eeg_data']      # Shape: (batch_size, 128, 800) for 4s
     gender = batch['gender']          # Shape: (batch_size,)
     age = batch['age']                # Shape: (batch_size,)
     participant_ids = batch['participant_ids']
@@ -61,21 +119,28 @@ for batch in dataloader:
 
 ## Overview
 
-This pipeline processes EEG data from the preprocessed_new directory structure and creates PyTorch datasets and data loaders for machine learning tasks. The system supports:
+This pipeline processes EEG data from multiple input formats and creates PyTorch datasets and data loaders for machine learning tasks. The system supports:
 
+- **Multiple Input Formats**: 
+  - 60-channel data from `.npy` files (legacy format)
+  - 128-channel data from `.h5` files (new format)
+- **Configurable Window Sizes**: Choose which segment lengths to process (1s, 2s, 4s)
 - **Gender Classification**: Binary classification (female/male)
 - **Age Classification**: 3-class classification (<8.5, 8.5-12.5, >12.5 years)
 - **Age Regression**: Continuous age prediction with multiple normalization strategies
 - **Combined Classification**: Gender+age combinations (6 classes)
-- **HDF5 Storage**: Efficient storage without compression for faster data loading (3-5x speedup)
+- **Multi-Part HDF5 Storage**: Automatic file splitting for optimal performance (prevents large file issues)
 - **Streaming Data Loading**: Memory-efficient IterableDataset for large datasets
 - **Cross-Task Evaluation**: Train on one task type, test on another
 - **Participant-Level Filtering**: Flexible participant isolation or mixing for training
 
 ## Key Features
 
+- **Multiple Input Formats**: Supports both 60-channel `.npy` files and 128-channel `.h5` files
+- **Configurable Window Sizes**: Process only the segment lengths you need (1s, 2s, 4s)
+- **Multi-Part HDF5 Storage**: Automatic file splitting (e.g., `part00.h5`, `part01.h5`) prevents large file performance issues
 - **HDF5 Storage**: Efficient hierarchical storage without compression for faster training
-- **Data Processing**: Converts (2, 60, 240) EEG data to (60, 200) or (60, 800) by concatenating runs
+- **Data Processing**: Converts EEG data to segments by concatenating runs and handling timepoint alignment
 - **Task Separation**: Separates active (ccd) and passive (sus) tasks into separate groups
 - **Streaming Data Loading**: Memory-efficient IterableDataset for large datasets
 - **PyTorch Integration**: Full PyTorch Dataset and DataLoader support
@@ -83,7 +148,6 @@ This pipeline processes EEG data from the preprocessed_new directory structure a
 - **Participant Metadata**: Each segment stores participant_id for flexible filtering
 - **Cross-Task Evaluation**: Train on one task type, test on another
 - **Participant-Level Filtering**: Filter by participant IDs for flexible training strategies
-- **Multiprocessing**: Parallel preprocessing using all available CPU cores
 - **Type Safety**: Comprehensive type hints and validation
 
 ### Important Notes
@@ -97,14 +161,16 @@ This pipeline processes EEG data from the preprocessed_new directory structure a
 ## Data Structure
 
 ### Input Data Structure
+
+**Option 1: 60-channel data (legacy format - .npy files)**
 ```
 preprocessed_new/
 ├── cmi_bids_R1/
 │   ├── sub-NDARAC904DMU/
 │   │   ├── demographics.csv
-│   │   ├── ccd_data_trial_0.npy  # Active task data (2, 60, 240)
+│   │   ├── ccd_data_trial_0.npy  # Active task data (N, 60, 240)
 │   │   ├── ccd_data_trial_1.npy
-│   │   ├── sus_data_trial_0.npy  # Passive task data (2, 60, 240)
+│   │   ├── sus_data_trial_0.npy  # Passive task data (N, 60, 240)
 │   │   ├── sus_data_trial_1.npy
 │   │   └── ...
 │   └── ...
@@ -112,13 +178,50 @@ preprocessed_new/
     └── ...
 ```
 
-### Output Data Structure (HDF5 Format)
-The preprocessing creates HDF5 files with the following structure:
-
+**Option 2: 128-channel data (new format - .h5 files)**
 ```
-eeg_data_{split}_{segment_length}.h5  # e.g., eeg_data_train_1s.h5
+preprocessed_128_channels/
+├── cmi_bids_R1/
+│   ├── sub-NDARAC904DMU/
+│   │   ├── demographics.csv
+│   │   ├── ccd_1_data_trial_0.h5  # Active task data (N, 128, 240)
+│   │   ├── ccd_1_data_trial_1.h5
+│   │   ├── sus_1_data_trial_0.h5  # Passive task data (N, 128, 240)
+│   │   ├── sus_1_data_trial_1.h5
+│   │   └── ...
+│   └── ...
+└── cmi_bids_R2/
+    └── ...
+```
+
+**H5 File Structure**: Each `.h5` file contains a `'data'` key with shape `(N, num_channels, 240)` where:
+- `N` = number of runs (typically 2)
+- `num_channels` = 60 (for .npy) or 128 (for .h5)
+- `240` = timepoints (first 40 are dropped to get 200 per run)
+
+### Output Data Structure (HDF5 Format)
+The preprocessing creates HDF5 files with multi-part support for optimal performance:
+
+**Single File Format** (for smaller datasets):
+```
+eeg_data_{split}_{segment_length}.h5  # e.g., eeg_data_train_4s.h5
+```
+
+**Multi-Part File Format** (for large datasets, automatic splitting):
+```
+eeg_data_{split}_{segment_length}_part00.h5  # First 100K samples
+eeg_data_{split}_{segment_length}_part01.h5  # Next 100K samples
+eeg_data_{split}_{segment_length}_part02.h5  # And so on...
+```
+
+**File Structure** (same for both formats):
+```
+eeg_data_train_4s_part00.h5
 ├── active/          (Group)
-│   ├── sample_XXXXXX (Dataset: EEG array, shape (60, 200) or (60, 800))
+│   ├── sample_XXXXXX (Dataset: EEG array, shape (num_channels, timepoints))
+│   │                 # For 1s: (60 or 128, 200)
+│   │                 # For 2s: (60 or 128, 400)
+│   │                 # For 4s: (60 or 128, 800)
 │   └── metadata_XXXXXX (Group with attributes)
 │       ├── participant_id: str
 │       ├── gender: int (1 = male, 0 = female)
@@ -126,7 +229,7 @@ eeg_data_{split}_{segment_length}.h5  # e.g., eeg_data_train_1s.h5
 │       ├── task_type: str ("active")
 │       └── task_number: int
 └── passive/         (Group)
-    ├── sample_XXXXXX (Dataset: EEG array, shape (60, 200) or (60, 800))
+    ├── sample_XXXXXX (Dataset: EEG array, same shape as above)
     └── metadata_XXXXXX (Group with attributes)
         ├── participant_id: str
         ├── gender: int (1 = male, 0 = female)
@@ -137,65 +240,123 @@ eeg_data_{split}_{segment_length}.h5  # e.g., eeg_data_train_1s.h5
 File-level attributes:
 - split_name: str ("train", "val", or "test")
 - segment_length: str ("1s", "2s", or "4s")
+- part_idx: int (for multi-part files, 0, 1, 2, ...)
 - num_participants: int
-- total_samples: int
+- total_samples: int (per file, not total across all parts)
 ```
 
-Each sample is stored as a separate dataset without compression for faster data loading during training (trade-off: ~8-10% larger files but 3-5x faster loading).
-
-**Performance Consideration**: For 1s segments with ~955K samples, storing each sample as a separate dataset creates a large HDF5 B-tree index. This can cause slower data loading due to B-tree traversal overhead. The dataset code automatically optimizes for this by:
-- Using larger HDF5 chunk cache (500MB) for datasets with >500K samples
-- Skipping sorting for large datasets during cache building
-- Recommending `num_workers=0` for 1s segments to avoid file contention
+**Key Points**:
+- Each sample is stored as a separate dataset without compression for faster data loading (trade-off: ~8-10% larger files but 3-5x faster loading)
+- Files automatically split when reaching 100K samples per file to prevent large file performance issues
+- Participant data CAN span multiple files (this is acceptable and handled transparently)
+- The dataset loader automatically detects and handles both single-file and multi-part formats
 
 ## Data Preprocessing
 
 ### Data Processing Details
 1. **EEG Data Processing**:
-   - Input: (2, 60, 240) - 2 channels, 60 electrodes, 240 time points
-   - Output: Two separate (60, 200) arrays - one per channel
-   - Processing: Drop first 40 time points from each channel
+   - **Input Formats**:
+     - `.npy` files: Shape `(N, 60, 240)` - N runs, 60 channels, 240 timepoints
+     - `.h5` files: Shape `(N, 128, 240)` - N runs, 128 channels, 240 timepoints
+   - **Processing**: 
+     - Drop first 40 timepoints to get 200 per run
+     - Concatenate all runs along time axis
+     - Split into segments of specified length (1s, 2s, or 4s)
+   - **Output**: 
+     - 1s segments: `(num_channels, 200)` - 200 timepoints
+     - 2s segments: `(num_channels, 400)` - 400 timepoints
+     - 4s segments: `(num_channels, 800)` - 800 timepoints
 
-2. **Dual Segment Creation**:
-   - **1-second segments**: (60, 200) - single runs
-   - **4-second segments**: (60, 800) - concatenated from 4 consecutive runs
-   - **Concatenation logic**: Groups 4 consecutive runs of the same task type and participant
+2. **Segment Creation**:
+   - **1-second segments**: Single runs (200 timepoints)
+   - **2-second segments**: Two consecutive runs (400 timepoints)
+   - **4-second segments**: Four consecutive runs (800 timepoints)
+   - **Remainder handling**: If total timepoints don't divide evenly, remainder is either dropped (if < half segment) or zero-padded (if >= half segment)
 
-3. **Task Naming**:
-   - Active tasks: `ccd_trial_{trial_num}_run{run_num}`
-   - Passive tasks: `sus_trial_{trial_num}_run{run_num}`
+3. **Task Type Detection**:
+   - Active tasks: Files starting with `ccd` (e.g., `ccd_1_data_trial_0.npy` or `ccd_1_data_trial_0.h5`)
+   - Passive tasks: Files starting with `sus` (e.g., `sus_1_data_trial_0.npy` or `sus_1_data_trial_0.h5`)
 
 4. **HDF5 Storage**:
    - Creates separate HDF5 files for train/val/test splits
+   - **Multi-part file support**: Automatically splits into multiple files when reaching 100K samples per file
    - Stores segments without compression for faster data loading (3-5x speedup)
    - Trade-off: ~8-10% larger files but significantly faster training
    - Each segment includes participant_id in metadata
-   - Supports multiple segment lengths (1s, 2s, 4s)
-   - **Performance Note**: Each sample is stored as a separate HDF5 dataset. For 1s segments with ~955K samples, this creates a large B-tree index that can cause slower data loading. Consider using `num_workers=0` for 1s segments to avoid file contention, or re-preprocess with batched storage for better performance.
+   - Supports configurable segment lengths (choose 1s, 2s, 4s, or all)
+   - **Performance**: Multi-part files prevent large file performance issues. The dataset loader automatically handles both single-file and multi-part formats.
 
-5. **Multiprocessing**:
-   - Parallel processing of participants using all available CPU cores
-   - Two-pass approach: first pass collects metadata, second pass saves to HDF5
+5. **Two-Pass Processing**:
+   - First pass: Collect participant metadata for stratified train/val/test splits
+   - Second pass: Process participants and save to appropriate split files
 
 ### Preprocessing Usage
+
+**For 60-channel .npy files (legacy format)**:
 ```python
 from eeg_data_preprocessing import EEGDataPreprocessor
 
-# Initialize preprocessor
+# Initialize preprocessor (default: 60 channels, all window sizes)
 preprocessor = EEGDataPreprocessor(
     data_root="/path/to/preprocessed_new",
     output_dir="/path/to/processed_eeg_data_hdf5"
 )
 
-# Process all participants with multiprocessing
-# n_jobs=None uses all available CPU cores
-participants = preprocessor.process_all_participants(n_jobs=64)
-
-# Creates HDF5 files:
-# - eeg_data_train_1s.h5, eeg_data_val_1s.h5, eeg_data_test_1s.h5
-# - eeg_data_train_2s.h5, eeg_data_val_2s.h5, eeg_data_test_2s.h5
-# - eeg_data_train_4s.h5, eeg_data_val_4s.h5, eeg_data_test_4s.h5
+# Process all participants
+preprocessor.process_all_participants(
+    train_ratio=0.7,
+    val_ratio=0.15,
+    test_ratio=0.15,
+    random_seed=42,
+    stratify_by="gender"
+)
 ```
+
+**For 128-channel .h5 files (new format)**:
+```python
+from eeg_data_preprocessing import EEGDataPreprocessor
+
+# Initialize preprocessor with 128 channels
+preprocessor = EEGDataPreprocessor(
+    data_root="/path/to/preprocessed_128_channels",
+    output_dir="/path/to/processed_eeg_data_128ch",
+    num_channels=128,
+    window_sizes=['1s', '4s']  # Choose which windows to process
+)
+
+# Process all participants
+preprocessor.process_all_participants(
+    train_ratio=0.7,
+    val_ratio=0.15,
+    test_ratio=0.15,
+    random_seed=42,
+    stratify_by="both"  # Stratify by both gender and age
+)
+```
+
+**Using the command-line script (recommended for 128-channel data)**:
+```bash
+# Process with 1s and 4s windows
+python preprocess_128channels.py --window_sizes 1s 4s
+
+# Process only 4s windows
+python preprocess_128channels.py --window_sizes 4s
+
+# Use custom paths and parameters
+python preprocess_128channels.py \
+    --data_root /path/to/preprocessed_128_channels \
+    --output_dir /path/to/output \
+    --window_sizes 1s 4s \
+    --num_channels 128 \
+    --stratify_by both
+```
+
+**Output Files**:
+- Creates HDF5 files with multi-part support (automatic splitting at 100K samples):
+  - `eeg_data_train_1s_part00.h5`, `eeg_data_train_1s_part01.h5`, ...
+  - `eeg_data_val_1s_part00.h5`, `eeg_data_val_1s_part01.h5`, ...
+  - `eeg_data_test_1s_part00.h5`, `eeg_data_test_1s_part01.h5`, ...
+  - Same pattern for 2s and 4s segments
 
 ## Dataset and DataLoader Classes
 
@@ -486,25 +647,30 @@ EEG/data_processing/
 ├── eeg_dataset.py              # PyTorch IterableDataset and DataLoader classes
 ├── target_transforms.py        # Target transformation functions
 ├── constants.py                # Shared constants and utilities
-├── processed_eeg_data_hdf5/    # HDF5 files with train/val/test splits
-│   ├── eeg_data_train_1s.h5
-│   ├── eeg_data_val_1s.h5
-│   ├── eeg_data_test_1s.h5
-│   ├── eeg_data_train_2s.h5
-│   ├── eeg_data_val_2s.h5
-│   ├── eeg_data_test_2s.h5
-│   ├── eeg_data_train_4s.h5
-│   ├── eeg_data_val_4s.h5
-│   └── eeg_data_test_4s.h5
+├── preprocess_128channels.py  # Script for preprocessing 128-channel h5 files
+├── preprocess_user_identification.py  # Script for user identification preprocessing
+├── multi_file_dataset.py       # Multi-file dataset support
+├── processed_eeg_data_hdf5/    # HDF5 files with train/val/test splits (60-channel)
+│   ├── eeg_data_train_1s_part00.h5
+│   ├── eeg_data_train_1s_part01.h5
+│   ├── eeg_data_val_1s_part00.h5
+│   ├── eeg_data_test_1s_part00.h5
+│   ├── eeg_data_train_4s_part00.h5
+│   ├── eeg_data_val_4s_part00.h5
+│   └── eeg_data_test_4s_part00.h5
+├── processed_eeg_data_128ch/   # HDF5 files for 128-channel data
+│   └── (same structure as above)
 └── README.md                   # This file
 ```
 
 ## Best Practices
 
 ### 1. Data Preprocessing
-- Use multiprocessing (`n_jobs`) to speed up preprocessing on multi-core systems
-- Verify data integrity after preprocessing by checking HDF5 file attributes
+- Choose the appropriate input format (60-channel .npy or 128-channel .h5)
+- Select which window sizes to process (1s, 2s, 4s) to save time and storage
 - The preprocessing creates pre-split train/val/test files automatically
+- Multi-part files are created automatically when datasets are large (>100K samples)
+- Verify data integrity after preprocessing by checking HDF5 file attributes
 
 ### 2. Dataset Usage
 - Choose the appropriate segment length for your model (1s, 2s, or 4s)
@@ -526,10 +692,10 @@ EEG/data_processing/
 - Use appropriate batch sizes and number of workers
 - HDF5 streaming is memory-efficient for large datasets
 - Worker sharding ensures no data duplication with `num_workers > 0`
-- **1s Segment Performance**: 1s segments have ~955K samples (3.1x more than 4s), each stored as a separate HDF5 dataset. This creates a large B-tree index that can cause slower data loading. Recommended optimizations:
-  - Use `num_workers=0` to avoid HDF5 file contention
-  - Increase HDF5 chunk cache size (automatically set to 500MB for large datasets)
-  - Consider re-preprocessing with batched storage (multiple samples per dataset) for better performance
+- **Multi-Part Files**: Large datasets are automatically split into multiple files (100K samples per file) to prevent large file performance issues
+- **Automatic Detection**: The dataset loader automatically detects and handles both single-file and multi-part formats
+- **File Rotation**: Participant data can span multiple files (this is acceptable and handled transparently)
+- **1s Segment Performance**: 1s segments have ~955K samples, automatically split into ~10 part files for optimal performance
 
 ### 6. Reproducibility
 - Set `random_seed` for reproducible shuffling
@@ -545,10 +711,7 @@ EEG/data_processing/
 3. **Data Loading Errors**: Verify HDF5 file structure and that groups (active/passive) exist
 4. **Transform Errors**: Ensure transforms match your target type
 5. **Worker Sharding Issues**: If using `num_workers > 0`, ensure worker sharding is working correctly
-6. **Slow Data Loading for 1s Segments**: 1s segments have ~955K samples, each stored as a separate HDF5 dataset. This creates a large B-tree index that can cause exponential slowdown. Solutions:
-   - Use `num_workers=0` to avoid file contention (already optimized in dataset code)
-   - HDF5 cache is automatically increased to 500MB for large datasets
-   - For long-term solution, consider re-preprocessing with batched storage (store multiple samples per dataset)
+6. **Slow Data Loading for 1s Segments**: This is now handled automatically with multi-part files. The preprocessing automatically splits large datasets into multiple files (100K samples per file), preventing large file performance issues. The dataset loader automatically detects and handles multi-part files.
 
 ### Debugging Tips
 
@@ -561,9 +724,14 @@ EEG/data_processing/
 ## API Reference
 
 ### EEGDataPreprocessor
-- `__init__(data_root, output_dir)`: Initialize preprocessor
-- `process_all_participants(n_jobs=None)`: Process all participants and create HDF5 files
-  - `n_jobs`: Number of parallel workers (None = use all CPU cores)
+- `__init__(data_root, output_dir, num_channels=60, window_sizes=None)`: Initialize preprocessor
+  - `data_root`: Path to input data directory
+  - `output_dir`: Path to output directory for HDF5 files
+  - `num_channels`: Number of EEG channels (60 for .npy files, 128 for .h5 files)
+  - `window_sizes`: List of window sizes to process (e.g., `['1s', '4s']`). Default: `['1s', '2s', '4s']`
+- `process_all_participants(train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, random_seed=42, stratify_by='gender')`: Process all participants and create HDF5 files
+  - Creates multi-part files automatically when datasets are large
+  - Supports both 60-channel and 128-channel data
 
 ### EEGDataset
 - `__init__(hdf5_file, task_type, target_type, ...)`: Initialize IterableDataset
