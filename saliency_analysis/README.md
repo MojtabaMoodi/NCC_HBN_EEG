@@ -10,11 +10,12 @@ This module provides tools for analyzing which EEG channels are most important f
 4. [Usage](#usage)
 5. [Run Scripts](#run-scripts)
 6. [Understanding Results](#understanding-results)
-7. [Best Practices](#best-practices)
-8. [Technical Details](#technical-details)
-9. [Progress and GPU Support](#progress-and-gpu-support)
-10. [Troubleshooting](#troubleshooting)
-11. [References](#references)
+7. [Topography and Additional Scripts](#topography-and-additional-scripts)
+8. [Best Practices](#best-practices)
+9. [Technical Details](#technical-details)
+10. [Progress and GPU Support](#progress-and-gpu-support)
+11. [Troubleshooting](#troubleshooting)
+12. [References](#references)
 
 ## Overview
 
@@ -96,7 +97,7 @@ python saliency_analysis/main.py \
     --checkpoint CNN/report_2025-12-16/results_1s/checkpoints/gender_baseline_1s_best.pth \
     --target_type gender \
     --segment_length 1s \
-    --hdf5_dir data_processing/processed_eeg_data_hdf5 \
+    --hdf5_dir data_processing/processed_eeg_data_hdf5_no_compression \
     --split test \
     --method vanilla_gradients \
     --max_samples 1000 \
@@ -107,7 +108,7 @@ python saliency_analysis/main.py \
     --checkpoint CNN/report_2025-12-16/results_1s/checkpoints/gender_baseline_1s_best.pth \
     --target_type gender \
     --segment_length 1s \
-    --hdf5_dir data_processing/processed_eeg_data_hdf5 \
+    --hdf5_dir data_processing/processed_eeg_data_hdf5_no_compression \
     --split test \
     --method both \
     --max_samples 1000 \
@@ -122,7 +123,7 @@ python saliency_analysis/main.py \
 - `--segment_length`: EEG segment length (`1s`, `2s`, or `4s`)
 
 **Data Options:**
-- `--hdf5_dir`: Directory containing HDF5 files (default: `data_processing/processed_eeg_data_hdf5`)
+- `--hdf5_dir`: Directory containing HDF5 files (default: `data_processing/processed_eeg_data_hdf5_no_compression`)
 - `--split`: Data split to analyze (`train`, `val`, or `test`)
 - `--task_type`: Task type (`active`, `passive`, or `both`)
 
@@ -143,15 +144,24 @@ python saliency_analysis/main.py \
 
 ### Python API
 
-You can also use the analyzer programmatically:
+Run from the project root (EEG/) so that `CNN`, `data_processing`, and `saliency_analysis` are on the path. You can use the analyzer programmatically:
 
 ```python
-from saliency_analysis.analyzer import SaliencyAnalyzer
-from models import ModelFactory
-from config import ModelConfig
-from eeg_dataset import EEGDataLoader
+import sys
+from pathlib import Path
+# Add project root
+root = Path(__file__).resolve().parent.parent  # or Path(".") if run from EEG/
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+if str(root / "CNN") not in sys.path:
+    sys.path.insert(0, str(root / "CNN"))
 
-# Create model
+from saliency_analysis.analyzer import SaliencyAnalyzer
+from CNN.models import ModelFactory
+from CNN.config import ModelConfig
+from data_processing.eeg_dataset import EEGDataLoader
+
+# Create model (match checkpoint: e.g. gender_cnn, age_cnn, age_regression_cnn)
 model_config = ModelConfig(num_channels=60, num_classes=2)
 model = ModelFactory.create_model('gender_cnn', model_config)
 
@@ -163,7 +173,7 @@ analyzer.load_checkpoint('path/to/checkpoint.pth')
 
 # Load data
 train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
-    hdf5_dir='data_processing/processed_eeg_data_hdf5',
+    hdf5_dir='data_processing/processed_eeg_data_hdf5_no_compression',
     segment_length='1s',
     batch_size=32
 )
@@ -181,7 +191,7 @@ analysis = analyzer.analyze_channel_importance(method='vanilla_gradients')
 # Get top channels
 top_channels = analyzer.get_top_channels(method='vanilla_gradients', top_k=10)
 
-# Generate visualizations
+# Generate visualizations (includes topography if MNE is available)
 analyzer.visualize_results(
     output_dir='saliency_results',
     method='vanilla_gradients',
@@ -193,7 +203,7 @@ analyzer.visualize_results(
 
 ### 1. `run_saliency_batch.sh` - Batch Mode (All Models)
 
-Runs saliency analysis for all best models automatically.
+Runs saliency analysis for all configured best models. For a subset of models, call `main.py` directly with `--batch --models <name1> <name2>`.
 
 **Usage:**
 ```bash
@@ -263,6 +273,7 @@ NumPy compressed file containing:
 - **`saliency_consistency_all_participants_<method>.png`**: Consistency map (standard deviation) showing variance across participants
 - **`saliency_sample_<N>_<method>.png`**: Full saliency maps for individual samples (for reference, shows 3 samples)
 - **`channel_ranking_<method>.csv`**: CSV file with ranked channels and statistics
+- **`topography_<method>.png`**: Scalp topography (channel importance on a head map), generated when MNE is available. See [Topography and Additional Scripts](#topography-and-additional-scripts).
 
 **When using `--method both`:**
 - **`method_comparison.png`**: Comprehensive comparison visualization with 4 subplots
@@ -286,6 +297,20 @@ Channels are ranked by their average importance across all samples. The ranking 
 For classification tasks, the analysis compares channel importance across different classes. This reveals:
 - **Class-specific channels**: Channels important for one class but not others
 - **Universal channels**: Channels important across all classes
+
+## Topography and Additional Scripts
+
+### Topography (scalp maps)
+
+Saliency results can be visualized as topography plots (EEG channel importance on a scalp map) using MNE's 10–20 montage. Topography is **automatically generated** when you run saliency analysis if MNE is installed (e.g. in the `eeg_env` conda environment).
+
+For details, saved-results workflows, and custom data, see **[TOPOGRAPHY_GUIDE.md](TOPOGRAPHY_GUIDE.md)**.
+
+### Additional scripts
+
+- **`create_topography.py`** – Interactive script to create topography plots from saved saliency `.npz` results or custom channel importance data.
+- **`example_topography_heatmap.py`** – Example script demonstrating topography plotting with MNE.
+- **`example_usage.py`** – Example usage of the saliency analyzer and visualization pipeline.
 
 ## Best Practices
 

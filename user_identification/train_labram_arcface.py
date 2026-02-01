@@ -90,7 +90,7 @@ def get_args():
     
     # Output parameters
     parser.add_argument('--output_dir', type=str, default='./results_labram_arcface',
-                       help='Output directory for checkpoints and logs')
+                       help='Directory to save all results: best_model.pth, checkpoint_epoch_*.pth, and logs')
     parser.add_argument('--save_ckpt_freq', type=int, default=5,
                        help='Save checkpoint frequency')
     parser.add_argument('--resume', type=str, default=None,
@@ -126,8 +126,13 @@ def get_args():
 def main():
     args = get_args()
     
-    # Initialize distributed training if enabled
-    labram_utils.init_distributed_mode(args)
+    # Initialize distributed training only when --distributed was passed (multi-GPU / SLURM).
+    # When not passed, skip init so single-GPU runs work even if SLURM_PROCID etc. are set (e.g. salloc).
+    if args.distributed:
+        labram_utils.init_distributed_mode(args)
+    else:
+        # Ensure we do not enter distributed mode (LaBraM would otherwise use SLURM_PROCID / RANK)
+        args.distributed = False
     
     # Set random seed (adjust for distributed training)
     seed = args.seed + labram_utils.get_rank() if args.distributed else args.seed
