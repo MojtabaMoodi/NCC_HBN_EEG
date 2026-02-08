@@ -79,7 +79,12 @@ class TrainingConfig:
     checkpoint_dir: str = 'checkpoints'
     target_key: str = 'gender'  # 'gender', 'age', 'combined', 'multi_output', or 'user_identification'
     prediction_type: str = 'classification'  # 'classification' or 'regression'
-    
+
+    # Evaluation: aggregate segment-level predictions to participant level (no retraining)
+    # 'majority_vote' = classification: mode of predicted class; regression: median of predicted value
+    # None = segment-level evaluation (default)
+    aggregate_by_participant: Optional[str] = None  # None or 'majority_vote'
+
     # ArcFace-specific learning rate multiplier
     # ArcFace is more sensitive to learning rate than CrossEntropyLoss
     # DIAGNOSIS: LR of 0.00005 (0.5 multiplier) caused model collapse in epoch 18
@@ -113,7 +118,19 @@ class TrainingConfig:
     # Label smoothing for CrossEntropyLoss (used for large classification tasks)
     label_smoothing_large: float = 0.1  # For num_classes > 100
     label_smoothing_very_large: float = 0.05  # For num_classes > 2000
-    
+
+    # How to balance classes for gender/age classification training. Options:
+    # - None: no balancing (iterable dataset); class_weight in loss is set from data if not provided.
+    # - 'stratified': stratified batch sampling (each batch has equal counts per class); class_weight can still be used.
+    # - 'oversample': sampling with replacement (minority classes oversampled); class_weight is NOT set (balance via data).
+    balance_method: Optional[str] = None  # None | 'stratified' | 'oversample'
+
+    # Class weights for imbalanced classification (e.g. gender: Female=0, Male=1). Ignored when balance_method == 'oversample'.
+    # Example: [1.0, 2.0] upweights Male so the model is penalized more for missing Male.
+    class_weight: Optional[List[float]] = None  # None = no weighting; list length must match num_classes
+    # When class_weight is computed from data: exponent applied to inverse-frequency weights (>1 upweights minorities more).
+    class_weight_power: Optional[float] = None  # None = 1.0 (standard balanced); set e.g. 1.5 for stronger minority weighting.
+
     # ArcFace hyperparameters (for very large classification: num_classes > 2000)
     arcface_margin: float = 0.5  # Angular margin in radians (~28.6 degrees)
     # DIAGNOSIS: Scale of 128.0 was insufficient for 3145 classes
@@ -139,11 +156,15 @@ class TrainingConfig:
             'checkpoint_dir': self.checkpoint_dir,
             'target_key': self.target_key,
             'prediction_type': self.prediction_type,
+            'aggregate_by_participant': self.aggregate_by_participant,
+            'balance_method': self.balance_method,
             'weight_decay': self.weight_decay,
             'scheduler_factor': self.scheduler_factor,
             'scheduler_patience': self.scheduler_patience,
             'label_smoothing_large': self.label_smoothing_large,
             'label_smoothing_very_large': self.label_smoothing_very_large,
+            'class_weight': self.class_weight,
+            'class_weight_power': self.class_weight_power,
             'arcface_margin': self.arcface_margin,
             'arcface_scale': self.arcface_scale,
             'arcface_easy_margin': self.arcface_easy_margin,
