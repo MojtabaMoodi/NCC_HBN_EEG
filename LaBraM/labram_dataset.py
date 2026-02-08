@@ -330,6 +330,59 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
     
     return train_dataset, val_dataset, test_dataset
 
+
+def prepare_labram_unknown_dataset(
+    hdf5_dir: str,
+    segment_length: str,
+    task_type: str = "both",
+    sampling_rate: int = 200,
+    random_seed: int = 42
+) -> Optional[LaBraMEEGDataset]:
+    """
+    Create LaBraM dataset for the "unknown" split when consider_unknown_users was used.
+    Unknown participants are not in the class mapping; samples get label -1 (UNKNOWN_LABEL).
+    
+    Args:
+        hdf5_dir: Directory containing HDF5 files (and participant_id_to_class_idx.json)
+        segment_length: '1s', '2s', or '4s'
+        task_type: 'active', 'passive', or 'both'
+        sampling_rate: Sampling rate for LaBraM
+        random_seed: Random seed for shuffling (optional)
+        
+    Returns:
+        LaBraMEEGDataset for unknown split, or None if no unknown split exists.
+    """
+    from data_processing.target_transforms import (
+        UserIdentificationTransform,
+        create_user_identification_transform_from_hdf5
+    )
+    
+    hdf5_dir_path = Path(hdf5_dir)
+    unknown_files = EEGDataLoader._get_unknown_hdf5_file_paths(hdf5_dir_path, segment_length)
+    if not unknown_files:
+        return None
+    
+    # Transform with unknown_label so participant_id not in mapping returns -1
+    transform, _ = create_user_identification_transform_from_hdf5(
+        hdf5_dir,
+        unknown_label=UserIdentificationTransform.UNKNOWN_LABEL
+    )
+    
+    unknown_eeg_dataset = EEGDataLoader._create_dataset_from_hdf5(
+        hdf5_file_or_files=unknown_files,
+        task_type=task_type,
+        target_type="user_identification",
+        transform=None,
+        gender_transform=None,
+        age_transform=None,
+        combined_transform=None,
+        user_identification_transform=transform,
+        shuffle=False
+    )
+    
+    return LaBraMEEGDataset(unknown_eeg_dataset, sampling_rate=sampling_rate)
+
+
 # COMMENTED OUT: Cross-validation and cross-task experiments not supported yet
 # These functions are disabled until HDF5 support is added for cross-validation/cross-task scenarios
 """
