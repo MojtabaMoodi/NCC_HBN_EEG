@@ -3,11 +3,19 @@ Systematic Main Script for EEG Classification Experiments
 Provides a comprehensive interface for running multiple experiments and generating reports.
 """
 
+import sys
+from pathlib import Path
+
+# Ensure project root (EEG) is on path so "CNN" and "data_processing" resolve when run from CNN/
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 import argparse
-from config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
-from experiment import run_experiments
-from utils import create_data_config_for_segment_length
-from gpu_utils import detect_available_gpus
+from CNN.config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
+from CNN.experiment import run_experiments
+from CNN.utils import create_data_config_for_segment_length
+from CNN.gpu_utils import detect_available_gpus
 
 
 def create_all_experiments_for_segment_length(segment_length: str, epochs: int = 50, 
@@ -35,6 +43,7 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
     base_data_config.task_type = "both"
     
     # Baseline experiments: Train on both task types, evaluate separately on active and passive
+    # Class weights are computed from training data in experiment.setup() (balanced / inverse frequency).
     experiments.append(ExperimentConfig(
         name=f"gender_baseline_{segment_length}",
         model_type="gender_cnn",
@@ -42,10 +51,14 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         description=f"Gender classification baseline with {segment_length} segments (train on both, evaluate separately)",
         data_config=base_data_config,
         model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="gender")
+        training_config=TrainingConfig(
+            epochs=epochs,
+            learning_rate=learning_rate,
+            target_key="gender",
+        )
     ))
     
-    # Age classification experiment
+    # Age classification (class weights computed from data in setup(); class_weight_power from config, default 1.0)
     experiments.append(ExperimentConfig(
         name=f"age_classification_{segment_length}",
         model_type="age_cnn",
@@ -53,7 +66,12 @@ def create_all_experiments_for_segment_length(segment_length: str, epochs: int =
         description=f"Age classification baseline with {segment_length} segments (train on both, evaluate separately)",
         data_config=base_data_config,
         model_config=ModelConfig(num_channels=60),
-        training_config=TrainingConfig(epochs=epochs, learning_rate=learning_rate, target_key="age", prediction_type="classification")
+        training_config=TrainingConfig(
+            epochs=epochs,
+            learning_rate=learning_rate * 0.5,
+            target_key="age",
+            prediction_type="classification",
+        )
     ))
     
     # Age regression experiment
@@ -313,15 +331,21 @@ def main():
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=None, 
-                       help='Batch size (if None, uses default: 256 for 1s, 192 for 2s, 128 for 4s)')
+                       help='Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_gpus', type=int, default=None, 
                        help='Number of GPUs to use for DataParallel (default: auto-detect, uses 4 if available, else 1)')
-    parser.add_argument('--results_dir', type=str, default='experiment_results', 
+    parser.add_argument('--results_dir', type=str, default='experiment_results',
                        help='Directory to save results')
-    parser.add_argument('--reports_dir', type=str, default='reports', 
+    parser.add_argument('--reports_dir', type=str, default='reports',
                        help='Directory to save reports')
-    
+    parser.add_argument('--eval_only', action='store_true',
+                       help='Skip training; load saved checkpoint and run evaluation only (e.g. with majority vote).')
+    parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
+                       help="Participant-level aggregation: 'majority_vote' for classification (mode) / median for regression. Use with --eval_only to re-evaluate without retraining.")
+    parser.add_argument('--balance_method', type=str, default=None, choices=['stratified', 'oversample'],
+                       help="Train balancing for gender/age: 'stratified' (balanced batches) or 'oversample' (sampling with replacement, no class weights). Default: None (no balanced sampling; class weights from data still applied when not using oversample).")
+
     args = parser.parse_args()
     
     # Determine number of GPUs to use
@@ -389,14 +413,30 @@ def main():
         segment_length=args.mode,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
-        batch_size=args.batch_size,
+        batch_size=actual_batch_size,
         num_gpus=actual_num_gpus
     )
-    
+
+    # Apply participant-level aggregation (e.g. majority vote) when requested
+    if args.aggregate_by_participant:
+        for exp in experiments:
+            exp.training_config.aggregate_by_participant = args.aggregate_by_participant
+        print(f"Evaluation will use participant-level aggregation: {args.aggregate_by_participant}")
+    if args.balance_method is not None:
+        for exp in experiments:
+            exp.training_config.balance_method = args.balance_method
+        print(f"Train balance method: {args.balance_method}")
+
     print(f"Running {len(experiments)} experiments for {args.mode} segments...")
-    
+
     # Run all experiments
-    results = run_experiments(experiments, system_config, args.random_seed, generate_reports=True)
+    results = run_experiments(
+        experiments,
+        system_config,
+        args.random_seed,
+        generate_reports=True,
+        eval_only=args.eval_only,
+    )
     
     print(f"All {args.mode} experiments completed successfully!")
     print(f"Results saved to: {args.results_dir}")
