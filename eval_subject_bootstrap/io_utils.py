@@ -158,21 +158,19 @@ def check_train_test_overlap(train_manifest: pd.DataFrame, test_manifest: pd.Dat
 def aggregate_segments_by_subject(
     segment_predictions: np.ndarray,
     segment_labels: np.ndarray,
-    segment_subject_ids: List[str]
+    segment_subject_ids: List[str],
+    aggregation: str = "mean_prob",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
     """
     Aggregate segment-level predictions to subject-level predictions.
-    
-    For each subject:
-    - Compute mean probability vector across all segments
-    - Subject prediction = argmax(mean probability)
-    - Subject label = unique label for that subject (validated)
-    
+
     Args:
         segment_predictions: Array of shape (N_segments, num_classes) with probabilities
         segment_labels: Array of shape (N_segments,) with segment labels
         segment_subject_ids: List of length N_segments with subject IDs
-        
+        aggregation: 'mean_prob' = mean probability then argmax; 'majority_vote' = mode
+            of per-segment argmax predictions (no retraining required).
+
     Returns:
         Tuple of:
         - subjects: Array of unique subject IDs, shape (S,)
@@ -180,41 +178,50 @@ def aggregate_segments_by_subject(
         - y_pred_subject: Array of subject predictions, shape (S,)
         - p_subject: Dictionary mapping subject_id to mean probability vector, shape (num_classes,)
     """
-    # Group by subject
+    if aggregation == "majority_vote":
+        try:
+            from data_processing.aggregation import aggregate_segment_probs_by_subject_majority_vote
+        except ImportError:
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from data_processing.aggregation import aggregate_segment_probs_by_subject_majority_vote
+        return aggregate_segment_probs_by_subject_majority_vote(
+            segment_predictions,
+            segment_labels,
+            segment_subject_ids,
+        )
+
+    # mean_prob (default): original behavior
     subject_data = defaultdict(lambda: {'probs': [], 'labels': []})
-    
+
     for i, subject_id in enumerate(segment_subject_ids):
         subject_data[subject_id]['probs'].append(segment_predictions[i])
         subject_data[subject_id]['labels'].append(segment_labels[i])
-    
-    # Aggregate per subject
+
     subjects = []
     y_true_subject = []
     y_pred_subject = []
     p_subject_dict = {}
-    
+
     for subject_id in sorted(subject_data.keys()):
         probs_list = subject_data[subject_id]['probs']
         labels_list = subject_data[subject_id]['labels']
-        
-        # Validate all labels are the same
+
         unique_labels = np.unique(labels_list)
         if len(unique_labels) > 1:
             raise ValueError(
                 f"Subject {subject_id} has inconsistent labels: {unique_labels.tolist()}"
             )
-        
-        # Compute mean probability
+
         mean_prob = np.mean(probs_list, axis=0)
-        
-        # Subject prediction
         pred = np.argmax(mean_prob)
-        
+
         subjects.append(subject_id)
         y_true_subject.append(unique_labels[0])
         y_pred_subject.append(pred)
         p_subject_dict[subject_id] = mean_prob
-    
+
     return (
         np.array(subjects),
         np.array(y_true_subject),
