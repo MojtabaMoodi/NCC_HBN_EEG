@@ -19,9 +19,17 @@ CNN/
 │   ├── base_model.py    # Base class for all EEG CNN models
 │   ├── model.py         # Specific model implementations (Gender, Age)
 │   └── model_factory.py # Factory pattern for model creation
+├── resnet/              # ResNet variants for EEG (see docs/ResNet.md)
+│   ├── resnet_model.py  # ResNet18/34/50 and task-specific wrappers
+│   ├── run_resnet_age.py
+│   └── run_resnet_gender.py
+├── docs/                # Supplementary documentation
+│   ├── ResNet.md        # ResNet architecture, usage, implementation
+│   ├── Troubleshooting.md # Gender/class collapse and imbalanced data
+│   └── GPU_SETUP_CHANGES.md # GPU detection, multi-GPU setup, saliency device handling
 ├── checkpoints/         # Model checkpoints (organized by model type)
 ├── experiment_results/  # Experiment results and metrics
-└── README.md           # This documentation
+└── README.md            # This documentation
 ```
 
 ## 🚀 Key Features
@@ -31,14 +39,11 @@ CNN/
 - **Model Factory**: Systematic model creation and configuration
 - **Reusable Components**: Training, evaluation, and reporting modules
 
-### 2. **Comprehensive Experiment Framework**
-- **12 Experiment Types**: Basic, cross-validation, cross-task, and cross-task cross-validation
-- **Specialized Data Loaders**: Each experiment type uses appropriate data loading strategy
-- **Cross-Validation Support**: 5-fold cross-validation with proper result aggregation
-- **Cross-Task Evaluation**: Train on one task type, evaluate on another
-- **Comprehensive Logging**: Track all metrics, training progress, and results
-- **Early Stopping**: Prevent overfitting with configurable patience
-- **Checkpointing**: Save best models and regular checkpoints
+### 2. **Experiment Framework**
+- **Default CLI**: Runs 3 baseline experiments per segment length (gender classification, age classification, age regression). Segment length via `--mode 1s` | `2s` | `4s`.
+- **Data Loaders**: Standard train/val/test from HDF5; optional stratified or oversample for gender/age (`--balance_method`).
+- **Additional experiment types** (cross-validation, cross-task) are defined in code and can be enabled in `main.py`.
+- **Logging**: Training progress, metrics, early stopping (configurable patience), checkpointing (best and last).
 
 ### 3. **Comprehensive Evaluation**
 - **Multiple Metrics**: Accuracy, Precision, Recall, F1-Score, ROC-AUC
@@ -68,62 +73,91 @@ CNN/
 
 ### Quick Start
 
+Run from the **project root (EEG)** or from **CNN/**:
+
 ```bash
-# Run all 12 comprehensive experiments
-python main.py --mode comprehensive
+# Run 3 baseline experiments for 4s segments (gender, age classification, age regression)
+python CNN/main.py --mode 4s
+# Or from CNN/:  python main.py --mode 4s
 
-# Run single experiment
-python main.py --mode single --experiment test_gender --target gender --epochs 10
+# Other segment lengths
+python CNN/main.py --mode 1s
+python CNN/main.py --mode 2s
 
-# Run default experiments (basic gender and age)
-python main.py --mode default
+# Optional: balance method for gender/age (stratified batches or oversampling)
+python CNN/main.py --mode 4s --balance_method stratified --results_dir CNN_4s_stratified
+python CNN/main.py --mode 4s --balance_method oversample --results_dir CNN_4s_oversample
 
-# Run custom batch experiments
-python main.py --mode batch --epochs 100 --learning_rate 0.01
+# Optional: custom epochs, learning rate, batch size
+python CNN/main.py --mode 4s --epochs 100 --learning_rate 0.00005 --batch_size 64
 ```
 
-### Comprehensive Experiment Types
+**CLI arguments:** `--mode` (1s | 2s | 4s; default: 1s), `--epochs`, `--learning_rate`, `--batch_size`, `--random_seed`, `--num_gpus`, `--results_dir`, `--reports_dir`, `--eval_only`, `--aggregate_by_participant`, `--balance_method` (optional: `stratified` | `oversample`; default: None).
 
-The framework supports 12 different experiment types:
+### Default experiments (per segment length)
 
-#### **1-2. Basic Experiments**
-- `gender_baseline_train_val_test`: Standard gender classification
-- `age_baseline_train_val_test`: Standard age classification
+The default run executes **3 experiments**:
 
-#### **3-4. Cross-Validation Experiments**
-- `gender_cv_gender_stratified`: 5-fold CV with gender stratification
-- `age_cv_age_stratified`: 5-fold CV with age stratification
+1. **gender_baseline_{1s|2s|4s}** — Gender classification (2 classes)
+2. **age_classification_{1s|2s|4s}** — Age classification (3 classes)
+3. **age_regression_{1s|2s|4s}** — Age regression (continuous)
 
-#### **5-8. Cross-Task Experiments**
-- `gender_cross_task_active_to_passive`: Train on active, test on passive
-- `gender_cross_task_passive_to_active`: Train on passive, test on active
-- `age_cross_task_active_to_passive`: Train on active, test on passive
-- `age_cross_task_passive_to_active`: Train on passive, test on active
+Additional experiment types (e.g. cross-validation, cross-task) are implemented in `main.py` and can be enabled by uncommenting the corresponding block.
 
-#### **9-12. Cross-Task Cross-Validation Experiments**
-- `gender_cross_task_cv_active_to_passive_gender_stratified`: 5-fold CV with cross-task
-- `gender_cross_task_cv_passive_to_active_gender_stratified`: 5-fold CV with cross-task
-- `age_cross_task_cv_active_to_passive_age_stratified`: 5-fold CV with cross-task
-- `age_cross_task_cv_passive_to_active_age_stratified`: 5-fold CV with cross-task
+### Re-evaluate with majority vote (no retraining)
+
+You can re-run **evaluation only** on an already-trained model and get **participant-level** accuracy (majority vote over segments per participant). No retraining; the saved checkpoint is loaded.
+
+```bash
+# From the project root (EEG) or from CNN/
+python CNN/main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --results_dir experiment_results
+
+# Or from inside CNN/:
+python main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --results_dir experiment_results
+```
+
+- `--eval_only`: skip training, load checkpoint from `results_dir/checkpoints/<experiment_name>_best.pth`.
+- `--aggregate_by_participant majority_vote`: aggregate segment predictions per participant (classification = mode, regression = median).
+
+Use the same `--mode` (e.g. `4s`) and `--results_dir` as for the original run. Keep the whole command on one line (no line break inside `--results_dir ...`).
+
+### ResNet experiments (gender / age)
+
+ResNet18, ResNet34, and ResNet50 for EEG are run via dedicated scripts (not `main.py`). Run from **project root (EEG)** or from **CNN/**:
+
+```bash
+# From project root (EEG):
+python -m CNN.resnet.run_resnet_age --mode 4s --resnet_type 34
+python -m CNN.resnet.run_resnet_gender --mode 4s --resnet_type 18
+
+# From CNN/:
+python -m resnet.run_resnet_age --mode 4s --resnet_type 34
+python -m resnet.run_resnet_gender --mode 4s --resnet_type 18
+```
+
+Options: `--mode` (1s/2s/4s), `--resnet_type` (18/34/50), `--epochs`, `--learning_rate`, `--batch_size`, `--num_gpus`, `--results_dir`, `--reports_dir`. Full usage, architecture, and API: **[docs/ResNet.md](docs/ResNet.md)**.
 
 ### Advanced Usage
 
 ```python
-from experiment import Experiment, ExperimentConfig
-from config import DataConfig, ModelConfig, TrainingConfig, SystemConfig
-from models import ModelFactory
+from CNN.experiment import Experiment
+from CNN.config import ExperimentConfig, DataConfig, ModelConfig, TrainingConfig, SystemConfig
 
 # Create custom experiment
 data_config = DataConfig(
-    pickle_dir="/path/to/data",
+    hdf5_dir="/path/to/processed_eeg_data_hdf5",
+    segment_length=800,
     batch_size=128,
-    use_cross_validation=True,
-    n_folds=5,
-    cv_strategy="gender"
+    task_type="both",
 )
 
 model_config = ModelConfig(num_channels=60, dropout_rate=0.3)
-training_config = TrainingConfig(epochs=100, learning_rate=0.01)
+training_config = TrainingConfig(
+    epochs=100,
+    learning_rate=0.01,
+    target_key="gender",
+    balance_method="stratified",  # or "oversample" or None
+)
 
 config = ExperimentConfig(
     name="my_custom_experiment",
@@ -131,50 +165,69 @@ config = ExperimentConfig(
     target_type="gender",
     data_config=data_config,
     model_config=model_config,
-    training_config=training_config
+    training_config=training_config,
 )
 
-# Run experiment
+# Run experiment (setup() creates loaders internally from data_config)
 system_config = SystemConfig(results_dir="my_results")
 experiment = Experiment(config, system_config)
-experiment.setup(train_loader, val_loader, test_loader)
+experiment.setup()
 result = experiment.run()
 ```
 
 ## 📈 Data Loading Strategies
 
+The **default CLI** uses the standard train/val/test split (strategy 1). Other strategies are used when the corresponding experiment types are enabled in `main.py`.
+
 ### 1. Standard Train/Val/Test Split
-- **Usage**: Basic experiments (1-2)
-- **Method**: `create_train_val_test_loaders()`
-- **Purpose**: Standard machine learning evaluation
+- **Usage**: Default baseline experiments (gender, age classification, age regression)
+- **Method**: `EEGDataLoader.create_train_val_test_loaders()` (from `data_processing`)
+- **Purpose**: Train on both task types (active + passive), evaluate on standard splits. Optional `--balance_method stratified` or `oversample` for gender/age.
 
 ### 2. Cross-Validation
-- **Usage**: Cross-validation experiments (3-4)
-- **Method**: `create_cross_validation_loaders()`
-- **Purpose**: Robust evaluation with 5-fold CV and stratification
+- **Method**: `create_cross_validation_loaders()` (when CV experiments are enabled)
+- **Purpose**: 5-fold CV with stratification
 
 ### 3. Cross-Task Evaluation
-- **Usage**: Cross-task experiments (5-8)
 - **Method**: `create_cross_task_loaders()`
-- **Purpose**: Test generalization across different task types (active ↔ passive)
+- **Purpose**: Train on one task type, evaluate on another (active ↔ passive)
 
 ### 4. Cross-Task Cross-Validation
-- **Usage**: Cross-task cross-validation experiments (9-12)
 - **Method**: `create_cross_task_cross_validation_loaders()`
-- **Purpose**: Most robust evaluation combining cross-task and cross-validation
+- **Purpose**: Cross-task and cross-validation combined
+
+### 5. Imbalanced data (gender/age classification)
+
+For imbalanced classes, the framework supports:
+
+- **Class weights (default when not using oversample)**: Inverse-frequency weights are computed from the training HDF5 data and applied in the loss. Use `class_weight_power` in config (e.g. 1.5) to upweight minorities more.
+- **Stratified batching** (`--balance_method stratified`): Each training batch has (roughly) equal counts per class; participant round-robin within class for diversity. Class weights can still be used.
+- **Oversampling** (`--balance_method oversample`): Sampling with replacement so each class is seen in proportion to inverse frequency; class weights are not set (balance via data).
+
+```bash
+# Stratified batches (recommended for strong per-batch balance)
+python main.py --mode 4s --balance_method stratified --results_dir CNN_4s_stratified
+
+# Oversampling (balance via sampling; no class weights in loss)
+python main.py --mode 4s --balance_method oversample --results_dir CNN_4s_oversample
+```
+
+When using stratified or oversample, the trainer does not abort on temporary model collapse (all predictions to one class); validation collapse is also allowed to recover. See [docs/Troubleshooting.md](docs/Troubleshooting.md) for background.
 
 ## 📋 Configuration
 
 ### Data Configuration
 ```python
 data_config = DataConfig(
-    pickle_dir="/path/to/data",
+    hdf5_dir="/path/to/processed_eeg_data_hdf5",  # Default CLI uses paths from CNN/utils.py DATA_PATHS
+    segment_length=800,  # 200=1s, 400=2s, 800=4s
     batch_size=128,
     num_workers=4,
     random_seed=42,
+    task_type="both",  # "active", "passive", or "both"
     use_cross_validation=True,
     n_folds=5,
-    cv_strategy="gender",  # "gender" or "age"
+    cv_strategy="stratified",  # "stratified", "kfold", "group"
     train_task_type="active",  # "active" or "passive" (for cross-task)
     val_test_task_type="passive"  # "active" or "passive" (for cross-task)
 )
@@ -197,7 +250,11 @@ training_config = TrainingConfig(
     patience=10,
     min_delta=1e-4,
     save_every=5,
-    target_key="gender"  # "gender" or "age"
+    target_key="gender",  # "gender", "age", "combined", "multi_output"
+    prediction_type="classification",  # "classification" or "regression"
+    balance_method="stratified",  # None | "stratified" | "oversample" (gender/age only)
+    # class_weight: computed from train data when balance_method != "oversample"; set explicitly to override
+    # class_weight_power: exponent for inverse-frequency weights (default 1.0; >1 upweights minority more)
 )
 ```
 
@@ -206,98 +263,59 @@ training_config = TrainingConfig(
 system_config = SystemConfig(
     results_dir='experiment_results',
     reports_dir='reports',
-    device='cuda',  # 'cuda' or 'cpu'
+    device='auto',  # 'auto', 'cuda', or 'cpu'
+    num_gpus=1,     # or None for auto-detect
     verbose=True
 )
 ```
 
 ## 📊 Output Structure
 
-```
-checkpoints/                         # Model checkpoints organized by model type
-├── EEGGenderCNN/                   # Gender classification model checkpoints
-│   ├── gender_cnn_baseline_best.pth
-│   ├── gender_cnn_baseline_epoch_10.pth
-│   └── gender_cnn_high_dropout_best.pth
-├── EEGAgeCNN/                      # Age classification model checkpoints
-│   ├── age_cnn_baseline_best.pth
-│   ├── age_cnn_baseline_epoch_10.pth
-│   └── age_cnn_high_dropout_best.pth
-└── ...
+Outputs are under `--results_dir` (default: `experiment_results`) and `--reports_dir` (default: `reports`):
 
-experiment_results/
-├── experiment_summary.json          # Overall experiment summary
-├── model_comparison.json           # Model comparison results
-├── gender_baseline_train_val_test/  # Basic experiment results
-│   ├── gender_baseline_train_val_test_result.json
-│   ├── gender_baseline_train_val_test_training_metrics.json
-│   └── (other experiment-specific files)
-├── gender_cv_gender_stratified/     # Cross-validation experiment (organized)
-│   ├── fold_1/                     # Individual fold results
-│   │   ├── gender_cv_gender_stratified_result.json
-│   │   ├── gender_cv_gender_stratified_training_metrics.json
-│   │   └── (other fold-specific files)
-│   ├── fold_2/
-│   ├── fold_3/
-│   ├── fold_4/
-│   ├── fold_5/
-│   └── gender_cv_gender_stratified_result.json  # Aggregated results
-├── gender_cross_task_cv_active_to_passive_gender_stratified/  # Cross-task CV
-│   ├── fold_1/
-│   ├── fold_2/
-│   ├── fold_3/
-│   ├── fold_4/
-│   ├── fold_5/
-│   └── gender_cross_task_cv_active_to_passive_gender_stratified_result.json
-└── ...
-
-reports/
-├── experiment_summary.txt          # Text summary
-├── experiment_report.html          # HTML report
-├── experiment_results.csv          # CSV data
-├── accuracy_comparison.png         # Visualizations
-├── training_time_comparison.png
-└── performance_by_target.png
 ```
+<results_dir>/
+├── checkpoints/                    # Best and last checkpoints per experiment
+│   ├── gender_baseline_4s_best.pth
+│   ├── gender_baseline_4s_last.pth
+│   ├── age_classification_4s_best.pth
+│   ├── age_regression_4s_best.pth
+│   └── ...
+├── gender_baseline_4s/             # Per-experiment results
+│   ├── gender_baseline_4s_result.json
+│   ├── gender_baseline_4s_training_metrics.json
+│   └── (evaluation outputs, confusion matrices, etc.)
+├── age_classification_4s/
+├── age_regression_4s/
+├── experiment_summary.json
+└── model_comparison.json
+
+<reports_dir>/
+├── experiment_summary.txt
+├── experiment_report.html
+├── experiment_results.csv
+└── (visualizations)
+```
+
+For `--eval_only`, the checkpoint path is `<results_dir>/checkpoints/<experiment_name>_best.pth`.
 
 ## 💾 Checkpoint Management
 
-The framework organizes checkpoints by model type for better management:
-
-### Checkpoint Structure
-```
-checkpoints/
-├── EEGGenderCNN/          # All gender classification model checkpoints
-│   ├── experiment1_best.pth
-│   ├── experiment1_epoch_10.pth
-│   └── experiment2_best.pth
-├── EEGAgeCNN/             # All age classification model checkpoints
-│   ├── experiment1_best.pth
-│   └── experiment2_best.pth
-└── ...
-```
+Checkpoints are stored under `<results_dir>/checkpoints/` with one file per experiment: `<experiment_name>_best.pth` and optionally `<experiment_name>_last.pth`. Example: `experiment_results/checkpoints/gender_baseline_4s_best.pth`.
 
 ### Loading Checkpoints
 ```python
-# Load a specific model checkpoint
-model_name = "EEGGenderCNN"
-experiment_name = "gender_cnn_baseline"
-checkpoint_path = f"checkpoints/{model_name}/{experiment_name}_best.pth"
+# Checkpoints are saved under results_dir/checkpoints/<experiment_name>_best.pth
+# Example: experiment_results/checkpoints/gender_baseline_4s_best.pth
+checkpoint_path = "experiment_results/checkpoints/gender_baseline_4s_best.pth"
 
-# Load checkpoint
-checkpoint = torch.load(checkpoint_path, map_location='cpu')
+checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 model.load_state_dict(checkpoint['model_state_dict'])
+# Optional: checkpoint also contains 'optimizer_state_dict', 'scheduler_state_dict', 'config', 'model_info'
 ```
 
-### Checkpoint Contents
-Each checkpoint contains:
-- `model_state_dict`: Model weights
-- `optimizer_state_dict`: Optimizer state
-- `scheduler_state_dict`: Learning rate scheduler state
-- `epoch`: Training epoch
-- `best_val_loss`: Best validation loss
-- `config`: Training configuration
-- `model_info`: Model architecture information
+### Checkpoint contents
+Each checkpoint contains: `model_state_dict`, `optimizer_state_dict`, `scheduler_state_dict`, `epoch`, `best_val_loss`, `config`, `model_info` (and possibly other keys depending on the trainer).
 
 ## 🔧 Extending the Framework
 
@@ -389,26 +407,20 @@ config = TrainingConfig(epochs=1, save_every=1)
 3. Include unit tests for new functionality
 4. Update documentation for new features
 
-## 📊 Comprehensive Experiment Results
+## 📊 Experiment results and optional experiment types
 
-When running `--mode comprehensive`, the framework executes all 12 experiment types and provides:
+The **default** run executes **3 experiments** per segment length (gender, age classification, age regression). Results are written under `--results_dir`: `experiment_summary.json`, `model_comparison.json`, per-experiment folders with metrics, checkpoints, and (when reports are generated) training plots and confusion matrices.
 
-### **Aggregated Results**
-- **Cross-validation experiments**: Results averaged across 5 folds
-- **Cross-task experiments**: Performance on different task types
-- **Comprehensive comparison**: All experiment types in one report
+**Additional experiment types** (e.g. cross-validation, cross-task, combined, multi-output) are implemented in `main.py` but are **commented out** by default. To enable them, uncomment the corresponding blocks in `create_all_experiments_for_segment_length()` in `CNN/main.py`. Those runs produce the same result structure with more experiment entries.
 
-### **Result Files**
-- `experiment_summary.json`: Complete results summary
-- `model_comparison.json`: Side-by-side model comparison
-- Individual experiment folders with detailed metrics
-- Training progress plots and confusion matrices
+## 📚 Documentation
 
-### **Performance Insights**
-- **Baseline Performance**: Standard train/val/test split results
-- **Robustness**: Cross-validation stability analysis
-- **Generalization**: Cross-task performance evaluation
-- **Comprehensive**: Combined cross-task and cross-validation analysis
+| Document | Description |
+|---------|-------------|
+| [README.md](README.md) | This file — framework overview, usage, config |
+| [docs/ResNet.md](docs/ResNet.md) | ResNet models: architecture, layer counts, usage, scripts |
+| [docs/Troubleshooting.md](docs/Troubleshooting.md) | Gender/class collapse, imbalanced data, class weights, `--balance_method` |
+| [docs/GPU_SETUP_CHANGES.md](docs/GPU_SETUP_CHANGES.md) | GPU detection, multi-GPU setup, gpu_utils, saliency device handling |
 
 ## 📄 License
 
