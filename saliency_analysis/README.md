@@ -16,6 +16,7 @@ This module provides tools for analyzing which EEG channels are most important f
 10. [Progress and GPU Support](#progress-and-gpu-support)
 11. [Troubleshooting](#troubleshooting)
 12. [References](#references)
+13. [Additional documentation](#additional-documentation)
 
 ## Overview
 
@@ -542,6 +543,10 @@ bash saliency_analysis/run_saliency_batch.sh
 
 1. Sundararajan, M., Taly, A., & Yan, Q. (2017). Axiomatic attribution for deep networks. ICML.
 2. Simonyan, K., Vedaldi, A., & Zisserman, A. (2013). Deep inside convolutional networks: Visualising image classification models and saliency maps. arXiv preprint arXiv:1312.6034.
+
+## Additional documentation
+
+- [SALIENCY_BATCH_ANALYSIS.md](SALIENCY_BATCH_ANALYSIS.md) — Batch structure from the data loader, error handling and fixes in `compute_batch_saliency`, regression/classification handling, and testing notes.
 
 ## License
 
