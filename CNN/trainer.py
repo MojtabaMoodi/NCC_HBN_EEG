@@ -10,6 +10,7 @@ import sys
 from typing import Dict, Any, Optional, Tuple, List
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -161,7 +162,14 @@ class EEGTrainer:
                 else:
                     self.criterion = nn.CrossEntropyLoss()
             else:
-                self.criterion = nn.CrossEntropyLoss()
+                # Binary/small classification (e.g. gender): optional class weights for imbalanced data
+                class_weight = getattr(config, 'class_weight', None)
+                if class_weight is not None:
+                    w = torch.tensor(class_weight, dtype=torch.float32, device=self.device)
+                    self.criterion = nn.CrossEntropyLoss(weight=w)
+                    print(f"✅ Using CrossEntropyLoss with class_weight={class_weight} (fix imbalanced / collapse)")
+                else:
+                    self.criterion = nn.CrossEntropyLoss()
         
         # Use fused Adam optimizer if available (faster on modern GPUs)
         # Weight decay from config (no hardcoding)
@@ -253,7 +261,20 @@ class EEGTrainer:
     def _get_underlying_model(self):
         """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
         return gpu_get_underlying_model(self.model)
-    
+
+    def _balanced_classification_loss(self, outputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """
+        Per-batch balanced loss: each class contributes equally to the gradient regardless of
+        how many samples of that class are in the batch. Prevents collapse when classes are skewed.
+        Uses global class_weight (inverse frequency) and per-batch normalization.
+        """
+        num_classes = self._get_underlying_model().num_classes
+        w = self.criterion.weight
+        loss_per_sample = F.cross_entropy(outputs, labels, weight=w, reduction="none")
+        batch_class_counts = torch.bincount(labels, minlength=num_classes).float().clamp(min=1)
+        per_sample_weight = 1.0 / (num_classes * batch_class_counts[labels])
+        return (per_sample_weight * loss_per_sample).sum() / per_sample_weight.sum()
+
     def train_epoch(self, train_loader: DataLoader) -> Tuple[float, float]:
         """Train for one epoch."""
         self.model.train()
@@ -264,10 +285,15 @@ class EEGTrainer:
         # This allows model to recover if collapse was temporary
         if hasattr(self, '_collapse_batch_count'):
             self._collapse_batch_count = 0
+        # When train loader was created with stratified or oversample, batches are balanced; don't abort on collapse
+        # Data loaders always have batch_sampler (PyTorch creates one); use explicit flag set by dataset layer
+        use_stratified_batches = getattr(train_loader, "_balanced_training", False)
+        self._use_balanced_training = use_stratified_batches  # used in validate_epoch to allow recovery from collapse
         
         batch_start_time = time.time()
         num_batches = 0
         first_batch_loaded = False
+        collapse_error = None  # Set and break instead of raising in-loop so DataLoader iterator can close
         for batch_idx, batch in enumerate(train_loader):
             num_batches = batch_idx + 1
             if not first_batch_loaded:
@@ -335,6 +361,13 @@ class EEGTrainer:
                             f"This indicates a data inconsistency issue. "
                             f"Check that the transform is correctly mapping participant IDs to class indices."
                         )
+                    
+                    # Diagnostic: log first-batch label distribution (verifies stratified batching)
+                    if batch_idx == 0:
+                        counts = labels.cpu().bincount(minlength=num_classes)
+                        dist_str = ", ".join(f"class {c}: {counts[c].item()}" for c in range(num_classes))
+                        print(f"  First batch label distribution: {dist_str}")
+                        sys.stdout.flush()
             
             self.optimizer.zero_grad()
             
@@ -377,7 +410,10 @@ class EEGTrainer:
                         # This is especially important with mixed precision and large number of classes
                         # Use config values (no hardcoding)
                         outputs_clamped = torch.clamp(outputs, min=self.config.output_clamp_min, max=self.config.output_clamp_max)
-                        loss = self.criterion(outputs_clamped, labels)
+                        if getattr(self.criterion, 'weight', None) is not None:
+                            loss = self._balanced_classification_loss(outputs_clamped, labels)
+                        else:
+                            loss = self.criterion(outputs_clamped, labels)
                 
                 # Calculate metrics outside autocast
                 # For ArcFace, outputs were computed and converted to float32 in the autocast block
@@ -404,44 +440,50 @@ class EEGTrainer:
                         correct += batch_correct
                         
                         # CRITICAL: Detect model collapse (all predictions to same class)
-                        # Track collapse across batches to avoid false positives from temporary collapses
                         unique_predictions = len(torch.unique(predicted))
                         if unique_predictions == 1:
-                            # Track collapse occurrences
                             if not hasattr(self, '_collapse_batch_count'):
                                 self._collapse_batch_count = 0
                             self._collapse_batch_count += 1
-                            
-                            # Only raise error if collapse persists across multiple batches
-                            # This prevents false positives from temporary collapses in early training
-                            # Increased from 5 to 10 to allow more recovery time, especially during warmup
-                            # For very large classification (3000+ classes), model needs more time to recover
-                            collapse_threshold = 10  # Allow up to 10 consecutive batches with collapse
-                            if self._collapse_batch_count >= collapse_threshold:
+                            num_classes = self._get_underlying_model().num_classes
+                            if use_stratified_batches:
+                                # With stratified batching, classes are balanced per batch; do not fail on collapse.
+                                # Participant counts per class are unequal, so early collapse can occur; allow recovery.
+                                if self._collapse_batch_count >= 50:
+                                    collapsed_class = predicted[0].item()
+                                    print(
+                                        f"⚠️  Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). "
+                                        "Balanced training (stratified/oversample): continuing (no abort)."
+                                    )
+                                    sys.stdout.flush()
+                                    self._collapse_batch_count = 0
+                            else:
+                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
+                                if self._collapse_batch_count >= collapse_threshold:
+                                    collapsed_class = predicted[0].item()
+                                    collapse_error = RuntimeError(
+                                        f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
+                                        f"with all samples predicted as class {collapsed_class}. "
+                                        f"This indicates a serious training issue. Possible causes: "
+                                        f"1) ArcFace weight initialization problem, "
+                                        f"2) Learning rate too high causing early collapse, "
+                                        f"3) Feature extraction producing identical features, "
+                                        f"4) Numerical instability, "
+                                        f"5) Batch correlation (samples from same participant in batch). "
+                                        f"Check model initialization, learning rate, feature diversity, and data shuffling."
+                                    )
+                                    break
+                            if self._collapse_batch_count == 2 and not use_stratified_batches:
                                 collapsed_class = predicted[0].item()
-                                raise RuntimeError(
-                                    f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
-                                    f"with all samples predicted as class {collapsed_class}. "
-                                    f"This indicates a serious training issue. Possible causes: "
-                                    f"1) ArcFace weight initialization problem, "
-                                    f"2) Learning rate too high causing early collapse, "
-                                    f"3) Feature extraction producing identical features, "
-                                    f"4) Numerical instability, "
-                                    f"5) Batch correlation (samples from same participant in batch). "
-                                    f"Check model initialization, learning rate, feature diversity, and data shuffling."
-                                )
-                            elif self._collapse_batch_count == 1:
-                                # First occurrence - log warning but continue
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse detected in batch (all predictions = class {collapsed_class}). "
-                                      f"Monitoring for persistence...")
+                                print(f"⚠️  WARNING: Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). Monitoring...")
                         else:
-                            # Reset collapse counter if predictions are diverse
+                            if hasattr(self, '_collapse_batch_count') and self._collapse_batch_count >= 2:
+                                print(f"✅ Model recovered: Predictions diverse again (unique: {unique_predictions})")
                             if hasattr(self, '_collapse_batch_count'):
-                                if self._collapse_batch_count > 0:
-                                    print(f"✅ Model recovered: Predictions are now diverse (unique: {unique_predictions})")
                                 self._collapse_batch_count = 0
                 
+                if collapse_error is not None:
+                    break
                 # Scale loss and backward pass for mixed precision
                 self.scaler.scale(loss).backward()
                 
@@ -494,7 +536,10 @@ class EEGTrainer:
                 else:
                     # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
                     if not self.use_arcface:  # ArcFace already computed loss
-                        loss = self.criterion(outputs, labels)
+                        if getattr(self.criterion, "weight", None) is not None:
+                            loss = self._balanced_classification_loss(outputs, labels)
+                        else:
+                            loss = self.criterion(outputs, labels)
                     
                     if self.is_regression:
                         # For regression: accumulate sum of absolute errors
@@ -515,37 +560,43 @@ class EEGTrainer:
                             if not hasattr(self, '_collapse_batch_count'):
                                 self._collapse_batch_count = 0
                             self._collapse_batch_count += 1
-                            
-                            # Only raise error if collapse persists across multiple batches
-                            # This prevents false positives from temporary collapses in early training
-                            # Increased from 5 to 10 to allow more recovery time, especially during warmup
-                            # For very large classification (3000+ classes), model needs more time to recover
-                            collapse_threshold = 10  # Allow up to 10 consecutive batches with collapse
-                            if self._collapse_batch_count >= collapse_threshold:
+                            num_classes = self._get_underlying_model().num_classes
+                            if use_stratified_batches:
+                                if self._collapse_batch_count >= 50:
+                                    collapsed_class = predicted[0].item()
+                                    print(
+                                        f"⚠️  Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). "
+                                        "Balanced training (stratified/oversample): continuing (no abort)."
+                                    )
+                                    sys.stdout.flush()
+                                    self._collapse_batch_count = 0
+                            else:
+                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
+                                if self._collapse_batch_count >= collapse_threshold:
+                                    collapsed_class = predicted[0].item()
+                                    collapse_error = RuntimeError(
+                                        f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
+                                        f"with all samples predicted as class {collapsed_class}. "
+                                        f"This indicates a serious training issue. Possible causes: "
+                                        f"1) ArcFace weight initialization problem, "
+                                        f"2) Learning rate too high causing early collapse, "
+                                        f"3) Feature extraction producing identical features, "
+                                        f"4) Numerical instability, "
+                                        f"5) Batch correlation (samples from same participant in batch). "
+                                        f"Check model initialization, learning rate, feature diversity, and data shuffling."
+                                    )
+                                    break
+                            if self._collapse_batch_count == 2 and not use_stratified_batches:
                                 collapsed_class = predicted[0].item()
-                                raise RuntimeError(
-                                    f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
-                                    f"with all samples predicted as class {collapsed_class}. "
-                                    f"This indicates a serious training issue. Possible causes: "
-                                    f"1) ArcFace weight initialization problem, "
-                                    f"2) Learning rate too high causing early collapse, "
-                                    f"3) Feature extraction producing identical features, "
-                                    f"4) Numerical instability, "
-                                    f"5) Batch correlation (samples from same participant in batch). "
-                                    f"Check model initialization, learning rate, feature diversity, and data shuffling."
-                                )
-                            elif self._collapse_batch_count == 1:
-                                # First occurrence - log warning but continue
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse detected in batch (all predictions = class {collapsed_class}). "
-                                      f"Monitoring for persistence...")
+                                print(f"⚠️  WARNING: Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). Monitoring...")
                         else:
-                            # Reset collapse counter if predictions are diverse
+                            if hasattr(self, '_collapse_batch_count') and self._collapse_batch_count >= 2:
+                                print(f"✅ Model recovered: Predictions diverse again (unique: {unique_predictions})")
                             if hasattr(self, '_collapse_batch_count'):
-                                if self._collapse_batch_count > 0:
-                                    print(f"✅ Model recovered: Predictions are now diverse (unique: {unique_predictions})")
                                 self._collapse_batch_count = 0
                 
+                if collapse_error is not None:
+                    break
                 loss.backward()
                 
                 # Gradient clipping for training stability
@@ -566,15 +617,15 @@ class EEGTrainer:
             total_loss += loss.item()
             total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
+        if collapse_error is not None:
+            raise collapse_error
         # Use num_batches instead of len(train_loader) since IterableDataset doesn't support __len__()
         avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        
-        # Calculate metric based on task type
-        # For regression: correct = sum(|outputs - labels|) across all batches, so correct/total = overall MAE
-        # For classification: correct = sum(correct_predictions), so correct/total = accuracy
+        # Metric is segment-level: one prediction per window. Regression = MAE; classification = mean accuracy over segments.
+        # For participant-level (e.g. majority vote over windows), use evaluator with aggregate_by_participant.
         metric = correct / total if total > 0 else 0.0
         return avg_loss, metric
-    
+
     def validate_epoch(self, val_loader: DataLoader) -> Tuple[float, float]:
         """Validate for one epoch."""
         self.model.eval()
@@ -586,7 +637,7 @@ class EEGTrainer:
         # This allows model to recover if collapse was temporary
         if hasattr(self, '_val_collapse_batch_count'):
             self._val_collapse_batch_count = 0
-        
+        val_collapse_error = None  # Break then raise so DataLoader iterator can close
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_loader):
                 num_batches = batch_idx + 1
@@ -768,32 +819,40 @@ class EEGTrainer:
                                 self._val_collapse_batch_count = 0
                             self._val_collapse_batch_count += 1
                             
-                            # Only raise error if collapse persists across multiple batches
-                            # This prevents false positives from temporary collapses
-                            # For very large classification (3000+ classes), model needs more time to recover
-                            collapse_threshold = 10  # Allow up to 10 consecutive batches with collapse
-                            if self._val_collapse_batch_count >= collapse_threshold:
+                            # When using balanced training (stratified/oversample), allow recovery: warn and reset, do not abort
+                            use_balanced = getattr(self, '_use_balanced_training', False)
+                            num_classes = self._get_underlying_model().num_classes
+                            if use_balanced:
+                                if self._val_collapse_batch_count >= 50:
+                                    collapsed_class = predicted[0].item()
+                                    print(
+                                        f"⚠️  Model collapse in validation ({self._val_collapse_batch_count} consecutive batches, all class {collapsed_class}). "
+                                        "Balanced training: continuing (no abort)."
+                                    )
+                                    sys.stdout.flush()
+                                    self._val_collapse_batch_count = 0
+                            else:
+                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
+                                if self._val_collapse_batch_count >= collapse_threshold:
+                                    collapsed_class = predicted[0].item()
+                                    val_collapse_error = RuntimeError(
+                                        f"Model collapse detected in validation: {self._val_collapse_batch_count} consecutive batches "
+                                        f"with all samples predicted as class {collapsed_class}. "
+                                        f"This indicates a serious training issue. Possible causes: "
+                                        f"1) ArcFace weight initialization problem, "
+                                        f"2) Learning rate too high causing early collapse, "
+                                        f"3) Feature extraction producing identical features, "
+                                        f"4) Numerical instability. "
+                                        f"Check model initialization, learning rate, and feature diversity."
+                                    )
+                                    break
+                            if self._val_collapse_batch_count == 2:
                                 collapsed_class = predicted[0].item()
-                                raise RuntimeError(
-                                    f"Model collapse detected in validation: {self._val_collapse_batch_count} consecutive batches "
-                                    f"with all samples predicted as class {collapsed_class}. "
-                                    f"This indicates a serious training issue. Possible causes: "
-                                    f"1) ArcFace weight initialization problem, "
-                                    f"2) Learning rate too high causing early collapse, "
-                                    f"3) Feature extraction producing identical features, "
-                                    f"4) Numerical instability. "
-                                    f"Check model initialization, learning rate, and feature diversity."
-                                )
-                            elif self._val_collapse_batch_count == 1:
-                                # First occurrence - log warning but continue
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse detected in validation batch (all predictions = class {collapsed_class}). "
-                                      f"Monitoring for persistence...")
+                                print(f"⚠️  WARNING: Model collapse in validation ({self._val_collapse_batch_count} consecutive batches, all class {collapsed_class}). Monitoring...")
                         else:
-                            # Reset collapse counter if predictions are diverse
+                            if hasattr(self, '_val_collapse_batch_count') and self._val_collapse_batch_count >= 2:
+                                print(f"✅ Model recovered in validation: Predictions diverse again (unique: {unique_predictions})")
                             if hasattr(self, '_val_collapse_batch_count'):
-                                if self._val_collapse_batch_count > 0:
-                                    print(f"✅ Model recovered in validation: Predictions are now diverse (unique: {unique_predictions})")
                                 self._val_collapse_batch_count = 0
                         
                         # Diagnostic logging for debugging validation accuracy issue
@@ -837,6 +896,8 @@ class EEGTrainer:
                             if batch_correct == 0:
                                 print(f"   ⚠️  WARNING: Zero correct predictions in first validation batch!")
                 
+                if val_collapse_error is not None:
+                    break
                 # Only add to total_loss if loss is finite (double-check)
                 if np.isfinite(loss_value):
                     total_loss += loss_value
@@ -845,12 +906,11 @@ class EEGTrainer:
                     raise ValueError(f"Attempted to add non-finite loss to total: {loss_value}")
                 total += labels.size(0) if not isinstance(labels, dict) else labels['gender'].size(0)
         
+        if val_collapse_error is not None:
+            raise val_collapse_error
         # Use num_batches instead of len(val_loader) since IterableDataset doesn't support __len__()
         avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        
-        # Calculate metric based on task type
-        # For regression: correct = sum(|outputs - labels|) across all batches, so correct/total = overall MAE
-        # For classification: correct = sum(correct_predictions), so correct/total = accuracy
+        # Metric is segment-level (regression = MAE; classification = mean accuracy over segments).
         metric = correct / total if total > 0 else 0.0
         return avg_loss, metric
     
@@ -1023,8 +1083,11 @@ class EEGTrainer:
         
         start_time = time.time()
         
-        # Log that we're about to start loading first batch
-        print(f"⏳ Loading first batch (batch_size={train_loader.batch_size}, num_workers={train_loader.num_workers})...")
+        # Log that we're about to start loading first batch (batch_size is None when using batch_sampler)
+        batch_size_desc = getattr(train_loader, "batch_size", None)
+        if batch_size_desc is None and getattr(train_loader, "batch_sampler", None) is not None:
+            batch_size_desc = f"stratified (see data loader)"
+        print(f"⏳ Loading first batch (batch_size={batch_size_desc}, num_workers={train_loader.num_workers})...")
         # Note: IterableDataset doesn't support __len__(), so we can't print dataset size
         sys.stdout.flush()
         
