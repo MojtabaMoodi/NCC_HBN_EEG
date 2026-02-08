@@ -26,6 +26,19 @@ from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
 from CNN.utils import safe_json_dump, convert_numpy_types
 from gpu_utils import get_underlying_model as gpu_get_underlying_model, get_device
 
+try:
+    from data_processing.aggregation import (
+        aggregate_predictions_by_group,
+        AGGREGATION_MAJORITY_VOTE,
+        AGGREGATION_MEAN_PROB,
+        AGGREGATION_MEDIAN,
+    )
+except ImportError:
+    aggregate_predictions_by_group = None
+    AGGREGATION_MAJORITY_VOTE = None
+    AGGREGATION_MEAN_PROB = None
+    AGGREGATION_MEDIAN = None
+
 class EvaluationResults:
     """Container for evaluation results with comprehensive metrics."""
     
@@ -49,7 +62,11 @@ class EvaluationResults:
         # Separate metrics for each head
         self.gender_metrics = None
         self.age_metrics = None
-    
+        # Segment-level metrics when participant-level aggregation is used (for side-by-side comparison)
+        self.segment_metrics = None
+        # Participant-level metrics using mean probability (mean(probs) then argmax) for fair comparison with majority vote
+        self.participant_mean_prob_metrics = None
+
     def add_metrics(self, metrics: Dict[str, Any]):
         """Add computed metrics."""
         self.metrics.update(metrics)
@@ -68,7 +85,7 @@ class EvaluationResults:
         num_samples = len(self.predictions) if len(self.predictions) > 0 else (
             len(self.gender_predictions) if self.gender_predictions is not None else 0
         )
-        return convert_numpy_types({
+        out = convert_numpy_types({
             'model_name': self.model_name,
             'target_type': self.target_type,
             'metrics': self.metrics,
@@ -76,6 +93,11 @@ class EvaluationResults:
             'num_samples': num_samples,
             'class_names': self.class_names
         })
+        if self.segment_metrics is not None:
+            out['segment_metrics'] = self.segment_metrics
+        if self.participant_mean_prob_metrics is not None:
+            out['participant_mean_prob_metrics'] = self.participant_mean_prob_metrics
+        return out
 
 class EEGEvaluator:
     """
@@ -83,13 +105,14 @@ class EEGEvaluator:
     Provides detailed metrics, confusion matrices, and classification reports.
     """
     
-    def __init__(self, model: BaseEEGCNN, target_type: str, 
+    def __init__(self, model: BaseEEGCNN, target_type: str,
                  class_names: Optional[List[str]] = None, prediction_type: str = 'classification',
                  age_min: Optional[float] = None, age_max: Optional[float] = None,
-                 device_preference: str = 'auto'):
+                 device_preference: str = 'auto',
+                 aggregate_by_participant: Optional[str] = None):
         """
         Initialize evaluator.
-        
+
         Args:
             model: Model to evaluate (may be wrapped with DataParallel)
             target_type: Type of target ('gender', 'age', 'combined', 'multi_output')
@@ -98,7 +121,11 @@ class EEGEvaluator:
             age_min: Minimum age for regression tasks (required for age regression)
             age_max: Maximum age for regression tasks (required for age regression)
             device_preference: Device preference ('auto', 'cuda', 'cpu')
-        
+            aggregate_by_participant: If 'majority_vote', aggregate segment-level
+                predictions to participant level: classification = majority vote,
+                regression = median. Requires batch to contain 'participant_ids'.
+                None = segment-level evaluation (default).
+
         Raises:
             ValueError: If age_min/age_max are missing for regression tasks
             RuntimeError: If CUDA is requested but not available
@@ -107,6 +134,7 @@ class EEGEvaluator:
         self.target_type = target_type
         self.prediction_type = prediction_type  # 'classification' or 'regression'
         self.class_names = class_names or self._get_default_class_names()
+        self.aggregate_by_participant = aggregate_by_participant
         
         # Setup device (explicit, no fallbacks)
         self.device = get_device(device_preference)
@@ -162,9 +190,9 @@ class EEGEvaluator:
             # Use the existing load_checkpoint function from trainer.py
             checkpoint = trainer_load_checkpoint(checkpoint_path, self.model, self.device)
             self.model.eval()  # Set to evaluation mode
-            print(f"✅ Loaded checkpoint from {checkpoint_path}")
+            print(f"? Loaded checkpoint from {checkpoint_path}")
         else:
-            print(f"⚠️  Checkpoint not found: {checkpoint_path}")
+            print(f"??  Checkpoint not found: {checkpoint_path}")
     
     def evaluate(self, test_loader: DataLoader) -> EvaluationResults:
         """
@@ -180,14 +208,16 @@ class EEGEvaluator:
         start_time = time.time()
         results = EvaluationResults(self._get_underlying_model().__class__.__name__, self.target_type)
         results.class_names = self.class_names
-        
+
         all_predictions = []
         all_true_labels = []
         all_probabilities = []
-        
+        all_participant_ids = []
+
         with torch.no_grad():
             for batch in test_loader:
                 inputs = batch['eeg_data'].to(self.device)
+                participant_ids_batch = batch.get('participant_ids', [])
                 
                 # Handle multi_output case where we have separate gender and age keys
                 if self.target_type == 'multi_output' and 'gender' in batch and 'age' in batch:
@@ -268,10 +298,11 @@ class EEGEvaluator:
                     results.age_predictions.extend(age_predicted.cpu().numpy())
                     results.age_true_labels.extend(age_labels.cpu().numpy())
                     results.age_probabilities.extend(age_probabilities.cpu().numpy())
-                    
+                    all_participant_ids.extend(participant_ids_batch)
+
                     # For multi-output models, we don't populate all_predictions
                     # Use gender_predictions and age_predictions separately instead
-                    
+
                 else:
                     # Single-output model (e.g., EEGCNN, CombinedCNN, EEGAgeRegressionCNN)
                     if self.prediction_type == 'regression':
@@ -298,12 +329,145 @@ class EEGEvaluator:
                         all_predictions.extend(predicted.cpu().numpy())
                         all_true_labels.extend(labels.cpu().numpy())
                         all_probabilities.extend(probabilities.cpu().numpy())
-        
+                all_participant_ids.extend(participant_ids_batch)
+
+        # Optionally aggregate segment-level predictions to participant level.
+        # Each segment/window (e.g. 4s) yields one prediction; we aggregate over all such predictions per participant.
+        # Two participant-level methods (one prediction per participant):
+        # - Mean probability: mean(softmax probs over all segments for that participant), then argmax.
+        # - Majority vote: mode of predicted class over all segments for that participant (recommended for classification).
+        do_agg = (
+            self.aggregate_by_participant == 'majority_vote'
+            and aggregate_predictions_by_group is not None
+            and all_participant_ids
+        )
+
+        # When aggregating, compute segment-level metrics first for side-by-side comparison
+        if do_agg:
+            if self.target_type == 'multi_output' and results.gender_predictions is not None:
+                seg_gender = self._compute_metrics(
+                    results.gender_predictions,
+                    results.gender_true_labels,
+                    results.gender_probabilities,
+                    class_names=['Female', 'Male'],
+                )
+                seg_age = self._compute_metrics(
+                    results.age_predictions,
+                    results.age_true_labels,
+                    results.age_probabilities,
+                    class_names=['<8.5 years', '8.5-12.5 years', '>12.5 years'],
+                )
+                results.segment_metrics = {
+                    'gender_head': seg_gender,
+                    'age_head': seg_age,
+                    'accuracy': (seg_gender['accuracy'] + seg_age['accuracy']) / 2.0,
+                }
+                # Participant-level mean probability (same denominator as majority vote, for fair comparison)
+                if aggregate_predictions_by_group is not None and AGGREGATION_MEAN_PROB is not None:
+                    n_seg = len(results.gender_predictions)
+                    if len(all_participant_ids) == n_seg:
+                        pid_list = all_participant_ids
+                        _, g_true_mp, g_pred_mp, g_prob_mp = aggregate_predictions_by_group(
+                            np.array(results.gender_predictions),
+                            np.array(results.gender_true_labels),
+                            pid_list,
+                            prediction_type='classification',
+                            aggregation=AGGREGATION_MEAN_PROB,
+                            probabilities=np.array(results.gender_probabilities),
+                        )
+                        _, a_true_mp, a_pred_mp, a_prob_mp = aggregate_predictions_by_group(
+                            np.array(results.age_predictions),
+                            np.array(results.age_true_labels),
+                            pid_list,
+                            prediction_type='classification',
+                            aggregation=AGGREGATION_MEAN_PROB,
+                            probabilities=np.array(results.age_probabilities),
+                        )
+                        g_prob_list = g_prob_mp.tolist() if g_prob_mp is not None else []
+                        a_prob_list = a_prob_mp.tolist() if a_prob_mp is not None else []
+                        g_mp = self._compute_metrics(
+                            g_pred_mp.tolist(), g_true_mp.tolist(),
+                            g_prob_list, class_names=['Female', 'Male'],
+                        )
+                        a_mp = self._compute_metrics(
+                            a_pred_mp.tolist(), a_true_mp.tolist(),
+                            a_prob_list, class_names=['<8.5 years', '8.5-12.5 years', '>12.5 years'],
+                        )
+                        results.participant_mean_prob_metrics = {
+                            'gender_head': g_mp,
+                            'age_head': a_mp,
+                            'accuracy': (g_mp['accuracy'] + a_mp['accuracy']) / 2.0,
+                        }
+            elif len(all_predictions) > 0:
+                if self.prediction_type == 'regression':
+                    results.segment_metrics = self._compute_regression_metrics(
+                        all_predictions, all_true_labels
+                    )
+                else:
+                    results.segment_metrics = self._compute_metrics(
+                        all_predictions, all_true_labels, all_probabilities or []
+                    )
+                    # Participant-level mean probability (fair comparison with majority vote)
+                    if aggregate_predictions_by_group is not None and AGGREGATION_MEAN_PROB is not None and all_probabilities:
+                        _, mp_true, mp_pred, mp_prob = aggregate_predictions_by_group(
+                            np.array(all_predictions),
+                            np.array(all_true_labels),
+                            all_participant_ids,
+                            prediction_type='classification',
+                            aggregation=AGGREGATION_MEAN_PROB,
+                            probabilities=np.array(all_probabilities),
+                        )
+                        mp_prob_list = mp_prob.tolist() if mp_prob is not None else []
+                        results.participant_mean_prob_metrics = self._compute_metrics(
+                            mp_pred.tolist(), mp_true.tolist(), mp_prob_list, class_names=self.class_names
+                        )
+
+        if do_agg and self.target_type == 'multi_output' and results.gender_predictions is not None:
+            n_seg = len(results.gender_predictions)
+            if len(all_participant_ids) == n_seg:
+                pid_list = all_participant_ids
+                _, g_true, g_pred, g_prob = aggregate_predictions_by_group(
+                    np.array(results.gender_predictions),
+                    np.array(results.gender_true_labels),
+                    pid_list,
+                    prediction_type='classification',
+                    aggregation=AGGREGATION_MAJORITY_VOTE,
+                    probabilities=np.array(results.gender_probabilities),
+                )
+                _, a_true, a_pred, a_prob = aggregate_predictions_by_group(
+                    np.array(results.age_predictions),
+                    np.array(results.age_true_labels),
+                    pid_list,
+                    prediction_type='classification',
+                    aggregation=AGGREGATION_MAJORITY_VOTE,
+                    probabilities=np.array(results.age_probabilities),
+                )
+                results.gender_predictions = g_pred
+                results.gender_true_labels = g_true
+                results.gender_probabilities = g_prob.tolist() if g_prob is not None else []
+                results.age_predictions = a_pred
+                results.age_true_labels = a_true
+                results.age_probabilities = a_prob.tolist() if a_prob is not None else []
+        elif do_agg and len(all_predictions) > 0 and len(all_participant_ids) == len(all_predictions):
+            # Single-output
+            _, agg_true, agg_pred, agg_prob = aggregate_predictions_by_group(
+                np.array(all_predictions),
+                np.array(all_true_labels),
+                all_participant_ids,
+                prediction_type=self.prediction_type,
+                aggregation=AGGREGATION_MAJORITY_VOTE,
+                regression_aggregation=AGGREGATION_MEDIAN,
+                probabilities=np.array(all_probabilities) if all_probabilities and self.prediction_type == 'classification' else None,
+            )
+            all_predictions = agg_pred.tolist()
+            all_true_labels = agg_true.tolist()
+            all_probabilities = agg_prob.tolist() if agg_prob is not None else []
+
         # Add predictions to results (only for single-output models)
         # For multi-output models, predictions are stored separately in gender_predictions and age_predictions
         if len(all_predictions) > 0:
-            results.add_predictions(all_predictions, all_true_labels, all_probabilities)
-        
+            results.add_predictions(all_predictions, all_true_labels, all_probabilities or [])
+
         # For multi-output models, compute metrics separately for each head
         if self.target_type == 'multi_output' and results.gender_predictions is not None:
             # Convert lists to arrays
@@ -480,7 +644,7 @@ class EEGEvaluator:
             if 'mae' in results.metrics:
                 print(f"  MAE: {results.metrics['mae']:.4f} years")
                 print(f"  RMSE: {results.metrics['rmse']:.4f} years")
-                print(f"  R²: {results.metrics['r2']:.4f}")
+                print(f"  R�: {results.metrics['r2']:.4f}")
             else:
                 acc = results.metrics.get('accuracy')
                 acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
@@ -501,7 +665,7 @@ class EEGEvaluator:
                 if 'mae' in results.metrics:
                     print(f"  {task_type.upper()}: MAE = {results.metrics['mae']:.4f} years, "
                           f"RMSE = {results.metrics['rmse']:.4f} years, "
-                          f"R² = {results.metrics['r2']:.4f}")
+                          f"R� = {results.metrics['r2']:.4f}")
                 else:
                     acc = results.metrics.get('accuracy')
                     f1 = results.metrics.get('f1_weighted')
@@ -593,9 +757,9 @@ class EEGEvaluator:
         
         return {
             'mae': float(mae),  # Mean Absolute Error in years
-            'mse': float(mse),  # Mean Squared Error in years²
+            'mse': float(mse),  # Mean Squared Error in years�
             'rmse': float(rmse),  # Root Mean Squared Error in years
-            'r2': float(r2),  # R² score
+            'r2': float(r2),  # R� score
             'mae_normalized': float(mae_norm),  # MAE on normalized [0, 1] values
             'mse_normalized': float(mse_norm),  # MSE on normalized [0, 1] values
             'rmse_normalized': float(rmse_norm),  # RMSE on normalized [0, 1] values
