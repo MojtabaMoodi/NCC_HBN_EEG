@@ -6,6 +6,7 @@ Represents a single experiment with its complete lifecycle.
 import time
 import os
 import sys
+import gc
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +22,7 @@ from CNN.evaluator import EEGEvaluator, EvaluationResults
 from CNN.config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
 from CNN.utils import safe_json_dump, convert_numpy_types
 
-from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
+from data_processing.eeg_dataset import EEGDataset, EEGDataLoader, compute_class_weights_from_train_hdf5
 from data_processing.target_transforms import (
     gender_classification_transform, 
     age_classification_transform, 
@@ -44,14 +45,16 @@ class ExperimentResult:
     training_time: float
     evaluation_time: float
     description: Optional[str] = None  # Human-readable description of the experiment
-    metrics: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None  # Participant-level (majority vote) when aggregation used
+    segment_metrics: Optional[Dict[str, Any]] = None  # Segment-level (per-window accuracy)
+    participant_mean_prob_metrics: Optional[Dict[str, Any]] = None  # Participant-level (mean prob then argmax) for fair comparison
     training_metrics: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     model_checkpoint_path: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for serialization."""
-        return {
+        d = {
             'experiment_name': self.experiment_name,
             'model_type': self.model_type,
             'target_type': self.target_type,
@@ -65,6 +68,11 @@ class ExperimentResult:
             'error': self.error,
             'model_checkpoint_path': self.model_checkpoint_path
         }
+        if self.segment_metrics is not None:
+            d['segment_metrics'] = self.segment_metrics
+        if self.participant_mean_prob_metrics is not None:
+            d['participant_mean_prob_metrics'] = self.participant_mean_prob_metrics
+        return d
 
 class ExperimentLogger:
     """Handles logging and reporting for experiments."""
@@ -91,11 +99,14 @@ class ExperimentLogger:
         print(f"Channels: {config.model_config.num_channels}")
         print(f"{'='*80}")
     
-    def log_experiment_progress(self, epoch: int, total_epochs: int, train_loss: float, 
-                              val_loss: float, train_acc: float, val_acc: float, 
-                              lr: float = None, epoch_time: float = None):
-        """Log training progress for the experiment and store metrics."""
-        # Store metrics
+    def log_experiment_progress(self, epoch: int, total_epochs: int, train_loss: float,
+                              val_loss: float, train_acc: float, val_acc: float,
+                              lr: float = None, epoch_time: float = None,
+                              is_regression: bool = False,
+                              age_min: Optional[float] = None,
+                              age_max: Optional[float] = None):
+        """Log training progress. For regression with age_min/age_max, train_acc/val_acc are normalized MAE; display MAE in years."""
+        # Store metrics (key remains 'train_acc' for compatibility; value is accuracy or normalized MAE)
         self.training_metrics['train_loss'].append(train_loss)
         self.training_metrics['val_loss'].append(val_loss)
         self.training_metrics['train_acc'].append(train_acc)
@@ -104,17 +115,24 @@ class ExperimentLogger:
             self.training_metrics['learning_rates'].append(lr)
         if epoch_time is not None:
             self.training_metrics['epoch_times'].append(epoch_time)
-        
-        # Log progress
+
+        if is_regression and age_min is not None and age_max is not None:
+            age_range = age_max - age_min
+            train_mae_years = train_acc * age_range
+            val_mae_years = val_acc * age_range
+            metric_str = f"Train MAE: {train_mae_years:.2f}y | Val MAE: {val_mae_years:.2f}y"
+        else:
+            metric_str = f"Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f}"
+
         if lr is not None and epoch_time is not None:
             print(f"  → Epoch {epoch+1:3d}/{total_epochs} | "
                   f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                  f"Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f} | "
+                  f"{metric_str} | "
                   f"LR: {lr:.6f} | Time: {epoch_time:.2f}s")
         else:
             print(f"  → Epoch {epoch+1:3d}/{total_epochs} | "
                   f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                  f"Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f}")
+                  f"{metric_str}")
     
     def get_training_metrics(self) -> Dict[str, Any]:
         """Get the stored training metrics."""
@@ -130,9 +148,9 @@ class ExperimentLogger:
         safe_json_dump(convert_numpy_types(self.training_metrics), metrics_file)
         print(f"   Training metrics saved to: {metrics_file}")
     
-    def log_evaluation_start(self, model_name: str, target_type: str):
-        """Log the start of evaluation."""
-        print(f"Evaluating {model_name} on {target_type} classification...")
+    def log_evaluation_start(self, model_name: str, target_type: str, task_label: str = "classification"):
+        """Log the start of evaluation. task_label is 'classification' or 'regression'."""
+        print(f"Evaluating {model_name} on {target_type} {task_label}...")
     
     def log_evaluation_success(self, results):
         """Log successful evaluation completion."""
@@ -219,8 +237,38 @@ class ExperimentLogger:
         print(f"   Total time: {result.total_time:.2f}s")
         print(f"   Training time: {result.training_time:.2f}s")
         print(f"   Evaluation time: {result.evaluation_time:.2f}s")
-        if result.metrics:
-            # Check if this is a regression task (has 'mae' instead of 'accuracy')
+        if result.segment_metrics is not None and result.metrics:
+            # Side-by-side: segment-level vs participant-level (mean prob) vs participant-level (majority vote)
+            def _fmt_acc(m):
+                return f"{m.get('accuracy', 0):.4f}" if isinstance(m.get('accuracy'), (int, float)) else "N/A"
+            def _fmt_mae(m):
+                return f"{m.get('mae', 0):.4f} years" if isinstance(m.get('mae'), (int, float)) else "N/A"
+            seg = result.segment_metrics
+            mean_prob = getattr(result, 'participant_mean_prob_metrics', None) or {}
+            part = result.metrics
+            if 'mae' in part or (seg and 'mae' in seg):
+                rmse_s = f"{seg.get('rmse', 0):.4f}" if isinstance(seg.get('rmse'), (int, float)) else "N/A"
+                r2_s = f"{seg.get('r2', 0):.4f}" if isinstance(seg.get('r2'), (int, float)) else "N/A"
+                rmse_p = f"{part.get('rmse', 0):.4f}" if isinstance(part.get('rmse'), (int, float)) else "N/A"
+                r2_p = f"{part.get('r2', 0):.4f}" if isinstance(part.get('r2'), (int, float)) else "N/A"
+                print(f"   Segment-level (per-window):  MAE: {_fmt_mae(seg)}, RMSE: {rmse_s}, R²: {r2_s}")
+                print(f"   Participant (mean prob):     MAE: {_fmt_mae(mean_prob)}, RMSE: ..., R²: ...")
+                print(f"   Participant (majority vote): MAE: {_fmt_mae(part)}, RMSE: {rmse_p}, R²: {r2_p}")
+            elif 'gender_head' in part and 'age_head' in part:
+                g_seg = seg.get('gender_head', {})
+                a_seg = seg.get('age_head', {})
+                g_mp = mean_prob.get('gender_head', {})
+                a_mp = mean_prob.get('age_head', {})
+                g_part = part.get('gender_head', part)
+                a_part = part.get('age_head', part)
+                print(f"   Segment-level (per-window):  Gender: {_fmt_acc(g_seg)}, Age: {_fmt_acc(a_seg)}, Avg: {_fmt_acc(seg)}")
+                print(f"   Participant (mean prob):     Gender: {_fmt_acc(g_mp)}, Age: {_fmt_acc(a_mp)}, Avg: {_fmt_acc(mean_prob)}")
+                print(f"   Participant (majority vote): Gender: {_fmt_acc(g_part)}, Age: {_fmt_acc(a_part)}, Avg: {_fmt_acc(part)}")
+            else:
+                print(f"   Segment-level (per-window):  Accuracy: {_fmt_acc(seg)}")
+                print(f"   Participant (mean prob):     Accuracy: {_fmt_acc(mean_prob)}")
+                print(f"   Participant (majority vote): Accuracy: {_fmt_acc(part)}")
+        elif result.metrics:
             if 'mae' in result.metrics:
                 mae = result.metrics.get('mae')
                 rmse = result.metrics.get('rmse')
@@ -278,7 +326,22 @@ class Experiment:
         self.evaluator = None
         self.result = None
         self.data_loaders = None
+        self.train_loader = None
+        self.val_loader = None
+        self.test_loader = None
         self.is_cross_validation = False
+
+    def cleanup(self):
+        """
+        Release data loaders and trigger worker shutdown so the next experiment
+        does not see 'terminate called without an active exception' or worker
+        killed (e.g. from leftover multiprocessing workers).
+        """
+        self.train_loader = None
+        self.val_loader = None
+        self.test_loader = None
+        self.data_loaders = None
+        gc.collect()
     
     def setup(self):
         """
@@ -288,6 +351,33 @@ class Experiment:
         
         # Create data loaders using the DataConfig
         self._create_data_loaders()
+        
+        # For classification (gender/age), handle imbalanced data: set num_classes and optionally class weights.
+        data_config = self.config.data_config
+        training_config = self.config.training_config
+        prediction_type = getattr(training_config, 'prediction_type', 'classification')
+        balance_method = getattr(training_config, 'balance_method', None)
+        target_type = self.config.target_type
+        if target_type in ('gender', 'age') and prediction_type == 'classification':
+            num_classes = 2 if target_type == 'gender' else 3
+            self.config.model_config.num_classes = num_classes
+            # When not using oversample and no explicit class_weight, compute from train data (inverse frequency).
+            if (
+                balance_method != 'oversample'
+                and getattr(training_config, 'class_weight', None) is None
+            ):
+                segment_length_str = f"{data_config.segment_length // 200}s"
+                weight_power = getattr(training_config, 'class_weight_power', None)
+                weight_power = weight_power if weight_power is not None else 1.0
+                weights = compute_class_weights_from_train_hdf5(
+                    data_config.hdf5_dir,
+                    segment_length_str,
+                    target_type,
+                    task_type=data_config.task_type,
+                    weight_power=weight_power,
+                )
+                training_config.class_weight = weights
+                self.config.model_config.num_classes = len(weights)
         
         # Create model using ModelFactory
         model_kwargs = self.config.model_config.to_dict()
@@ -332,13 +422,17 @@ class Experiment:
         # Get device preference from system config
         device_preference = self.system_config.device if self.system_config else 'auto'
         
+        aggregate_by_participant = getattr(
+            self.config.training_config, 'aggregate_by_participant', None
+        )
         self.evaluator = EEGEvaluator(
-            self.model, 
-            self.config.target_type, 
+            self.model,
+            self.config.target_type,
             prediction_type=prediction_type,
-            age_min=age_min, 
+            age_min=age_min,
             age_max=age_max,
-            device_preference=device_preference
+            device_preference=device_preference,
+            aggregate_by_participant=aggregate_by_participant,
         )
         
         print(f"✅ Experiment setup complete")
@@ -475,14 +569,18 @@ class Experiment:
         else:
             # Standard train/val/test split experiments
             # Train on both task types (task_type="both")
-            print(f"Creating standard loaders for {target_type} classification (train on both task types)")
+            prediction_type = getattr(self.config.training_config, "prediction_type", "classification")
+            task_label = "classification" if prediction_type == "classification" else "regression"
+            print(
+                f"Creating standard loaders for {target_type} {task_label} (train on both task types)"
+            )
             segment_length_str = f"{data_config.segment_length // 200}s"  # Convert 200->1s, 800->4s
             self.data_loaders = EEGDataLoader.create_train_val_test_loaders(
                 hdf5_dir=data_config.hdf5_dir,
                 segment_length=segment_length_str,
                 batch_size=data_config.batch_size,
                 num_workers=data_config.num_workers,
-                task_type=data_config.task_type,  # Should be "both"
+                task_type=data_config.task_type,
                 target_type=target_type,
                 transform=None,
                 gender_transform=gender_transform,
@@ -490,7 +588,10 @@ class Experiment:
                 combined_transform=combined_transform,
                 user_identification_transform=user_identification_transform,
                 shuffle_train=True,
-                random_seed=data_config.random_seed
+                random_seed=data_config.random_seed,
+                use_stratified_train_batches=(target_type in ("gender", "age")),
+                train_balance_method=getattr(self.config.training_config, "balance_method", None),
+                prediction_type=getattr(self.config.training_config, "prediction_type", "classification"),
             )
             self.is_cross_validation = False
             # Store segment_length for later use in task-type-specific evaluation
@@ -522,7 +623,7 @@ class Experiment:
             
         except Exception as e:
             total_time = time.time() - experiment_start
-            
+            self.cleanup()  # Release loaders immediately so workers can shut down (avoids DataLoader worker killed)
             # Create failed result
             self.result = ExperimentResult(
                 experiment_name=self.config.name,
@@ -542,7 +643,40 @@ class Experiment:
         self.logger.save_experiment_result(self.result)
         
         return self.result
-    
+
+    def run_eval_only(self) -> ExperimentResult:
+        """
+        Load the saved checkpoint and run evaluation only (no training).
+        Use this to re-evaluate with different settings (e.g. majority vote)
+        without retraining. Checkpoint path is taken from config name and results_dir.
+        """
+        if self.model is None or self.trainer is None or self.evaluator is None:
+            self.setup()
+        self.logger.log_experiment_start(self.config)
+        self.train_loader, self.val_loader, self.test_loader = self.data_loaders
+        evaluation_start = time.time()
+        evaluation_results = self._evaluate()
+        evaluation_time = time.time() - evaluation_start
+        self.result = ExperimentResult(
+            experiment_name=self.config.name,
+            model_type=self.config.model_type,
+            target_type=self.config.target_type,
+            success=True,
+            total_time=evaluation_time,
+            training_time=0.0,
+            evaluation_time=evaluation_time,
+            description=self.config.description,
+            metrics=evaluation_results.metrics,
+            segment_metrics=getattr(evaluation_results, 'segment_metrics', None),
+            participant_mean_prob_metrics=getattr(evaluation_results, 'participant_mean_prob_metrics', None),
+            model_checkpoint_path=self._get_checkpoint_path(),
+        )
+        if hasattr(evaluation_results, 'task_type_metrics'):
+            self.result.metrics['task_type_metrics'] = evaluation_results.task_type_metrics
+        self.logger.log_experiment_success(self.result)
+        self.logger.save_experiment_result(self.result)
+        return self.result
+
     def _run_single_experiment(self, experiment_start: float) -> ExperimentResult:
         """Run a single experiment (train/val/test split)."""
         # Extract data loaders from injected data
@@ -571,9 +705,11 @@ class Experiment:
             evaluation_time=evaluation_time,
             description=self.config.description,
             metrics=evaluation_results.metrics,
+            segment_metrics=getattr(evaluation_results, 'segment_metrics', None),
+            participant_mean_prob_metrics=getattr(evaluation_results, 'participant_mean_prob_metrics', None),
             model_checkpoint_path=self._get_checkpoint_path()
         )
-        
+
         # Add training metrics to result
         result.training_metrics = self.logger.get_training_metrics()
         
@@ -672,11 +808,19 @@ class Experiment:
     
     def _train(self):
         """Train the model."""
-        print(f"Training {self.config.model_type} for {self.config.target_type} classification...")
-        
-        # Create progress callback
+        prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
+        task_label = "regression" if prediction_type == "regression" else "classification"
+        print(f"Training {self.config.model_type} for {self.config.target_type} {task_label}...")
+
+        is_regression = prediction_type == "regression"
+        age_min = getattr(self, '_age_min', None)
+        age_max = getattr(self, '_age_max', None)
+
         def progress_callback(epoch, total_epochs, train_loss, val_loss, train_acc, val_acc, lr, epoch_time):
-            self.logger.log_experiment_progress(epoch, total_epochs, train_loss, val_loss, train_acc, val_acc, lr, epoch_time)
+            self.logger.log_experiment_progress(
+                epoch, total_epochs, train_loss, val_loss, train_acc, val_acc, lr, epoch_time,
+                is_regression=is_regression, age_min=age_min, age_max=age_max,
+            )
         
         # Train the model with progress callback
         self.trainer.train(
@@ -693,7 +837,9 @@ class Experiment:
     
     def _evaluate(self) -> EvaluationResults:
         """Evaluate the model on overall test set and separately by task type."""
-        self.logger.log_evaluation_start(self.config.model_type, self.config.target_type)
+        prediction_type = getattr(self.config.training_config, 'prediction_type', 'classification')
+        task_label = "regression" if prediction_type == "regression" else "classification"
+        self.logger.log_evaluation_start(self.config.model_type, self.config.target_type, task_label=task_label)
         
         # Load best model
         checkpoint_path = self._get_checkpoint_path()
@@ -865,56 +1011,64 @@ class Experiment:
             f'{self.config.name}_best.pth'
         )
 
-def run_experiments(experiments: List[ExperimentConfig], 
+def run_experiments(experiments: List[ExperimentConfig],
                    system_config: SystemConfig = None,
                    random_seed: int = 42,
-                   generate_reports: bool = True) -> List[ExperimentResult]:
+                   generate_reports: bool = True,
+                   eval_only: bool = False) -> List[ExperimentResult]:
     """
     Unified experiment orchestrator that coordinates multiple experiments.
-    
+
     Each experiment is now self-contained and handles its own:
     - Data loader creation
     - Model setup
     - Training and evaluation
     - Cross-validation (if applicable)
-    
+
     This function just orchestrates the execution of multiple experiments.
-    
+
     Args:
         experiments: List of experiment configurations
         system_config: System-wide configuration
         random_seed: Random seed for reproducibility
         generate_reports: Whether to generate comparison reports
-        
+        eval_only: If True, skip training and only run evaluation (load saved checkpoint).
+
     Returns:
         List of ExperimentResult objects
     """
     # Set random seeds
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
-    
+
     # Use default system config if not provided
     system_config = system_config or SystemConfig()
-    
+
     print(f"\n{'='*80}")
     print(f"STARTING EXPERIMENTS")
     print(f"Number of experiments: {len(experiments)}")
     print(f"Random seed: {random_seed}")
     print(f"Results directory: {system_config.results_dir}")
     print(f"Generate reports: {generate_reports}")
+    if eval_only:
+        print(f"Mode: EVAL ONLY (load checkpoint, no training)")
     print(f"{'='*80}")
-    
+
     results = []
-    
+
     for i, config in enumerate(experiments):
         print(f"\nProgress: {i+1}/{len(experiments)}")
         print(f"Experiment: {config.name}")
-        
+
+        experiment = None
         try:
             # Create and run experiment (data loaders created internally)
             experiment = Experiment(config, system_config)
             experiment.setup()  # Setup data loaders, model, trainer, evaluator
-            result = experiment.run()  # Run the experiment
+            if eval_only:
+                result = experiment.run_eval_only()
+            else:
+                result = experiment.run()
             results.append(result)
             
             if result.success:
@@ -937,13 +1091,18 @@ def run_experiments(experiments: List[ExperimentConfig],
                 error=str(e)
             )
             results.append(failed_result)
+        finally:
+            # Release data loaders so workers shut down before the next experiment.
+            # Avoids "terminate called without an active exception" / worker killed.
+            if experiment is not None:
+                experiment.cleanup()
     
     # Save summary of all results
     _save_experiment_summary(results, system_config.results_dir)
     
     # Generate reports if requested
     if generate_reports:
-        from report_generator import ReportGenerator
+        from CNN.report_generator import ReportGenerator
         report_generator = ReportGenerator(system_config.results_dir, system_config.reports_dir)
         report_generator.generate_all_reports(results)
         print(f"Reports generated in: {system_config.reports_dir}")
@@ -1000,7 +1159,7 @@ def _generate_comparison_report(successful_results: List[ExperimentResult], resu
         eval_results.append(eval_result)
     
     # Generate comparison
-    from evaluator import compare_models
+    from CNN.evaluator import compare_models
     comparison = compare_models(eval_results)
     
     # Add experiment names and descriptions to comparison
