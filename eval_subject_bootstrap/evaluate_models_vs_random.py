@@ -366,6 +366,9 @@ def main():
                         help='Number of permutations for permutation test (0 to disable)')
     parser.add_argument('--hdf5_base_dir', type=str, default=None,
                         help='Base directory for HDF5 files (if paths in manifest are relative)')
+    parser.add_argument('--aggregation', type=str, default='mean_prob',
+                        choices=['mean_prob', 'majority_vote'],
+                        help='Subject-level aggregation: mean_prob (mean prob then argmax) or majority_vote (mode of segment predictions). No retraining.')
     
     args = parser.parse_args()
     
@@ -458,11 +461,12 @@ def main():
         )
         
         # Aggregate to subject level
-        print("Aggregating to subject level...")
+        print(f"Aggregating to subject level (aggregation={args.aggregation})...")
         subjects, y_true_subject, y_pred_subject, p_subject_dict = aggregate_segments_by_subject(
             segment_probs,
             segment_labels,
-            segment_subject_ids
+            segment_subject_ids,
+            aggregation=args.aggregation,
         )
         
         # Compute point estimates
