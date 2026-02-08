@@ -2,11 +2,49 @@
 
 This module provides statistically sound evaluation for EEG age-group classification with multiple segments per participant. It evaluates models at the **participant (subject) level** and compares them against a **subject-level stratified random baseline** using bootstrap uncertainty estimation.
 
+## Quick start
+
+From the **project root (EEG)**:
+
+```bash
+chmod +x eval_subject_bootstrap/run_on_gpu_server.sh
+./eval_subject_bootstrap/run_on_gpu_server.sh
+```
+
+This script (1) generates train/test manifests from HDF5 if missing, (2) runs evaluation for all models in `config.yaml`, (3) writes results to `eval_subject_bootstrap/outputs/age_evaluation_4s_<timestamp>/`.
+
+**Manual run (custom paths or options):**
+
+```bash
+# 1. Generate manifests (if needed)
+python eval_subject_bootstrap/generate_manifests.py \
+    --hdf5_dir data_processing/processed_eeg_data_hdf5_no_compression \
+    --split train --segment_length 4s --task_type both \
+    --output eval_subject_bootstrap/manifests/train_manifest_4s.csv
+python eval_subject_bootstrap/generate_manifests.py \
+    --hdf5_dir data_processing/processed_eeg_data_hdf5_no_compression \
+    --split test --segment_length 4s --task_type both \
+    --output eval_subject_bootstrap/manifests/test_manifest_4s.csv
+
+# 2. Run evaluation
+python eval_subject_bootstrap/evaluate_models_vs_random.py \
+    --train_manifest eval_subject_bootstrap/manifests/train_manifest_4s.csv \
+    --test_manifest eval_subject_bootstrap/manifests/test_manifest_4s.csv \
+    --models_config eval_subject_bootstrap/config.yaml \
+    --hdf5_base_dir data_processing/processed_eeg_data_hdf5_no_compression \
+    --out_dir eval_subject_bootstrap/outputs/age_evaluation_4s \
+    --batch_size 64 --num_workers 8 --device cuda \
+    --bootstrap_B 2000 --permutation_M 1000 --seed 123 \
+    --primary_metric balanced_accuracy --save_npz
+```
+
+Results: `results.json`, `summary.csv`, and (with `--save_npz`) `intermediate_<model>.npz`. See [Output Files](#output-files) below.
+
 ## Overview
 
 ### Key Features
 
-1. **Subject-Level Aggregation**: Aggregates segment-level predictions to one prediction per participant using mean probability voting
+1. **Subject-Level Aggregation**: Aggregates segment-level predictions to one prediction per participant using **mean probability** (default) or **majority vote** (`--aggregation`)
 2. **Stratified Random Baseline**: Uses training set subject-level class proportions to generate random predictions
 3. **Bootstrap Uncertainty**: Performs subject-level (cluster) bootstrap to estimate 95% confidence intervals
 4. **Delta Analysis**: Reports bootstrap CI for the difference (model metric − random baseline metric)
@@ -40,6 +78,8 @@ The bootstrap 95% CI for delta (model − random) tells us:
 
 ## Installation
 
+Run all commands from the **project root (EEG)** so that `data_processing` and CNN/LaBraM model imports resolve.
+
 No additional installation required. Uses existing project dependencies:
 - numpy
 - pandas
@@ -55,7 +95,7 @@ You can either create manifests manually or use the helper script to generate th
 
 #### Option A: Generate Manifests from HDF5 Files (Recommended)
 
-Use the helper script to automatically extract subject and segment information:
+Use the helper script to extract subject and segment information from HDF5 files. **Run from project root (EEG).**
 
 ```bash
 # Generate train manifest (subject-level)
@@ -74,6 +114,8 @@ python eval_subject_bootstrap/generate_manifests.py \
     --task_type both \
     --output eval_subject_bootstrap/manifests/test_manifest_4s.csv
 ```
+
+Optional: `--pattern` to match specific files (e.g. `eeg_data_train_4s*.h5`). Default pattern is `eeg_data_{split}_{segment_length}*.h5`.
 
 #### Option B: Create Manifests Manually
 
@@ -177,9 +219,10 @@ python eval_subject_bootstrap/evaluate_models_vs_random.py \
 - `--seed`: Random seed (default: 123)
 - `--primary_metric`: Primary metric name (default: `balanced_accuracy`)
 - `--out_dir`: Output directory (default: `eval_subject_bootstrap/outputs/<timestamp>`)
-- `--save_npz`: Save intermediate arrays (segment preds, subject preds)
-- `--permutation_M`: Number of permutations for permutation test (default: 0, disabled)
+- `--save_npz`: Save intermediate arrays (segment/subject preds and probs)
+- `--permutation_M`: Number of permutations for permutation test (default: 0 = disabled)
 - `--hdf5_base_dir`: Base directory for HDF5 files (if paths in manifest are relative)
+- `--aggregation`: Subject-level aggregation: `mean_prob` (mean probability then argmax) or `majority_vote` (mode of segment predictions). Default: `mean_prob`
 
 ## Output Files
 
@@ -355,6 +398,24 @@ Before running full evaluation, test with a small subset:
 2. Verify ResNet model loads and runs inference correctly  
 3. Verify LaBraM model loads, preprocesses data correctly, and runs inference
 4. Check that subject-level aggregation works for all models
+
+## File structure
+
+```
+eval_subject_bootstrap/
+├── README.md                    # This file
+├── REPORT.md                    # Example evaluation report (methodology + results)
+├── config.yaml                  # Model list and checkpoint paths (edit for your runs)
+├── run_on_gpu_server.sh         # One-shot: generate manifests + run evaluation
+├── generate_manifests.py        # Build train/test manifests from HDF5
+├── evaluate_models_vs_random.py # Main script: inference + bootstrap + comparison
+├── bootstrap.py                 # Bootstrap and random baseline logic
+├── io_utils.py                 # Manifest load/save, subject aggregation
+├── metrics.py                  # Subject-level metrics
+├── model_loader.py             # Load CNN/ResNet/LaBraM and run inference
+├── manifests/                  # Generated train/test CSVs
+└── outputs/                    # Results per run (timestamped or --out_dir)
+```
 
 ## License
 
