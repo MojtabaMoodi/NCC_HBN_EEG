@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=None, 
-                       help='Batch size (if None, uses default: 6144 for 1s, 256 for 2s, 192 for 4s)')
+                       help='Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_gpus', type=int, default=2, help='Number of GPUs to use for DataParallel (default: 2)')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
@@ -69,10 +69,10 @@ def main():
     print(f"Batch size: {actual_batch_size} {'(auto-selected)' if args.batch_size is None else ''}, Random seed: {args.random_seed}")
     print(f"Number of GPUs: {actual_num_gpus}")
     
-    # Create data config using shared utility function
+    # Create data config using shared utility function (use actual_batch_size so displayed and used batch size match)
     base_data_config = create_data_config_for_segment_length(
         args.mode, 
-        batch_size=args.batch_size, 
+        batch_size=actual_batch_size, 
         random_seed=args.random_seed, 
         num_gpus=actual_num_gpus
     )
