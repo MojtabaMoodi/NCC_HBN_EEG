@@ -9,6 +9,7 @@ This comprehensive guide covers the entire EEG data processing pipeline, from ra
 - **Multi-Part File Support**: Automatic file splitting for all window sizes prevents large file performance issues
 - **Improved Performance**: Large datasets are automatically split into multiple files (100K samples per file)
 - **Command-Line Script**: New `preprocess_128channels.py` script for easy preprocessing of 128-channel data
+- **Imbalanced data (gender/age)**: Optional stratified train batches or oversampling via `train_balance_method` in `create_train_val_test_loaders`; `compute_class_weights_from_train_hdf5()` for inverse-frequency class weights (e.g. for use in loss when not oversampling)
 
 ## Quick Start
 
@@ -116,6 +117,7 @@ for batch in train_loader:
 7. [Usage Examples](#usage-examples)
 8. [File Structure](#file-structure)
 9. [Best Practices](#best-practices)
+10. [Additional documentation](#additional-documentation)
 
 ## Overview
 
@@ -148,6 +150,7 @@ This pipeline processes EEG data from multiple input formats and creates PyTorch
 - **Participant Metadata**: Each segment stores participant_id for flexible filtering
 - **Cross-Task Evaluation**: Train on one task type, test on another
 - **Participant-Level Filtering**: Filter by participant IDs for flexible training strategies
+- **Imbalanced data**: For gender/age classification, optional stratified batching or oversampling (`train_balance_method`), and `compute_class_weights_from_train_hdf5()` for class weights in the loss
 - **Type Safety**: Comprehensive type hints and validation
 
 ### Important Notes
@@ -593,7 +596,11 @@ train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_load
     gender_transform=gender_classification_transform,
     batch_size=32,
     num_workers=4,
-    shuffle_train=True
+    shuffle_train=True,
+    random_seed=42,
+    use_stratified_train_batches=True,   # optional: balanced batches for gender/age
+    train_balance_method=None,            # or "stratified" or "oversample"
+    prediction_type="classification",
 )
 
 # 3. Train model
@@ -603,6 +610,46 @@ for epoch in range(num_epochs):
         gender = batch['gender']      # (batch_size,)
         participant_ids = batch['participant_ids']
         # ... training code ...
+```
+
+### Imbalanced data (gender/age classification)
+
+For imbalanced classes you can (1) balance via data or (2) use class weights in the loss:
+
+**Option 1 — Balanced batches or oversampling** (no class weights in loss):
+
+```python
+train_loader, val_loader, test_loader = EEGDataLoader.create_train_val_test_loaders(
+    hdf5_dir="/path/to/processed_eeg_data_hdf5",
+    segment_length="4s",
+    task_type="both",
+    target_type="gender",
+    gender_transform=gender_classification_transform,
+    train_balance_method="stratified",  # or "oversample"
+    prediction_type="classification",
+    random_seed=42,
+    batch_size=128,
+    num_workers=4,
+    shuffle_train=True,
+)
+```
+
+- **stratified**: Each train batch has (roughly) equal counts per class; participant round-robin within class.
+- **oversample**: Sampling with replacement so each class is seen in proportion to inverse frequency.
+
+**Option 2 — Class weights** (when not using `train_balance_method="oversample"`):
+
+```python
+from eeg_dataset import compute_class_weights_from_train_hdf5
+
+weights = compute_class_weights_from_train_hdf5(
+    hdf5_dir="/path/to/processed_eeg_data_hdf5",
+    segment_length_str="4s",
+    target_type="gender",
+    task_type="both",
+    weight_power=1.0,  # use >1 (e.g. 1.5) to upweight minority more
+)
+# Pass weights to your loss (e.g. CrossEntropyLoss(weight=torch.tensor(weights)))
 ```
 
 ### Task-Type-Specific Evaluation
@@ -643,23 +690,22 @@ passive_results = evaluator.evaluate_by_task_type(
 
 ```
 EEG/data_processing/
-├── eeg_data_preprocessing.py    # Main preprocessing pipeline
-├── eeg_dataset.py              # PyTorch IterableDataset and DataLoader classes
+├── eeg_data_preprocessing.py   # Main preprocessing pipeline
+├── eeg_dataset.py              # PyTorch Dataset/DataLoader: EEGDataset, EEGMapDataset, EEGDataLoader, StratifiedBatchSampler, get_train_sample_list_with_classes, compute_class_weights_from_train_hdf5
 ├── target_transforms.py        # Target transformation functions
-├── constants.py                # Shared constants and utilities
-├── preprocess_128channels.py  # Script for preprocessing 128-channel h5 files
-├── preprocess_user_identification.py  # Script for user identification preprocessing
+├── constants.py                 # Shared constants (e.g. age/gender class bounds)
+├── aggregation.py              # Segment→participant aggregation (majority vote, median)
+├── preprocess_128channels.py    # Script for preprocessing 128-channel .h5 files
+├── preprocess_user_identification.py  # User identification preprocessing
 ├── multi_file_dataset.py       # Multi-file dataset support
+├── validate_128channels.py     # Validation for 128-channel data
 ├── processed_eeg_data_hdf5/    # HDF5 files with train/val/test splits (60-channel)
 │   ├── eeg_data_train_1s_part00.h5
-│   ├── eeg_data_train_1s_part01.h5
 │   ├── eeg_data_val_1s_part00.h5
 │   ├── eeg_data_test_1s_part00.h5
 │   ├── eeg_data_train_4s_part00.h5
-│   ├── eeg_data_val_4s_part00.h5
-│   └── eeg_data_test_4s_part00.h5
-├── processed_eeg_data_128ch/   # HDF5 files for 128-channel data
-│   └── (same structure as above)
+│   └── ...
+├── processed_eeg_data_128ch/   # HDF5 files for 128-channel data (same structure)
 └── README.md                   # This file
 ```
 
@@ -702,6 +748,11 @@ EEG/data_processing/
 - Pre-split HDF5 files ensure consistent train/val/test splits
 - Document your preprocessing and evaluation procedures
 
+## Additional documentation
+
+- [docs/DATALOADER_BATCHING_EXPLANATION.md](docs/DATALOADER_BATCHING_EXPLANATION.md) — How `EEGDataset` (stream), `DataLoader`, and `collate_fn` form batches.
+- [docs/MULTI_FILE_SOLUTION.md](docs/MULTI_FILE_SOLUTION.md) — Multi-file HDF5 layout for 1s segments (e.g. part0, part1), loading, and performance.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -735,9 +786,9 @@ EEG/data_processing/
 
 ### EEGDataset
 - `__init__(hdf5_file, task_type, target_type, ...)`: Initialize IterableDataset
-  - `hdf5_file`: Path to HDF5 file (e.g., "eeg_data_train_1s.h5")
+  - `hdf5_file`: Path to HDF5 file (e.g., "eeg_data_train_1s.h5") or list of paths for multi-file
   - `task_type`: "active", "passive", or "both"
-  - `target_type`: "gender", "age", "both", "combined"
+  - `target_type`: "gender", "age", "both", "combined", "user_identification"
   - `participant_filter`: Optional list of participant IDs to include
   - `shuffle`: Whether to shuffle samples (default: False)
   - `random_seed`: Random seed for shuffling
@@ -746,8 +797,16 @@ EEG/data_processing/
 - `create_dataloader(dataset, batch_size, num_workers, ...)`: Create PyTorch DataLoader
   - Automatically handles worker sharding for `num_workers > 0`
 - `create_train_val_test_loaders(hdf5_dir, segment_length, ...)`: Create train/val/test loaders
-  - Loads from pre-split HDF5 files
+  - Loads from pre-split HDF5 files (single or multi-part); auto-detects file layout
   - `shuffle_train`: Whether to shuffle training data (default: True)
+  - `random_seed`: For reproducible shuffling and balanced sampling
+  - `use_stratified_train_batches`: If True and target is gender/age, use stratified batches (unless overridden by `train_balance_method`)
+  - `train_balance_method`: `None` | `'stratified'` | `'oversample'`. For **gender/age classification only**: stratified = balanced batches per class (participant round-robin); oversample = sampling with replacement (inverse class frequency). Not used for combined, regression, or user_identification
+  - `prediction_type`: `'classification'` | `'regression'` | None. Stratified/oversample apply only when classification. None is treated as classification
+  - `user_identification_transform`: Optional for `target_type="user_identification"`
+
+### Class weights (imbalanced gender/age)
+- `compute_class_weights_from_train_hdf5(hdf5_dir, segment_length_str, target_type, task_type="both", weight_power=1.0)`: Compute inverse-frequency class weights from train HDF5 metadata (no EEG data loaded). Returns a list of per-class weights. Use when **not** using `train_balance_method="oversample"` (e.g. in the loss). `weight_power` > 1 upweights minority classes more.
 
 ### Target Transforms
 - `gender_classification_transform(gender)`: Convert gender to classification target (0/1)
