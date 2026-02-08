@@ -1,20 +1,36 @@
 # User Identification Module
 
-This module provides tools for **user identification** using **LaBraM with ArcFace**: training, evaluation, and **open-set** analysis (known vs unknown participants). It also includes an alternative entry point for CNN and LaBraM experiments via `main.py`.
+This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (training, evaluation, open-set analysis with known vs unknown participants) and an alternative **CNN experiment pipeline** via `main.py`.
+
+**Run from project root:** All scripts and wrappers assume the EEG project root as the current working directory (e.g. `cd /path/to/EEG` before running). The shell wrappers set this explicitly; when calling Python scripts directly, run them from the project root so imports and paths resolve correctly.
+
+**Requirements:** Conda env `eeg_env`, LaBraM (with pretrained checkpoint under `LaBraM/checkpoints/`), and `data_processing` with HDF5 data prepared for user identification (including `participant_id_to_class_idx.json`). See `data_processing/README.md` for preprocessing.
+
+**Data split:** Unlike gender/age (participant-level split), user identification splits **per participant at sample level** (e.g. 70% train, 15% val, 15% test per participant) so that all participants appear in all splits. Preprocessing: `data_processing/preprocess_user_identification.py`; use `--consider_unknown` to create an unknown split for open-set evaluation.
+
+## Quick reference
+
+| What | Where |
+|------|--------|
+| Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
+| Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
+| CNN/LaBraM experiments (non-ArcFace) | `main.py` |
+| Validate HDF5 setup | `validate.py` |
+| Preprocessing | `data_processing/preprocess_user_identification.py` |
 
 ## Structure
 
 | File | Description |
 |------|-------------|
 | `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
-| `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive/SLURM) |
-| `run_4s.slurm` | SLURM batch script for cluster runs |
+| `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
+| `run_4s.slurm` | SLURM batch script for cluster runs (output_dir and hdf5_dir are fixed in the script; no resume by default—edit to add `--resume` or `OUTPUT_DIR` if needed). |
 | `labram_model.py` | LaBraM wrapper for user identification |
 | `labram_trainer.py` | Training loop and ArcFace integration |
 | `analyze_confidence.py` | Confidence and OOD analysis: test/unknown splits, open-set threshold tuning |
-| `run_analysis_test_unknown.sh` | Wrapper to run analysis on test + unknown with `--split both` |
-| `main.py` | Alternative: run CNN and/or LaBraM experiments via CNN experiment pipeline |
-| `validate.py` | Validation script to verify user-identification data setup |
+| `run_analysis_test_unknown.sh` | Wrapper to run analysis on test + unknown (`--split both`). Requires `CHECKPOINT`; optional: `OUTPUT_DIR`, `HDF5_DIR`, `SEGMENT_LENGTH`. |
+| `main.py` | Alternative: run CNN and/or LaBraM experiments via the CNN experiment pipeline (not ArcFace). |
+| `validate.py` | Validation script: checks mapping, class coverage, and label consistency. Uses `--hdf5_dir` (script has a default path; override as needed). |
 
 ## Training (LaBraM + ArcFace)
 
@@ -69,7 +85,27 @@ python user_identification/train_labram_arcface.py \
 # Multi-GPU: add --distributed and run with torchrun
 ```
 
-**Key arguments:** `--hdf5_dir` (required), `--segment_length` (1s/2s/4s), `--output_dir`, `--resume` (e.g. `best_model.pth`), `--distributed` (only for multi-GPU). ArcFace: `--arcface_margin`, `--arcface_scale`. Early stopping: `--early_stopping_patience`, `--early_stopping_min_delta`.
+**Key arguments:** `--hdf5_dir` (required), `--segment_length` (1s/2s/4s), `--output_dir` (default when run directly: `./results_labram_arcface`; `run_4s.sh` uses `OUTPUT_DIR`), `--resume` (e.g. `best_model.pth`), `--distributed` (only for multi-GPU). ArcFace: `--arcface_margin`, `--arcface_scale`. Early stopping: `--early_stopping_patience`, `--early_stopping_min_delta`. Optimizer: `--lr`, `--layer_decay`, `--weight_decay`, `--warmup_epochs`, `--clip_grad`. Run `python user_identification/train_labram_arcface.py --help` for full list.
+
+## How unknown participants are handled
+
+**Unknown participants** are users that the model has never seen during training. The pipeline handles them as follows.
+
+1. **Preprocessing (data_processing)**  
+   When building user-identification HDF5 data, run preprocessing with **`--consider_unknown`** (e.g. in `data_processing/preprocess_user_identification.py`). A fraction of participants (e.g. `--unknown_ratio 0.2`) are held out: they are **not** in the train/val/test splits and do **not** appear in `participant_id_to_class_idx.json`. Their segments are written to a separate **unknown** split (e.g. `eeg_data_unknown_4s*.h5`). At load time, unknown samples get a sentinel label (e.g. `-1`) so the model never sees their identity during training.
+
+2. **Training**  
+   Training uses only **known** users (train/val/test). The model and ArcFace head are fit to recognize these identities. Unknown users are never used in training.
+
+3. **Analysis and open-set behavior**  
+   After training, run analysis with `--split both` (test + unknown). For each sample we get:
+   - **Embeddings** from the model (ArcFace backbone).
+   - **Known-user centroids**: mean embedding per known class, computed on the training set.
+   - **OOD distance**: minimum L2 distance from the sample’s embedding to any known-user centroid (high = more “out-of-distribution”).
+   - **Known-user score** = 1/(1 + OOD distance): low for unknown participants, high for known ones. This score is used (instead of softmax) to decide “known vs unknown”.
+   - **Open-set threshold**: we tune a threshold on the known-user score so that “predict unknown” when score < threshold. The threshold is chosen to maximize **open-set accuracy** (correctly identifying known users + correctly rejecting unknown users) on the combined test+unknown set.
+
+So: unknown participants are **created at preprocessing** (held-out users, unknown split), **ignored at training**, and **detected at analysis** via feature-space OOD and the known-user score, with a tunable threshold for open-set recognition.
 
 ## Confidence and Open-Set Analysis
 
@@ -96,10 +132,10 @@ python user_identification/analyze_confidence.py \
 | Argument | Default | Description |
 |----------|--------|-------------|
 | `--checkpoint` | (required) | Path to trained checkpoint (e.g. `best_model.pth`) |
-| `--hdf5_dir` | (see script) | HDF5 directory (user-identification preprocessed) |
+| `--hdf5_dir` | script default | HDF5 directory (user-identification preprocessed); run with `--help` to see the default path |
 | `--segment_length` | `4s` | `1s`, `2s`, or `4s` (must match training) |
 | `--split` | `test` | `train`, `val`, `test`, `unknown`, or `both` |
-| `--output_dir` | `./confidence_analysis` | Base directory for all outputs |
+| `--output_dir` | `./confidence_analysis` | Base directory for all outputs (wrapper `run_analysis_test_unknown.sh` uses `./confidence_analysis_test_unknown`) |
 | `--batch_size` | 128 | Inference batch size |
 | `--num_workers` | 4 | DataLoader workers |
 | `--device` | `cuda` | `cuda` or `cpu` |
@@ -138,15 +174,18 @@ With a LaBraM+ArcFace checkpoint and `--split both`:
 ## Validating Setup
 
 ```bash
-python user_identification/validate.py \
-  --hdf5_dir /path/to/processed_eeg_data_user_identification
+# From project root; --hdf5_dir has a script default (see --help)
+python user_identification/validate.py --hdf5_dir /path/to/processed_eeg_data_user_identification
 ```
+
+`validate.py` checks that all participants are in the mapping, all classes appear in training data, and labels match. Override `--hdf5_dir` if your data is not at the script’s default path.
 
 ## Alternative: CNN / LaBraM experiments (main.py)
 
-For running CNN and/or LaBraM experiments through the CNN experiment pipeline (different from the ArcFace training above):
+For running CNN and/or LaBraM experiments through the **CNN experiment pipeline** (standard cross-entropy, not ArcFace):
 
 ```bash
+# From project root
 python user_identification/main.py \
   --mode 4s \
   --model both \
@@ -157,10 +196,10 @@ python user_identification/main.py \
   --hdf5_dir /path/to/processed_eeg_data_user_identification
 ```
 
-Arguments: `--mode` (1s/2s/4s), `--model` (cnn/labram/both), `--labram_checkpoint`, `--epochs`, `--learning_rate`, `--num_gpus`, `--hdf5_dir`, `--results_dir`, `--reports_dir`.
+**Arguments:** `--mode` (1s/2s/4s), `--model` (cnn/labram/both), `--labram_checkpoint`, `--epochs`, `--learning_rate`, `--num_gpus`, `--hdf5_dir`, `--results_dir`, `--reports_dir`, `--batch_size` (default: None → segment-length based: 256 for 1s, 192 for 2s, 128 for 4s), `--random_seed`. LaBraM without `--labram_checkpoint` prompts to continue (not recommended).
 
 ## Notes
 
 - LaBraM training in `run_4s.sh` uses a pre-trained LaBraM backbone (`--pretrained_path`); the checkpoint saves the full model and ArcFace state for analysis.
-- Unknown users require preprocessing with “consider unknown” (held-out participants); otherwise the unknown split is empty.
+- Unknown participants are created at preprocessing: run `data_processing/preprocess_user_identification.py` with **`--consider_unknown`** (and optionally `--unknown_ratio`); otherwise the unknown split is empty. See [How unknown participants are handled](#how-unknown-participants-are-handled) above.
 - For saliency/interpretability on **CNN** age/gender models, use the `saliency_analysis` module; user identification (LaBraM) is not supported there.
