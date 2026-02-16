@@ -15,7 +15,7 @@ The two participant-level methods gave **identical** accuracy.
 Both methods assign **one prediction per participant** from that participant’s segments:
 
 1. **Mean probability:** For each participant, average the model’s **probabilities** over all their segments, then take `argmax` → one class per participant.
-2. **Majority vote:** For each participant, take the **predicted class** for each segment (`argmax` per segment), then take the **mode** → one class per participant.
+2. **Majority vote:** For each participant, **confidence-weighted** vote: each segment contributes a vote for its predicted class weighted by the probability it assigned to that class; the class with the highest total weighted score wins. (When probabilities are not available, plain mode of predicted classes with tie-break is used.)
 
 If the model predicts the **same class for (almost) every segment** (e.g. always Female), then for every participant both methods yield the same prediction, hence the same accuracy.
 

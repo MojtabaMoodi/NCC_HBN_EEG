@@ -81,7 +81,7 @@ class TrainingConfig:
     prediction_type: str = 'classification'  # 'classification' or 'regression'
 
     # Evaluation: aggregate segment-level predictions to participant level (no retraining)
-    # 'majority_vote' = classification: mode of predicted class; regression: median of predicted value
+    # 'majority_vote' = classification: confidence-weighted majority (or mode with tie-break if no probs); regression: median
     # None = segment-level evaluation (default)
     aggregate_by_participant: Optional[str] = None  # None or 'majority_vote'
 

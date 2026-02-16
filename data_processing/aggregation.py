@@ -28,6 +28,33 @@ def _mode_per_group(class_indices: np.ndarray) -> int:
     return int(np.min(candidates))
 
 
+def _weighted_majority_per_group(
+    class_indices: np.ndarray, probs: np.ndarray
+) -> int:
+    """
+    Confidence-weighted majority vote: each segment's vote is weighted by the
+    probability it assigned to its predicted class. Often performs better than
+    unweighted mode and can match or exceed mean-probability aggregation.
+    On tie, return smallest class index (deterministic).
+    """
+    if len(class_indices) == 0 or len(probs) == 0:
+        raise ValueError("Cannot compute weighted majority on empty array")
+    if len(class_indices) != len(probs):
+        raise ValueError(
+            "class_indices and probs must have the same length. "
+            f"Got {len(class_indices)}, {len(probs)}."
+        )
+    num_classes = probs.shape[1]
+    score = np.zeros(num_classes, dtype=np.float64)
+    for i, k in enumerate(class_indices):
+        k = int(k)
+        if 0 <= k < num_classes:
+            score[k] += probs[i, k]
+    max_score = np.max(score)
+    candidates = np.where(score == max_score)[0]
+    return int(np.min(candidates))
+
+
 def aggregate_predictions_by_group(
     predictions: np.ndarray,
     labels: np.ndarray,
@@ -42,8 +69,9 @@ def aggregate_predictions_by_group(
     Each segment/window (e.g. 4s) yields one prediction; aggregation is over
     all such predictions per participant.
 
-    Classification: use majority vote (mode of predicted class over all segments
-    per participant) or mean probability then argmax, depending on `aggregation`.
+    Classification: use majority vote (when probabilities given: confidence-weighted
+    vote per class; else mode of predicted class with tie-break) or mean probability
+    then argmax, depending on `aggregation`.
     Regression: use median or mean of predicted values per group.
 
     Args:
@@ -55,8 +83,9 @@ def aggregate_predictions_by_group(
         aggregation: For classification: AGGREGATION_MAJORITY_VOTE or
             AGGREGATION_MEAN_PROB. Ignored for regression.
         regression_aggregation: For regression: AGGREGATION_MEDIAN or AGGREGATION_MEAN.
-        probabilities: Optional (N, num_classes) for classification; used only
-            when aggregation is AGGREGATION_MEAN_PROB to compute mean prob per group.
+        probabilities: Optional (N, num_classes) for classification; required for
+            AGGREGATION_MEAN_PROB; when provided for AGGREGATION_MAJORITY_VOTE, enables
+            confidence-weighted majority (recommended).
 
     Returns:
         groups: Unique group ids, shape (G,).
@@ -70,6 +99,11 @@ def aggregate_predictions_by_group(
             "predictions, labels, and group_ids must have the same length. "
             f"Got {len(predictions)}, {len(labels)}, {len(group_ids)}."
         )
+    if probabilities is not None and len(probabilities) != len(predictions):
+        raise ValueError(
+            "probabilities must have the same length as predictions when provided. "
+            f"Got {len(probabilities)}, {len(predictions)}."
+        )
     if prediction_type not in ("classification", "regression"):
         raise ValueError(
             f"prediction_type must be 'classification' or 'regression'. Got {prediction_type}."
@@ -80,7 +114,7 @@ def aggregate_predictions_by_group(
     for i, gid in enumerate(group_ids):
         by_group[gid]["preds"].append(predictions[i])
         by_group[gid]["labels"].append(labels[i])
-        if probabilities is not None and i < probabilities.shape[0]:
+        if probabilities is not None:
             by_group[gid]["probs"].append(probabilities[i])
 
     groups = []
@@ -118,14 +152,29 @@ def aggregate_predictions_by_group(
         else:
             # Classification
             if aggregation == AGGREGATION_MAJORITY_VOTE:
-                pred_agg = _mode_per_group(preds_arr)
+                probs_arr = np.array(data["probs"]) if data["probs"] else None
+                if probs_arr is not None and len(probs_arr) == len(preds_arr):
+                    # Confidence-weighted majority: weight each segment's vote by prob it assigned to its predicted class
+                    pred_agg = _weighted_majority_per_group(preds_arr, probs_arr)
+                    mean_prob = np.mean(probs_arr, axis=0)
+                else:
+                    pred_agg = _mode_per_group(preds_arr)
+                    # Tie-break: smallest class index when no probs; with probs use mean prob among tied
+                    if data["probs"]:
+                        mean_prob = np.mean(data["probs"], axis=0)
+                        values, counts = np.unique(preds_arr, return_counts=True)
+                        max_count = np.max(counts)
+                        candidates = values[counts == max_count]
+                        if len(candidates) > 1:
+                            best_idx = np.argmax(mean_prob[candidates])
+                            pred_agg = int(candidates[best_idx])
+                    else:
+                        mean_prob = None
+                if prob_agg_list is not None:
+                    prob_agg_list.append(mean_prob if probs_arr is not None else None)
                 groups.append(gid)
                 y_true_agg.append(true_label)
                 y_pred_agg.append(pred_agg)
-                if prob_agg_list is not None and data["probs"]:
-                    prob_agg_list.append(np.mean(data["probs"], axis=0))
-                elif prob_agg_list is not None:
-                    prob_agg_list.append(None)
             elif aggregation == AGGREGATION_MEAN_PROB:
                 if not data["probs"] or probabilities is None:
                     raise ValueError(

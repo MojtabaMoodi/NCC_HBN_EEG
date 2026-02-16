@@ -342,7 +342,7 @@ def main():
     parser.add_argument('--eval_only', action='store_true',
                        help='Skip training; load saved checkpoint and run evaluation only (e.g. with majority vote).')
     parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
-                       help="Participant-level aggregation: 'majority_vote' for classification (mode) / median for regression. Use with --eval_only to re-evaluate without retraining.")
+                       help="Participant-level aggregation: 'majority_vote' for classification (confidence-weighted majority when probs available) / median for regression. Use with --eval_only to re-evaluate without retraining.")
     parser.add_argument('--balance_method', type=str, default=None, choices=['stratified', 'oversample'],
                        help="Train balancing for gender/age: 'stratified' (balanced batches) or 'oversample' (sampling with replacement, no class weights). Default: None (no balanced sampling; class weights from data still applied when not using oversample).")
 

@@ -122,8 +122,9 @@ class EEGEvaluator:
             age_max: Maximum age for regression tasks (required for age regression)
             device_preference: Device preference ('auto', 'cuda', 'cpu')
             aggregate_by_participant: If 'majority_vote', aggregate segment-level
-                predictions to participant level: classification = majority vote,
-                regression = median. Requires batch to contain 'participant_ids'.
+                predictions to participant level: classification = confidence-weighted
+                majority vote (or mode with tie-break); regression = median. Requires
+                batch to contain 'participant_ids'.
                 None = segment-level evaluation (default).
 
         Raises:

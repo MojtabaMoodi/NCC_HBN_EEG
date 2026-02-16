@@ -104,9 +104,9 @@ The default run executes **3 experiments**:
 
 Additional experiment types (e.g. cross-validation, cross-task) are implemented in `main.py` and can be enabled by uncommenting the corresponding block.
 
-### Re-evaluate with majority vote (no retraining)
+### Re-evaluate with participant-level aggregation (no retraining)
 
-You can re-run **evaluation only** on an already-trained model and get **participant-level** accuracy (majority vote over segments per participant). No retraining; the saved checkpoint is loaded.
+You can re-run **evaluation only** on an already-trained model and get **participant-level** metrics by aggregating segment predictions per participant. No retraining; the saved checkpoint is loaded.
 
 ```bash
 # From the project root (EEG) or from CNN/
@@ -117,7 +117,9 @@ python main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --
 ```
 
 - `--eval_only`: skip training, load checkpoint from `results_dir/checkpoints/<experiment_name>_best.pth`.
-- `--aggregate_by_participant majority_vote`: aggregate segment predictions per participant (classification = mode, regression = median).
+- `--aggregate_by_participant majority_vote`: aggregate segment predictions per participant. **Classification:** confidence-weighted majority vote (each segment’s vote weighted by the probability it assigned to its predicted class; when probabilities are not available, plain mode with tie-break). **Regression:** median of predicted values per participant.
+
+Evaluation reports three metrics for comparison: **segment-level** (one prediction per window), **participant (mean probability)** (mean of softmax probs over segments then argmax), and **participant (majority vote)** (confidence-weighted majority as above). On some datasets mean probability can be slightly higher than majority vote; both are reported for transparency.
 
 Use the same `--mode` (e.g. `4s`) and `--results_dir` as for the original run. Keep the whole command on one line (no line break inside `--results_dir ...`).
 
