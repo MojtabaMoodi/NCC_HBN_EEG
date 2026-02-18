@@ -141,6 +141,9 @@ class LaBraMReportGenerator:
                     'roc_auc': best_metrics.get('test_roc_auc', 0),
                 },
                 'task_type_metrics': task_type_metrics,  # Active/passive task metrics
+                'test_segment_metrics': best_metrics.get('test_segment_metrics'),  # Segment-level (per-window) when --aggregate_by_participant
+                'test_participant_mean_prob_metrics': best_metrics.get('test_participant_mean_prob_metrics'),
+                'test_participant_metrics': best_metrics.get('test_participant_metrics'),  # Participant-level majority vote
                 'all_epochs': metrics_list,
                 'success': True
             }
@@ -297,7 +300,18 @@ class LaBraMReportGenerator:
                     
                     f.write(f"Test ROC-AUC: {result['test_metrics']['roc_auc']:.4f}\n")
                     f.write(f"Test PR-AUC: {result['test_metrics']['pr_auc']:.4f}\n")
-                    
+                    if result.get('test_segment_metrics') and result.get('test_participant_metrics'):
+                        seg = result['test_segment_metrics']
+                        part_mp = result.get('test_participant_mean_prob_metrics') or {}
+                        part_mv = result['test_participant_metrics']
+                        seg_acc = seg.get('accuracy')
+                        if seg_acc is not None:
+                            f.write(f"\nSegment vs participant-level (with --aggregate_by_participant):\n")
+                            f.write(f"  Segment-level (per-window) Accuracy: {seg_acc:.4f}\n")
+                            if part_mp.get('accuracy') is not None:
+                                f.write(f"  Participant (mean prob) Accuracy: {part_mp['accuracy']:.4f}\n")
+                            if part_mv.get('accuracy') is not None:
+                                f.write(f"  Participant (majority vote) Accuracy: {part_mv['accuracy']:.4f}\n")
                     # Add dataset sample counts if available
                     if result.get('train_task_type_counts'):
                         counts = result['train_task_type_counts']
