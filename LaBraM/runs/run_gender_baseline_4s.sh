@@ -79,7 +79,7 @@ if ! "$PYTHON_PATH" -c "import numpy" 2>/dev/null; then
     fi
 fi
 
-# Set environment variables for single GPU training (no distributed)
+# Set environment variables for training (no distributed by default)
 # Unset any existing distributed variables to avoid conflicts
 unset RANK
 unset WORLD_SIZE
@@ -87,6 +87,7 @@ unset LOCAL_RANK
 unset MASTER_ADDR
 unset MASTER_PORT
 unset SLURM_PROCID
+# Do not set CUDA_VISIBLE_DEVICES here; use the environment (e.g. SLURM sets it when GPUs are allocated).
 
 # Dataset configuration
 DATASET="gender_baseline"
@@ -179,7 +180,8 @@ fi
     --auto_resume \
     --seed 42 \
     --pin_mem \
-    --num_workers 10
+    --num_workers 10 \
+    "$@"
 
 echo "=========================================="
 echo "Fine-tuning completed for gender_baseline"
