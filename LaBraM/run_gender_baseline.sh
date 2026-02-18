@@ -119,7 +119,8 @@ python run_class_finetuning.py \
     --auto_resume \
     --seed 42 \
     --world_size 1 \
-    --local_rank -1
+    --local_rank -1 \
+    --aggregate_by_participant majority_vote
 
 echo "=========================================="
 echo "Fine-tuning completed!"
