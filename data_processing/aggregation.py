@@ -206,6 +206,55 @@ def aggregate_predictions_by_group(
     )
 
 
+def aggregate_participant_level_classification(
+    predictions: np.ndarray,
+    labels: np.ndarray,
+    group_ids: List[str],
+    probabilities: np.ndarray,
+) -> Tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    Optional[np.ndarray],
+    np.ndarray,
+    np.ndarray,
+    Optional[np.ndarray],
+]:
+    """
+    Compute both mean-probability and majority-vote participant-level aggregations
+    in one go. Use this to avoid duplicating aggregation logic in evaluators.
+
+    Args:
+        predictions: Segment-level class indices, shape (N,).
+        labels: Segment-level labels, shape (N,).
+        group_ids: Participant/group id per segment, length N.
+        probabilities: Segment-level class probabilities, shape (N, num_classes).
+
+    Returns:
+        groups: Unique group ids.
+        true_mp, pred_mp, prob_mp: One per participant for mean-probability aggregation.
+        true_mv, pred_mv, prob_mv: One per participant for majority-vote aggregation.
+        prob_mp is always set when probabilities are provided; prob_mv may be None.
+    """
+    groups, true_mp, pred_mp, prob_mp = aggregate_predictions_by_group(
+        predictions,
+        labels,
+        group_ids,
+        prediction_type="classification",
+        aggregation=AGGREGATION_MEAN_PROB,
+        probabilities=probabilities,
+    )
+    _, true_mv, pred_mv, prob_mv = aggregate_predictions_by_group(
+        predictions,
+        labels,
+        group_ids,
+        prediction_type="classification",
+        aggregation=AGGREGATION_MAJORITY_VOTE,
+        probabilities=probabilities,
+    )
+    return groups, true_mp, pred_mp, prob_mp, true_mv, pred_mv, prob_mv
+
+
 def aggregate_segment_probs_by_subject_majority_vote(
     segment_probs: np.ndarray,
     segment_labels: np.ndarray,
