@@ -19,21 +19,23 @@ from sklearn.metrics import (
 
 from CNN.models import BaseEEGCNN
 import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append('/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing')
-from constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+from data_processing.constants import DEFAULT_MIN_AGE, DEFAULT_MAX_AGE
 from CNN.utils import safe_json_dump, convert_numpy_types
 from gpu_utils import get_underlying_model as gpu_get_underlying_model, get_device
 
 try:
     from data_processing.aggregation import (
+        aggregate_participant_level_classification,
         aggregate_predictions_by_group,
         AGGREGATION_MAJORITY_VOTE,
         AGGREGATION_MEAN_PROB,
         AGGREGATION_MEDIAN,
     )
 except ImportError:
+    aggregate_participant_level_classification = None
     aggregate_predictions_by_group = None
     AGGREGATION_MAJORITY_VOTE = None
     AGGREGATION_MEAN_PROB = None
@@ -340,12 +342,19 @@ class EEGEvaluator:
         do_agg = (
             self.aggregate_by_participant == 'majority_vote'
             and aggregate_predictions_by_group is not None
-            and all_participant_ids
+            and len(all_participant_ids) > 0
+            and None not in all_participant_ids
         )
 
         # When aggregating, compute segment-level metrics first for side-by-side comparison
         if do_agg:
             if self.target_type == 'multi_output' and results.gender_predictions is not None:
+                n_seg = len(results.gender_predictions)
+                if len(all_participant_ids) != n_seg:
+                    raise ValueError(
+                        "Participant-level aggregation requires one participant_id per segment. "
+                        f"Got {len(all_participant_ids)} participant_ids for {n_seg} segments."
+                    )
                 seg_gender = self._compute_metrics(
                     results.gender_predictions,
                     results.gender_true_labels,
@@ -363,42 +372,68 @@ class EEGEvaluator:
                     'age_head': seg_age,
                     'accuracy': (seg_gender['accuracy'] + seg_age['accuracy']) / 2.0,
                 }
-                # Participant-level mean probability (same denominator as majority vote, for fair comparison)
-                if aggregate_predictions_by_group is not None and AGGREGATION_MEAN_PROB is not None:
-                    n_seg = len(results.gender_predictions)
-                    if len(all_participant_ids) == n_seg:
-                        pid_list = all_participant_ids
-                        _, g_true_mp, g_pred_mp, g_prob_mp = aggregate_predictions_by_group(
-                            np.array(results.gender_predictions),
-                            np.array(results.gender_true_labels),
-                            pid_list,
-                            prediction_type='classification',
-                            aggregation=AGGREGATION_MEAN_PROB,
-                            probabilities=np.array(results.gender_probabilities),
-                        )
-                        _, a_true_mp, a_pred_mp, a_prob_mp = aggregate_predictions_by_group(
-                            np.array(results.age_predictions),
-                            np.array(results.age_true_labels),
-                            pid_list,
-                            prediction_type='classification',
-                            aggregation=AGGREGATION_MEAN_PROB,
-                            probabilities=np.array(results.age_probabilities),
-                        )
-                        g_prob_list = g_prob_mp.tolist() if g_prob_mp is not None else []
-                        a_prob_list = a_prob_mp.tolist() if a_prob_mp is not None else []
-                        g_mp = self._compute_metrics(
-                            g_pred_mp.tolist(), g_true_mp.tolist(),
-                            g_prob_list, class_names=['Female', 'Male'],
-                        )
-                        a_mp = self._compute_metrics(
-                            a_pred_mp.tolist(), a_true_mp.tolist(),
-                            a_prob_list, class_names=['<8.5 years', '8.5-12.5 years', '>12.5 years'],
-                        )
-                        results.participant_mean_prob_metrics = {
-                            'gender_head': g_mp,
-                            'age_head': a_mp,
-                            'accuracy': (g_mp['accuracy'] + a_mp['accuracy']) / 2.0,
-                        }
+                # Participant-level mean probability and majority vote (same as LaBraM via shared aggregation)
+                pid_list = all_participant_ids
+                g_pred_arr = np.array(results.gender_predictions)
+                g_true_arr = np.array(results.gender_true_labels)
+                g_prob_arr = np.array(results.gender_probabilities)
+                a_pred_arr = np.array(results.age_predictions)
+                a_true_arr = np.array(results.age_true_labels)
+                a_prob_arr = np.array(results.age_probabilities)
+                if aggregate_participant_level_classification is not None:
+                    _, g_true_mp, g_pred_mp, g_prob_mp, g_true_mv, g_pred_mv, g_prob_mv = aggregate_participant_level_classification(
+                        g_pred_arr, g_true_arr, pid_list, g_prob_arr
+                    )
+                    _, a_true_mp, a_pred_mp, a_prob_mp, a_true_mv, a_pred_mv, a_prob_mv = aggregate_participant_level_classification(
+                        a_pred_arr, a_true_arr, pid_list, a_prob_arr
+                    )
+                else:
+                    _, g_true_mp, g_pred_mp, g_prob_mp = aggregate_predictions_by_group(
+                        g_pred_arr, g_true_arr, pid_list,
+                        prediction_type='classification',
+                        aggregation=AGGREGATION_MEAN_PROB,
+                        probabilities=g_prob_arr,
+                    )
+                    _, a_true_mp, a_pred_mp, a_prob_mp = aggregate_predictions_by_group(
+                        a_pred_arr, a_true_arr, pid_list,
+                        prediction_type='classification',
+                        aggregation=AGGREGATION_MEAN_PROB,
+                        probabilities=a_prob_arr,
+                    )
+                    _, g_true_mv, g_pred_mv, g_prob_mv = aggregate_predictions_by_group(
+                        g_pred_arr, g_true_arr, pid_list,
+                        prediction_type='classification',
+                        aggregation=AGGREGATION_MAJORITY_VOTE,
+                        probabilities=g_prob_arr,
+                    )
+                    _, a_true_mv, a_pred_mv, a_prob_mv = aggregate_predictions_by_group(
+                        a_pred_arr, a_true_arr, pid_list,
+                        prediction_type='classification',
+                        aggregation=AGGREGATION_MAJORITY_VOTE,
+                        probabilities=a_prob_arr,
+                    )
+                g_prob_list = g_prob_mp.tolist() if g_prob_mp is not None else []
+                a_prob_list = a_prob_mp.tolist() if a_prob_mp is not None else []
+                g_mp = self._compute_metrics(
+                    g_pred_mp.tolist(), g_true_mp.tolist(),
+                    g_prob_list, class_names=['Female', 'Male'],
+                )
+                a_mp = self._compute_metrics(
+                    a_pred_mp.tolist(), a_true_mp.tolist(),
+                    a_prob_list, class_names=['<8.5 years', '8.5-12.5 years', '>12.5 years'],
+                )
+                results.participant_mean_prob_metrics = {
+                    'gender_head': g_mp,
+                    'age_head': a_mp,
+                    'accuracy': (g_mp['accuracy'] + a_mp['accuracy']) / 2.0,
+                }
+                # Overwrite with participant-level majority-vote so main metrics use them
+                results.gender_predictions = g_pred_mv
+                results.gender_true_labels = g_true_mv
+                results.gender_probabilities = g_prob_mv.tolist() if g_prob_mv is not None else []
+                results.age_predictions = a_pred_mv
+                results.age_true_labels = a_true_mv
+                results.age_probabilities = a_prob_mv.tolist() if a_prob_mv is not None else []
             elif len(all_predictions) > 0:
                 if self.prediction_type == 'regression':
                     results.segment_metrics = self._compute_regression_metrics(
@@ -423,33 +458,12 @@ class EEGEvaluator:
                             mp_pred.tolist(), mp_true.tolist(), mp_prob_list, class_names=self.class_names
                         )
 
-        if do_agg and self.target_type == 'multi_output' and results.gender_predictions is not None:
-            n_seg = len(results.gender_predictions)
-            if len(all_participant_ids) == n_seg:
-                pid_list = all_participant_ids
-                _, g_true, g_pred, g_prob = aggregate_predictions_by_group(
-                    np.array(results.gender_predictions),
-                    np.array(results.gender_true_labels),
-                    pid_list,
-                    prediction_type='classification',
-                    aggregation=AGGREGATION_MAJORITY_VOTE,
-                    probabilities=np.array(results.gender_probabilities),
+        if do_agg and len(all_predictions) > 0:
+            if len(all_participant_ids) != len(all_predictions):
+                raise ValueError(
+                    "Participant-level aggregation requires one participant_id per segment. "
+                    f"Got {len(all_participant_ids)} participant_ids for {len(all_predictions)} segments."
                 )
-                _, a_true, a_pred, a_prob = aggregate_predictions_by_group(
-                    np.array(results.age_predictions),
-                    np.array(results.age_true_labels),
-                    pid_list,
-                    prediction_type='classification',
-                    aggregation=AGGREGATION_MAJORITY_VOTE,
-                    probabilities=np.array(results.age_probabilities),
-                )
-                results.gender_predictions = g_pred
-                results.gender_true_labels = g_true
-                results.gender_probabilities = g_prob.tolist() if g_prob is not None else []
-                results.age_predictions = a_pred
-                results.age_true_labels = a_true
-                results.age_probabilities = a_prob.tolist() if a_prob is not None else []
-        elif do_agg and len(all_predictions) > 0 and len(all_participant_ids) == len(all_predictions):
             # Single-output
             _, agg_true, agg_pred, agg_prob = aggregate_predictions_by_group(
                 np.array(all_predictions),
