@@ -182,7 +182,8 @@ fi
     --auto_resume \
     --seed 42 \
     --pin_mem \
-    --num_workers 10
+    --num_workers 10 \
+    --aggregate_by_participant majority_vote
 
 echo "=========================================="
 echo "Fine-tuning completed for age_baseline"
