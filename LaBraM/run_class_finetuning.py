@@ -40,6 +40,7 @@ from dataset_config import (
     get_data_path,
     DATA_PATHS
 )
+from labram_dataset import collate_labram_with_participant_ids
 
 def get_args():
     parser = argparse.ArgumentParser('LaBraM fine-tuning and evaluation script for EEG classification', add_help=False)
@@ -170,6 +171,8 @@ def get_args():
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
+    parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
+                        help="Participant-level aggregation: 'majority_vote' for classification (same as CNN). Reports segment-level and participant-level (mean prob + majority vote) metrics.")
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -338,7 +341,17 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         if args.output_dir:
             os.makedirs(args.output_dir, exist_ok=True)
 
-    device = torch.device(args.device)
+    # Prefer GPU when requested and available; no hardcoded device indices
+    if (args.device == 'cuda' or (isinstance(args.device, str) and args.device.startswith('cuda'))):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if device.type == 'cpu':
+            print("WARNING: CUDA not available; using CPU. Install PyTorch with CUDA for GPU training.")
+    else:
+        device = torch.device(args.device)
+    if device.type == 'cuda':
+        n_gpu = torch.cuda.device_count()
+        gpu_names = [torch.cuda.get_device_name(i) for i in range(n_gpu)]
+        print(f"Using device: {device} ({n_gpu} GPU(s): {gpu_names})")
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -383,6 +396,11 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     else:
         log_writer = None
 
+    # LaBraMEEGDataset yields (eeg, label, participant_id); use custom collate so batch is (eeg, label, pids). Training only uses (eeg, label).
+    use_labram_collate = args.dataset in CUSTOM_DATASET_CONFIGS
+    labram_collate = collate_labram_with_participant_ids if use_labram_collate else None
+    val_test_collate = labram_collate
+
     # IterableDataset doesn't support samplers - DataLoader iterates directly
     data_loader_train = torch.utils.data.DataLoader(
         train_dataset,  # No sampler for IterableDataset
@@ -390,15 +408,16 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
         drop_last=True,
+        collate_fn=labram_collate,
     )
-
     if val_dataset is not None:
         data_loader_val = torch.utils.data.DataLoader(
             val_dataset,  # No sampler for IterableDataset
             batch_size=int(1.5 * args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
-            drop_last=False
+            drop_last=False,
+            collate_fn=val_test_collate
         )
         if type(test_dataset) == list:
             data_loader_test = [torch.utils.data.DataLoader(
@@ -406,7 +425,8 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 batch_size=int(1.5 * args.batch_size),
                 num_workers=args.num_workers,
                 pin_memory=args.pin_mem,
-                drop_last=False
+                drop_last=False,
+                collate_fn=val_test_collate
             ) for dataset in test_dataset]
         else:
             data_loader_test = torch.utils.data.DataLoader(
@@ -414,7 +434,8 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 batch_size=int(1.5 * args.batch_size),
                 num_workers=args.num_workers,
                 pin_memory=args.pin_mem,
-                drop_last=False
+                drop_last=False,
+                collate_fn=val_test_collate
             )
     else:
         data_loader_val = None
@@ -430,9 +451,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     if args.finetune:
         if args.finetune.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
-                args.finetune, map_location='cpu', check_hash=True)
+                args.finetune, map_location=device, check_hash=True)
         else:
-            checkpoint = torch.load(args.finetune, map_location='cpu')
+            # Pretrained checkpoint may contain numpy/torch types; use weights_only=False for compatibility (trusted source).
+            checkpoint = torch.load(args.finetune, map_location=device, weights_only=False)
 
         print("Load ckpt from %s" % args.finetune)
         checkpoint_model = None
@@ -478,17 +500,23 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
 
     model.to(device)
 
+    # Use all visible GPUs when not in distributed mode
+    if not args.distributed and device.type == 'cuda' and torch.cuda.device_count() > 1:
+        model = torch.nn.parallel.DataParallel(model)
+        model_without_ddp = model.module
+        print(f"Wrapped model in DataParallel across {torch.cuda.device_count()} GPU(s).")
+    else:
+        model_without_ddp = model
+
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
         model_ema = ModelEma(
-            model,
+            model_without_ddp,
             decay=args.model_ema_decay,
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
         print("Using EMA with decay = %.8f" % args.model_ema_decay)
-
-    model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print("Model = %s" % str(model_without_ddp))
@@ -516,7 +544,7 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     if assigner is not None:
         print("Assigned values = %s" % str(assigner.values))
 
-    skip_weight_decay_list = model.no_weight_decay()
+    skip_weight_decay_list = model_without_ddp.no_weight_decay()
     if args.disable_weight_decay_on_rel_pos_bias:
         for i in range(num_layers):
             skip_weight_decay_list.add("blocks.%d.attn.relative_position_bias_table" % i)
@@ -626,8 +654,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema, save_ckpt_freq=args.save_ckpt_freq)
             
         if data_loader_val is not None:
-            val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
-            test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1)
+            val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                                 aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
+            test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                                  aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
             
             # Evaluate by task type (active/passive) every 5 epochs or on last epoch
             task_type_results = None
@@ -678,7 +708,17 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                         loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
 
-            print(f'Max accuracy val: {max_accuracy:.2f}%, max accuracy test: {max_accuracy_test:.2f}%')
+            print(f'Max accuracy val: {max_accuracy * 100:.2f}%, max accuracy test: {max_accuracy_test * 100:.2f}%')
+            if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
+                seg_acc = test_stats['segment_metrics'].get('accuracy')
+                part_mp = test_stats.get('participant_mean_prob_metrics') or {}
+                part_mv = test_stats.get('participant_metrics') or {}
+                part_mp_acc = part_mp.get('accuracy')
+                part_mv_acc = part_mv.get('accuracy')
+                if seg_acc is not None:
+                    _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
+                    _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
+                    print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
             if log_writer is not None:
                 for key, value in val_stats.items():
                     if key == 'accuracy':
@@ -716,7 +756,13 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                          **{f'test_{k}': v for k, v in test_stats.items()},
                          'epoch': epoch,
                          'n_parameters': n_parameters}
-            
+            if test_stats.get('segment_metrics') is not None:
+                log_stats['test_segment_metrics'] = test_stats['segment_metrics']
+            if test_stats.get('participant_mean_prob_metrics') is not None:
+                log_stats['test_participant_mean_prob_metrics'] = test_stats['participant_mean_prob_metrics']
+            if test_stats.get('participant_metrics') is not None:
+                log_stats['test_participant_metrics'] = test_stats['participant_metrics']
+
             # Add task type counts if available (from first epoch)
             if epoch == 0:
                 if train_stats.get('task_type_counts'):
@@ -760,7 +806,8 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             best_checkpoint_path = Path(args.output_dir) / 'checkpoint-best.pth'
             if best_checkpoint_path.exists():
                 print(f"\nLoading best model from {best_checkpoint_path} for final evaluation...")
-                checkpoint = torch.load(best_checkpoint_path, map_location='cpu')
+                # Our own checkpoint may contain optimizer state; use weights_only=False for compatibility.
+                checkpoint = torch.load(best_checkpoint_path, map_location=device, weights_only=False)
                 model_without_ddp.load_state_dict(checkpoint['model'])
             
             # Get dataset type and data path
@@ -860,7 +907,9 @@ def main(args, ds_init):
         
         # Extract dataset type and parameters from dataset name
         dataset_type, kwargs = get_dataset_type_and_params(args.dataset)
-        
+        if hasattr(args, 'segment_length'):
+            kwargs['segment_length'] = args.segment_length
+
         # Check if this is a CV experiment by calling prepare_custom_dataset early
         # This will load all folds into memory, so we know if it's CV
         try:
