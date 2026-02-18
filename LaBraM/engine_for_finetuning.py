@@ -12,6 +12,7 @@ import sys
 import warnings
 from pathlib import Path
 from typing import Iterable, Optional
+import numpy as np
 import torch
 
 # Suppress FutureWarning for autocast deprecation (may come from PyTorch internals)
@@ -20,13 +21,30 @@ from timm.utils import ModelEma
 import utils
 from einops import rearrange
 
-# Add LaBraM directory to path for imports (needed for labram_dataset and data_processing)
+# Add LaBraM directory and project root for imports (labram_dataset, data_processing)
 _labram_dir = Path(__file__).parent
+_project_root = _labram_dir.parent
 if str(_labram_dir) not in sys.path:
     sys.path.insert(0, str(_labram_dir))
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 # Import LaBraM-specific modules
 from labram_dataset import prepare_labram_dataset
+
+# Reuse participant-level aggregation from data_processing (same as CNN)
+try:
+    from data_processing.aggregation import (
+        aggregate_participant_level_classification,
+        aggregate_predictions_by_group,
+        AGGREGATION_MAJORITY_VOTE,
+        AGGREGATION_MEAN_PROB,
+    )
+except ImportError:
+    aggregate_participant_level_classification = None
+    aggregate_predictions_by_group = None
+    AGGREGATION_MAJORITY_VOTE = None
+    AGGREGATION_MEAN_PROB = None
 
 def train_class_batch(model, samples, target, criterion, ch_names):
     outputs = model(samples, ch_names)
@@ -96,7 +114,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 task_type_counts[task_type] += 1
         print(f"  Training dataset: {task_type_counts['active']:,} active, {task_type_counts['passive']:,} passive samples")
     
-    for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        samples = batch[0]
+        targets = batch[1]  # batch may be (eeg, label) or (eeg, label, participant_ids)
         # Count samples and batches in first epoch for diagnostic
         if count_samples:
             sample_count += samples.shape[0]
@@ -368,7 +388,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=['acc'], is_binary=True):
+def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=['acc'], is_binary=True,
+             aggregate_by_participant=None):
     input_chans = None
     if ch_names is not None:
         input_chans = utils.get_input_chans(ch_names)
@@ -386,9 +407,6 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
-    #header = 'Test:'
-
-    # switch to evaluation mode
     model.eval()
     pred = []
     true = []
@@ -396,10 +414,18 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
     pred_age = []
     true_gender = []
     true_age = []
-    
+    all_participant_ids = []
+
     for step, batch in enumerate(metric_logger.log_every(data_loader, 10, header)):
         EEG = batch[0]
-        target = batch[-1]
+        if len(batch) == 3:
+            target = batch[1]
+            participant_ids_batch = batch[2]
+            if participant_ids_batch is not None:
+                all_participant_ids.extend(participant_ids_batch)
+        else:
+            target = batch[-1]
+            participant_ids_batch = None
         EEG = EEG.float().to(device, non_blocking=True) / 100
         EEG = rearrange(EEG, 'B N (A T) -> B N A T', T=200)
         
@@ -541,7 +567,111 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         true = torch.cat(true, dim=0).numpy()
         ret = utils.get_metrics(pred, true, metrics, is_binary, 0.5)
         ret['loss'] = metric_logger.loss.global_avg
-    
+
+    # Participant-level aggregation (segment-level vs majority vote / mean prob), reusing data_processing.aggregation (same as CNN)
+    do_agg = (
+        aggregate_by_participant == 'majority_vote'
+        and aggregate_predictions_by_group is not None
+        and len(all_participant_ids) > 0
+        and None not in all_participant_ids
+    )
+    if do_agg and is_multi_output:
+        pred_gender_all = torch.cat(pred_gender, dim=0).numpy()
+        true_gender_all = torch.cat(true_gender, dim=0).numpy()
+        pred_age_all = torch.cat(pred_age, dim=0).numpy()
+        true_age_all = torch.cat(true_age, dim=0).numpy()
+        n_seg = len(pred_gender_all)
+        if len(all_participant_ids) != n_seg:
+            raise ValueError(
+                f"Participant-level aggregation requires one participant_id per segment. "
+                f"Got {len(all_participant_ids)} participant_ids for {n_seg} segments."
+            )
+        probs_gender = torch.softmax(torch.from_numpy(pred_gender_all), dim=1).numpy()
+        probs_age = torch.softmax(torch.from_numpy(pred_age_all), dim=1).numpy()
+        pred_gender_cls = np.argmax(probs_gender, axis=1)
+        pred_age_cls = np.argmax(probs_age, axis=1)
+        pid_list = all_participant_ids
+        if aggregate_participant_level_classification is not None:
+            _, g_true_mp, g_pred_mp, g_prob_mp, g_true_mv, g_pred_mv, g_prob_mv = aggregate_participant_level_classification(
+                pred_gender_cls, true_gender_all, pid_list, probs_gender
+            )
+            _, a_true_mp, a_pred_mp, a_prob_mp, a_true_mv, a_pred_mv, a_prob_mv = aggregate_participant_level_classification(
+                pred_age_cls, true_age_all, pid_list, probs_age
+            )
+        else:
+            _, g_true_mp, g_pred_mp, g_prob_mp = aggregate_predictions_by_group(
+                pred_gender_cls, true_gender_all, pid_list,
+                prediction_type='classification', aggregation=AGGREGATION_MEAN_PROB,
+                probabilities=probs_gender)
+            _, a_true_mp, a_pred_mp, a_prob_mp = aggregate_predictions_by_group(
+                pred_age_cls, true_age_all, pid_list,
+                prediction_type='classification', aggregation=AGGREGATION_MEAN_PROB,
+                probabilities=probs_age)
+            _, g_true_mv, g_pred_mv, g_prob_mv = aggregate_predictions_by_group(
+                pred_gender_cls, true_gender_all, pid_list,
+                prediction_type='classification', aggregation=AGGREGATION_MAJORITY_VOTE,
+                probabilities=probs_gender)
+            _, a_true_mv, a_pred_mv, a_prob_mv = aggregate_predictions_by_group(
+                pred_age_cls, true_age_all, pid_list,
+                prediction_type='classification', aggregation=AGGREGATION_MAJORITY_VOTE,
+                probabilities=probs_age)
+        # Metrics from predictions; use probabilities when available (for ROC etc.), else predictions (accuracy only)
+        g_mp = utils.get_metrics(
+            g_prob_mp if g_prob_mp is not None else g_pred_mp,
+            g_true_mp, metrics, is_binary=False
+        )
+        a_mp = utils.get_metrics(
+            a_prob_mp if a_prob_mp is not None else a_pred_mp,
+            a_true_mp, metrics, is_binary=False
+        )
+        g_mv = utils.get_metrics(
+            g_prob_mv if g_prob_mv is not None else g_pred_mv,
+            g_true_mv, metrics, is_binary=False
+        )
+        a_mv = utils.get_metrics(
+            a_prob_mv if a_prob_mv is not None else a_pred_mv,
+            a_true_mv, metrics, is_binary=False
+        )
+        ret['segment_metrics'] = {k: v for k, v in ret.items() if k not in ('loss',)}
+        ret['participant_mean_prob_metrics'] = {'gender_head': g_mp, 'age_head': a_mp,
+            'accuracy': (g_mp['accuracy'] + a_mp['accuracy']) / 2.0}
+        ret['participant_metrics'] = {'gender_head': g_mv, 'age_head': a_mv,
+            'accuracy': (g_mv['accuracy'] + a_mv['accuracy']) / 2.0}
+    elif do_agg and not is_multi_output:
+        # pred/true are already numpy after the single-output branch above
+        pred_all = pred
+        true_all = true
+        if len(all_participant_ids) != len(pred_all):
+            raise ValueError(
+                f"Participant-level aggregation requires one participant_id per segment. "
+                f"Got {len(all_participant_ids)} participant_ids for {len(pred_all)} segments."
+            )
+        if is_binary:
+            probs = pred_all
+            pred_cls = (probs > 0.5).astype(np.int64)
+        else:
+            probs = torch.softmax(torch.from_numpy(pred_all), dim=1).numpy()
+            pred_cls = np.argmax(probs, axis=1)
+        _, true_mp, pred_mp, prob_mp = aggregate_predictions_by_group(
+            pred_cls, true_all, all_participant_ids,
+            prediction_type='classification', aggregation=AGGREGATION_MEAN_PROB,
+            probabilities=probs)
+        _, true_mv, pred_mv, prob_mv = aggregate_predictions_by_group(
+            pred_cls, true_all, all_participant_ids,
+            prediction_type='classification', aggregation=AGGREGATION_MAJORITY_VOTE,
+            probabilities=probs)
+        ret['segment_metrics'] = {k: v for k, v in ret.items() if k not in ('loss',)}
+        # Multiclass: pass predictions (class indices) so participant-level accuracy is (pred==true).mean().
+        # Binary: use probabilities when available (for ROC etc.), else predictions.
+        if is_binary:
+            out_mp = prob_mp if prob_mp is not None else pred_mp
+            out_mv = prob_mv if prob_mv is not None else pred_mv
+        else:
+            out_mp = pred_mp
+            out_mv = pred_mv
+        ret['participant_mean_prob_metrics'] = utils.get_metrics(out_mp, true_mp, metrics, is_binary, 0.5)
+        ret['participant_metrics'] = utils.get_metrics(out_mv, true_mv, metrics, is_binary, 0.5)
+
     return ret
 
 
@@ -608,12 +738,14 @@ def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length,
             random_seed=random_seed
         )[2]  # Get test dataset (index 2)
         
+        # drop_last=True so every batch has full size; avoids DataParallel scatter
+        # giving empty chunks when batch size < num GPUs (TypeError: forward() missing 1 required positional argument: 'x')
         return torch.utils.data.DataLoader(
             test_dataset,
             batch_size=64,  # Use reasonable batch size for evaluation
             num_workers=4,
             pin_memory=True,
-            drop_last=False
+            drop_last=True,
         )
     
     active_loader = _create_task_type_loader("active")
