@@ -19,8 +19,14 @@ from typing import Dict, List, Tuple, Any, Optional, Union, Iterator
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from torch.utils.data import IterableDataset
 
-# Add the data_processing directory to the path
-sys.path.append(str(Path(__file__).parent.parent / "data_processing"))
+# Add project root and data_processing so that data_processing package and its
+# internal imports (constants, target_transforms) resolve when LaBraM runs from its own dir.
+_project_root = Path(__file__).resolve().parent.parent
+_data_processing_dir = _project_root / "data_processing"
+for _path in (_project_root, _data_processing_dir):
+    _path_str = str(_path)
+    if _path_str not in sys.path:
+        sys.path.insert(0, _path_str)
 
 from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
 # Import MultiFileEEGDataset for type hints (optional, may not be available)
@@ -153,24 +159,41 @@ class LaBraMEEGDataset(IterableDataset):
         else:
             raise ValueError(f"Unknown target_type: {self.target_type}")
     
-    def __iter__(self) -> Iterator[Tuple[torch.Tensor, Any]]:
+    def __iter__(self) -> Iterator[Tuple[torch.Tensor, Any, Optional[str]]]:
         """
-        Iterate through the dataset, yielding (X, Y) tuples in LaBraM format.
+        Iterate through the dataset, yielding (X, Y, participant_id) in LaBraM format.
+        participant_id is used for participant-level aggregation (e.g. majority vote).
         
         Yields:
-            Tuple of (X, Y) where X is EEG data tensor and Y is the label
+            Tuple of (X, Y, participant_id) where X is EEG data, Y is the label,
+            and participant_id is from metadata (None if absent).
         """
         for sample in self.eeg_dataset:
             # Extract EEG data
             eeg_data = sample['eeg_data']
-            
-            # Apply resampling if needed
             eeg_data = self._resample_if_needed(eeg_data)
-            
-            # Extract label based on target type
             label = self._extract_label(sample)
-            
-            yield eeg_data, label
+            participant_id = sample.get('participant_id')
+            yield eeg_data, label, participant_id
+
+
+def collate_labram_with_participant_ids(batch):
+    """
+    Collate batch of (eeg, label, participant_id) into (eeg_stacked, label_stacked, participant_ids).
+    Use with DataLoader when participant-level aggregation (e.g. majority vote) is needed.
+    """
+    eeg = torch.stack([b[0] for b in batch])
+    labels = [b[1] for b in batch]
+    if isinstance(labels[0], tuple):
+        # Multi-output: (gender, age)
+        label = (
+            torch.stack([l[0] for l in labels]),
+            torch.stack([l[1] for l in labels]),
+        )
+    else:
+        label = torch.stack(labels) if torch.is_tensor(labels[0]) else torch.tensor(labels)
+    participant_ids = [b[2] for b in batch]
+    return (eeg, label, participant_ids)
 
 
 def _get_dataset_config(dataset_type: str) -> Tuple[str, Optional[callable], Optional[callable], Optional[callable]]:
