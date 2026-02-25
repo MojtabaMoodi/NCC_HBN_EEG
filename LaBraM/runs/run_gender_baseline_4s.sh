@@ -89,6 +89,19 @@ unset MASTER_PORT
 unset SLURM_PROCID
 # Do not set CUDA_VISIBLE_DEVICES here; use the environment (e.g. SLURM sets it when GPUs are allocated).
 
+# Parse script arguments: pass --output_dir DIR and/or --log_dir DIR when running
+OUTPUT_DIR_OVERRIDE=""
+LOG_DIR_OVERRIDE=""
+OTHER_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --output_dir) OUTPUT_DIR_OVERRIDE="$2"; shift 2 ;;
+    --log_dir)    LOG_DIR_OVERRIDE="$2"; shift 2 ;;
+    *)            OTHER_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${OTHER_ARGS[@]}"
+
 # Dataset configuration
 DATASET="gender_baseline"
 NB_CLASSES=1
@@ -101,14 +114,15 @@ NB_CLASSES=1
 #   - 16 for cross-task CV with 4s segments (eval uses 1.5x = 24) - increased from 8
 EPOCHS=50
 BATCH_SIZE=256
-LEARNING_RATE=0.0005
+# Conservative LR and clip_grad to reduce training collapse (val acc drop then NaN)
+LEARNING_RATE=0.0002
 WEIGHT_DECAY=0.05
 WARMUP_EPOCHS=5
 MIN_LR=1e-5
 DROP_PATH=0.1
 SMOOTHING=0.0
 LAYER_DECAY=0.65
-CLIP_GRAD=3.0
+CLIP_GRAD=1.0
 LAYER_SCALE_INIT_VALUE=0.1
 MODEL_EMA_DECAY=0.996
 
@@ -119,9 +133,11 @@ SEGMENT_LENGTH="4s"
 MODEL="labram_base_patch200_200"
 PRETRAINED_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth"
 
-# Output configuration
-OUTPUT_DIR="./outputs/${DATASET}_${SEGMENT_LENGTH}"
-LOG_DIR="./logs/${DATASET}_${SEGMENT_LENGTH}"
+# Output configuration (defaults; overridden by --output_dir/--log_dir when running the script)
+OUTPUT_DIR="${OUTPUT_DIR:-./outputs/${DATASET}_${SEGMENT_LENGTH}}"
+LOG_DIR="${LOG_DIR:-./logs/${DATASET}_${SEGMENT_LENGTH}}"
+[[ -n "${OUTPUT_DIR_OVERRIDE:-}" ]] && OUTPUT_DIR="$OUTPUT_DIR_OVERRIDE"
+[[ -n "${LOG_DIR_OVERRIDE:-}" ]] && LOG_DIR="$LOG_DIR_OVERRIDE"
 
 # Create output directories
 mkdir -p "${OUTPUT_DIR}"
@@ -149,6 +165,8 @@ if [ -f "$HOME/miniconda3/envs/eeg_env/bin/python" ]; then
 fi
 
 # Run the fine-tuning (handles CV automatically)
+# Unbuffered output so progress appears in log file when stdout is redirected
+export PYTHONUNBUFFERED=1
 "$PYTHON_CMD" run_class_finetuning.py \
     --model $MODEL \
     --finetune $PRETRAINED_PATH \

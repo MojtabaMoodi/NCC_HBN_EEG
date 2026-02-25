@@ -11,6 +11,19 @@ unset MASTER_ADDR
 unset MASTER_PORT
 unset SLURM_PROCID
 
+# Parse script arguments: pass --output_dir DIR and/or --log_dir DIR when running
+OUTPUT_DIR_OVERRIDE=""
+LOG_DIR_OVERRIDE=""
+OTHER_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --output_dir) OUTPUT_DIR_OVERRIDE="$2"; shift 2 ;;
+    --log_dir)    LOG_DIR_OVERRIDE="$2"; shift 2 ;;
+    *)            OTHER_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${OTHER_ARGS[@]}"
+
 # Dataset configuration
 DATASET="combined_baseline"
 NB_CLASSES=6
@@ -41,9 +54,10 @@ SEGMENT_LENGTH="4s"
 MODEL="labram_base_patch200_200"
 PRETRAINED_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth"
 
-# Output configuration
-OUTPUT_DIR="./outputs/${DATASET}_${SEGMENT_LENGTH}"
-LOG_DIR="./logs/${DATASET}_${SEGMENT_LENGTH}"
+OUTPUT_DIR="${OUTPUT_DIR:-./outputs/${DATASET}_${SEGMENT_LENGTH}}"
+LOG_DIR="${LOG_DIR:-./logs/${DATASET}_${SEGMENT_LENGTH}}"
+[[ -n "${OUTPUT_DIR_OVERRIDE:-}" ]] && OUTPUT_DIR="$OUTPUT_DIR_OVERRIDE"
+[[ -n "${LOG_DIR_OVERRIDE:-}" ]] && LOG_DIR="$LOG_DIR_OVERRIDE"
 
 # Create output directories
 mkdir -p "${OUTPUT_DIR}"
@@ -65,6 +79,8 @@ echo "=========================================="
 cd "$(dirname "$0")/.."
 
 # Run the fine-tuning (handles CV automatically)
+# Unbuffered output so progress appears in log file when stdout is redirected
+export PYTHONUNBUFFERED=1
 python run_class_finetuning.py \
     --model $MODEL \
     --finetune $PRETRAINED_PATH \
