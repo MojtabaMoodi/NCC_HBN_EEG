@@ -79,6 +79,8 @@ from labram_dataset import (
         # prepare_labram_cross_task_cross_validation_datasets
     )
 
+# Single source of truth for checkpoint filenames (used by save_model and run_class_finetuning)
+CHECKPOINT_BEST_FILENAME = 'checkpoint-best.pth'
 
 standard_1020 = [
     'FP1', 'FPZ', 'FP2', 
@@ -655,12 +657,11 @@ def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler, mo
     output_dir = Path(args.output_dir)
     
     if not getattr(args, 'enable_deepspeed', False):
-        # Only save checkpoint-best.pth, skip all other periodic checkpoints
+        # Only save best checkpoint, skip all other periodic checkpoints
         if epoch != 'best':
             return  # Skip all periodic checkpoint saving
         
-        # Save only the best model checkpoint
-        checkpoint_path = output_dir / 'checkpoint-best.pth'
+        checkpoint_path = output_dir / CHECKPOINT_BEST_FILENAME
         
         # Lightweight checkpoint - minimal info needed for inference
         to_save = {
@@ -683,7 +684,7 @@ def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler, mo
         client_state = {'epoch': epoch}
         if model_ema is not None:
             client_state['model_ema'] = get_state_dict(model_ema)
-        model.save_checkpoint(save_dir=args.output_dir, tag="checkpoint-best", client_state=client_state)           
+        model.save_checkpoint(save_dir=args.output_dir, tag=CHECKPOINT_BEST_FILENAME.replace('.pth', ''), client_state=client_state)           
 
 def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, model_ema=None, optimizer_disc=None):
     output_dir = Path(args.output_dir)
