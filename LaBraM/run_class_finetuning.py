@@ -10,6 +10,7 @@
 
 import argparse
 import datetime
+import sys
 from pyexpat import model
 import numpy as np
 import time
@@ -38,9 +39,10 @@ from dataset_config import (
     get_dataset_config,
     get_dataset_type_and_params,
     get_data_path,
-    DATA_PATHS
+    DATA_PATHS,
 )
 from labram_dataset import collate_labram_with_participant_ids
+from data_processing.eeg_dataset import compute_class_weights_from_train_hdf5
 
 def get_args():
     parser = argparse.ArgumentParser('LaBraM fine-tuning and evaluation script for EEG classification', add_help=False)
@@ -190,7 +192,10 @@ def get_args():
                         help='Segment length: 1s or 4s (only for custom datasets)')
     
     parser.add_argument('--data_path', default=None, type=str,
-                        help='Path to data directory (auto-detected if not provided)')
+                        help='HDF5 data directory (train/val/test multipart: eeg_data_{train,val,test}_{1s,2s,4s}_part*.h5). Required if EEG_HDF5_DIR is not set.')
+    # Class imbalance (binary / gender): same as CNN — inverse-frequency weight for positive class.
+    parser.add_argument('--class_weight_power', default=1.0, type=float,
+                        help='Exponent for class weights from train data (default 1.0). Use >1 (e.g. 1.5) for stronger minority weighting. Only for binary (gender).')
 
     known_args, _ = parser.parse_known_args()
 
@@ -584,7 +589,31 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
     if args.nb_classes == 1:
-        criterion = torch.nn.BCEWithLogitsLoss()
+        # Binary (gender): use pos_weight from train class counts to prevent collapse to majority class (same idea as CNN).
+        bce_pos_weight = None
+        if args.dataset in CUSTOM_DATASET_CONFIGS:
+            hdf5_dir = args.data_path if args.data_path is not None else get_data_path(getattr(args, 'segment_length', '1s'))
+            segment_length_str = getattr(args, 'segment_length', '1s')
+            dataset_type, ds_kwargs = get_dataset_type_and_params(args.dataset)
+            if dataset_type == 'gender':
+                task_type = ds_kwargs.get('train_task_type', ds_kwargs.get('task_type', 'both'))
+                weight_power = getattr(args, 'class_weight_power', 1.0)
+                try:
+                    weights = compute_class_weights_from_train_hdf5(
+                        hdf5_dir, segment_length_str, 'gender',
+                        task_type=task_type, weight_power=weight_power,
+                    )
+                    if len(weights) == 2 and weights[0] > 0:
+                        bce_pos_weight = weights[1] / weights[0]
+                        print(f"Binary class weights from train data (gender): {[round(w, 4) for w in weights]} -> BCE pos_weight={bce_pos_weight:.4f}")
+                except Exception as e:
+                    print(f"Could not compute class weights for BCE: {e}. Using unweighted BCE.")
+        if bce_pos_weight is not None:
+            pos_t = torch.tensor([bce_pos_weight], dtype=torch.float32, device=device)
+            criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_t)
+            print("Using BCEWithLogitsLoss(pos_weight=...) to reduce majority-class collapse")
+        else:
+            criterion = torch.nn.BCEWithLogitsLoss()
     elif args.smoothing > 0.:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
@@ -629,170 +658,191 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             print(f"  Test: {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
         print(f"{'='*60}\n")
     
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            # Note: IterableDataset doesn't use samplers, so no set_epoch needed
-            # For IterableDataset, each epoch naturally starts from the beginning
-            pass
-        if log_writer is not None:
-            log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer,
-            device, epoch, loss_scaler, args.clip_grad, model_ema,
-            log_writer=log_writer, start_steps=epoch * num_training_steps_per_epoch,
-            lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
-            num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq, 
-            ch_names=ch_names, is_binary=args.nb_classes == 1
-        )
-        
-        # Get current learning rate
-        current_lr = optimizer.param_groups[0]['lr']
-        
-        if args.output_dir and args.save_ckpt:
-            utils.save_model(
-                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema, save_ckpt_freq=args.save_ckpt_freq)
-            
-        if data_loader_val is not None:
-            val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                                 aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
-            test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                                  aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
-            
-            # Evaluate by task type (active/passive) every 5 epochs or on last epoch
-            task_type_results = None
-            if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epochs:
-                if args.dataset in CUSTOM_DATASET_CONFIGS:
-                    try:
-                        # Get dataset type and data path
-                        dataset_type, _ = get_dataset_type_and_params(args.dataset)
-                        if args.data_path is not None:
-                            hdf5_dir = args.data_path
-                        else:
-                            hdf5_dir = get_data_path(getattr(args, 'segment_length', '1s'))
-                        segment_length = getattr(args, 'segment_length', '1s')
-                        
-                        task_type_results = evaluate_by_task_type(
-                            model, device, dataset_type, hdf5_dir, segment_length,
-                            ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                            random_seed=args.seed
-                        )
-                        
-                        # Print task-type-specific results
-                        for task_type, results in task_type_results.items():
-                            acc = results.get('accuracy', 0.0) * 100
-                            num_samples = results.get('num_samples', 0)
-                            print(f"  {task_type.upper()} Test Acc: {acc:.4f}% (n={num_samples:,})")
-                    except Exception as e:
-                        print(f"  Warning: Could not evaluate by task type: {e}")
-            
-            # Print epoch summary in a clear format (matching CNN format)
-            train_loss = train_stats.get('loss', 0.0)
-            train_acc = train_stats.get('class_acc', 0.0) * 100  # Convert to percentage
-            val_loss = val_stats.get('loss', 0.0)
-            val_acc = val_stats.get('accuracy', 0.0) * 100  # Convert to percentage
-            print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
-                  f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                  f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
-                  f"LR: {current_lr:.6f}")
-            
-            if max_accuracy < val_stats["accuracy"]:
-                max_accuracy = val_stats["accuracy"]
-                max_accuracy_test = test_stats["accuracy"]
-                
-                # Clear GPU cache before saving to avoid OOM
-                torch.cuda.empty_cache()
-                
-                if args.output_dir and args.save_ckpt:
-                    utils.save_model(
-                        args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                        loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
-
-            print(f'Max accuracy val: {max_accuracy * 100:.2f}%, max accuracy test: {max_accuracy_test * 100:.2f}%')
-            if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
-                seg_acc = test_stats['segment_metrics'].get('accuracy')
-                part_mp = test_stats.get('participant_mean_prob_metrics') or {}
-                part_mv = test_stats.get('participant_metrics') or {}
-                part_mp_acc = part_mp.get('accuracy')
-                part_mv_acc = part_mv.get('accuracy')
-                if seg_acc is not None:
-                    _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
-                    _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
-                    print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
+    training_unstable = False
+    early_stop_collapse = False
+    try:
+        for epoch in range(args.start_epoch, args.epochs):
+            if early_stop_collapse:
+                break
+            if args.distributed:
+                # Note: IterableDataset doesn't use samplers, so no set_epoch needed
+                # For IterableDataset, each epoch naturally starts from the beginning
+                pass
             if log_writer is not None:
-                for key, value in val_stats.items():
-                    if key == 'accuracy':
-                        log_writer.update(accuracy=value, head="val", step=epoch)
-                    elif key == 'balanced_accuracy':
-                        log_writer.update(balanced_accuracy=value, head="val", step=epoch)
-                    elif key == 'f1_weighted':
-                        log_writer.update(f1_weighted=value, head="val", step=epoch)
-                    elif key == 'pr_auc':
-                        log_writer.update(pr_auc=value, head="val", step=epoch)
-                    elif key == 'roc_auc':
-                        log_writer.update(roc_auc=value, head="val", step=epoch)
-                    elif key == 'cohen_kappa':
-                        log_writer.update(cohen_kappa=value, head="val", step=epoch)
-                    elif key == 'loss':
-                        log_writer.update(loss=value, head="val", step=epoch)
-                for key, value in test_stats.items():
-                    if key == 'accuracy':
-                        log_writer.update(accuracy=value, head="test", step=epoch)
-                    elif key == 'balanced_accuracy':
-                        log_writer.update(balanced_accuracy=value, head="test", step=epoch)
-                    elif key == 'f1_weighted':
-                        log_writer.update(f1_weighted=value, head="test", step=epoch)
-                    elif key == 'pr_auc':
-                        log_writer.update(pr_auc=value, head="test", step=epoch)
-                    elif key == 'roc_auc':
-                        log_writer.update(roc_auc=value, head="test", step=epoch)
-                    elif key == 'cohen_kappa':
-                        log_writer.update(cohen_kappa=value, head="test", step=epoch)
-                    elif key == 'loss':
-                        log_writer.update(loss=value, head="test", step=epoch)
-                
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         **{f'val_{k}': v for k, v in val_stats.items()},
-                         **{f'test_{k}': v for k, v in test_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
-            if test_stats.get('segment_metrics') is not None:
-                log_stats['test_segment_metrics'] = test_stats['segment_metrics']
-            if test_stats.get('participant_mean_prob_metrics') is not None:
-                log_stats['test_participant_mean_prob_metrics'] = test_stats['participant_mean_prob_metrics']
-            if test_stats.get('participant_metrics') is not None:
-                log_stats['test_participant_metrics'] = test_stats['participant_metrics']
-
-            # Add task type counts if available (from first epoch)
-            if epoch == 0:
-                if train_stats.get('task_type_counts'):
-                    log_stats['train_task_type_counts'] = train_stats['task_type_counts']
-                if val_task_counts:
-                    log_stats['val_task_type_counts'] = val_task_counts
-                if test_task_counts:
-                    log_stats['test_task_type_counts'] = test_task_counts
+                log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
+            train_stats = train_one_epoch(
+                model, criterion, data_loader_train, optimizer,
+                device, epoch, loss_scaler, args.clip_grad, model_ema,
+                log_writer=log_writer, start_steps=epoch * num_training_steps_per_epoch,
+                lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
+                num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
+                ch_names=ch_names, is_binary=args.nb_classes == 1
+            )
+        
+            # Get current learning rate
+            current_lr = optimizer.param_groups[0]['lr']
             
-            # Add task-type-specific metrics if available
-            if task_type_results is not None:
-                log_stats['task_type_metrics'] = {
-                    task_type: {
-                        'accuracy': results.get('accuracy', 0.0),
-                        'f1_weighted': results.get('f1_weighted', 0.0),
-                        'balanced_accuracy': results.get('balanced_accuracy', 0.0),
-                        'num_samples': results.get('num_samples', 0),
+            if args.output_dir and args.save_ckpt:
+                utils.save_model(
+                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema, save_ckpt_freq=args.save_ckpt_freq)
+                
+            if data_loader_val is not None:
+                val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                                     aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
+                test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                                      aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
+                
+                # Evaluate by task type (active/passive) every 5 epochs or on last epoch
+                task_type_results = None
+                if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epochs:
+                    if args.dataset in CUSTOM_DATASET_CONFIGS:
+                        try:
+                            # Get dataset type and data path
+                            dataset_type, _ = get_dataset_type_and_params(args.dataset)
+                            if args.data_path is not None:
+                                hdf5_dir = args.data_path
+                            else:
+                                hdf5_dir = get_data_path(getattr(args, 'segment_length', '1s'))
+                            segment_length = getattr(args, 'segment_length', '1s')
+                            
+                            task_type_results = evaluate_by_task_type(
+                                model, device, dataset_type, hdf5_dir, segment_length,
+                                ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
+                                random_seed=args.seed
+                            )
+                            
+                            # Print task-type-specific results
+                            for task_type, results in task_type_results.items():
+                                acc = results.get('accuracy', 0.0) * 100
+                                num_samples = results.get('num_samples', 0)
+                                print(f"  {task_type.upper()} Test Acc: {acc:.4f}% (n={num_samples:,})")
+                        except Exception as e:
+                            print(f"  Warning: Could not evaluate by task type: {e}")
+                
+                # Print epoch summary in a clear format (matching CNN format)
+                train_loss = train_stats.get('loss', 0.0)
+                train_acc = train_stats.get('class_acc', 0.0) * 100  # Convert to percentage
+                val_loss = val_stats.get('loss', 0.0)
+                val_acc = val_stats.get('accuracy', 0.0) * 100  # Convert to percentage
+                print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
+                      f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                      f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
+                      f"LR: {current_lr:.6f}")
+                
+                if max_accuracy < val_stats["accuracy"]:
+                    max_accuracy = val_stats["accuracy"]
+                    max_accuracy_test = test_stats["accuracy"]
+                    
+                    # Clear GPU cache before saving to avoid OOM
+                    torch.cuda.empty_cache()
+                    
+                    if args.output_dir and args.save_ckpt:
+                        utils.save_model(
+                            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                            loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
+    
+                print(f'Max accuracy val: {max_accuracy * 100:.2f}%, max accuracy test: {max_accuracy_test * 100:.2f}%')
+                # Early stop on training collapse: if we had clearly above-random val acc and it drops to near-random, stop
+                nb_classes = max(1, args.nb_classes)
+                random_baseline = 1.0 / nb_classes
+                min_good_accuracy = random_baseline + 0.30
+                collapse_threshold = random_baseline + 0.15
+                if max_accuracy > min_good_accuracy and val_stats["accuracy"] < collapse_threshold:
+                    best_ckpt_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
+                    print(f"\n⚠️  Training collapse detected: val accuracy dropped from {max_accuracy*100:.1f}% to {val_stats['accuracy']*100:.1f}%. "
+                          f"Stopping early. Use {best_ckpt_path} (already saved) for evaluation.")
+                    early_stop_collapse = True
+                    break  # exit loop from inside the for-body (avoids lint error on break outside loop)
+                if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
+                    seg_acc = test_stats['segment_metrics'].get('accuracy')
+                    part_mp = test_stats.get('participant_mean_prob_metrics') or {}
+                    part_mv = test_stats.get('participant_metrics') or {}
+                    part_mp_acc = part_mp.get('accuracy')
+                    part_mv_acc = part_mv.get('accuracy')
+                    if seg_acc is not None:
+                        _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
+                        _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
+                        print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
+                if log_writer is not None:
+                    for key, value in val_stats.items():
+                        if key == 'accuracy':
+                            log_writer.update(accuracy=value, head="val", step=epoch)
+                        elif key == 'balanced_accuracy':
+                            log_writer.update(balanced_accuracy=value, head="val", step=epoch)
+                        elif key == 'f1_weighted':
+                            log_writer.update(f1_weighted=value, head="val", step=epoch)
+                        elif key == 'pr_auc':
+                            log_writer.update(pr_auc=value, head="val", step=epoch)
+                        elif key == 'roc_auc':
+                            log_writer.update(roc_auc=value, head="val", step=epoch)
+                        elif key == 'cohen_kappa':
+                            log_writer.update(cohen_kappa=value, head="val", step=epoch)
+                        elif key == 'loss':
+                            log_writer.update(loss=value, head="val", step=epoch)
+                    for key, value in test_stats.items():
+                        if key == 'accuracy':
+                            log_writer.update(accuracy=value, head="test", step=epoch)
+                        elif key == 'balanced_accuracy':
+                            log_writer.update(balanced_accuracy=value, head="test", step=epoch)
+                        elif key == 'f1_weighted':
+                            log_writer.update(f1_weighted=value, head="test", step=epoch)
+                        elif key == 'pr_auc':
+                            log_writer.update(pr_auc=value, head="test", step=epoch)
+                        elif key == 'roc_auc':
+                            log_writer.update(roc_auc=value, head="test", step=epoch)
+                        elif key == 'cohen_kappa':
+                            log_writer.update(cohen_kappa=value, head="test", step=epoch)
+                        elif key == 'loss':
+                            log_writer.update(loss=value, head="test", step=epoch)
+                    
+                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                             **{f'val_{k}': v for k, v in val_stats.items()},
+                             **{f'test_{k}': v for k, v in test_stats.items()},
+                             'epoch': epoch,
+                             'n_parameters': n_parameters}
+                if test_stats.get('segment_metrics') is not None:
+                    log_stats['test_segment_metrics'] = test_stats['segment_metrics']
+                if test_stats.get('participant_mean_prob_metrics') is not None:
+                    log_stats['test_participant_mean_prob_metrics'] = test_stats['participant_mean_prob_metrics']
+                if test_stats.get('participant_metrics') is not None:
+                    log_stats['test_participant_metrics'] = test_stats['participant_metrics']
+    
+                # Add task type counts if available (from first epoch)
+                if epoch == 0:
+                    if train_stats.get('task_type_counts'):
+                        log_stats['train_task_type_counts'] = train_stats['task_type_counts']
+                    if val_task_counts:
+                        log_stats['val_task_type_counts'] = val_task_counts
+                    if test_task_counts:
+                        log_stats['test_task_type_counts'] = test_task_counts
+                
+                # Add task-type-specific metrics if available
+                if task_type_results is not None:
+                    log_stats['task_type_metrics'] = {
+                        task_type: {
+                            'accuracy': results.get('accuracy', 0.0),
+                            'f1_weighted': results.get('f1_weighted', 0.0),
+                            'balanced_accuracy': results.get('balanced_accuracy', 0.0),
+                            'num_samples': results.get('num_samples', 0),
+                        }
+                        for task_type, results in task_type_results.items()
                     }
-                    for task_type, results in task_type_results.items()
-                }
-        else:
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
+            else:
+                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                             'epoch': epoch,
+                             'n_parameters': n_parameters}
+    
+            if args.output_dir and utils.is_main_process():
+                if log_writer is not None:
+                    log_writer.flush()
+                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+                    f.write(json.dumps(log_stats) + "\n")
 
-        if args.output_dir and utils.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
-            with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                f.write(json.dumps(log_stats) + "\n")
+    except RuntimeError as e:
+        training_unstable = True
+        print(f"\n{e}")
+        print("Loading best checkpoint for final evaluation (see below).")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -803,7 +853,7 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     if args.dataset in CUSTOM_DATASET_CONFIGS:
         try:
             # Load best model for final evaluation
-            best_checkpoint_path = Path(args.output_dir) / 'checkpoint-best.pth'
+            best_checkpoint_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
             if best_checkpoint_path.exists():
                 print(f"\nLoading best model from {best_checkpoint_path} for final evaluation...")
                 # Our own checkpoint may contain optimizer state; use weights_only=False for compatibility.
@@ -843,8 +893,8 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     
     # Save final model even if checkpoint saving was disabled
     if args.output_dir and not args.save_ckpt:
-        # Save final epoch model as checkpoint-best.pth for easy loading
-        final_checkpoint_path = Path(args.output_dir) / 'checkpoint-best.pth'
+        # Save final epoch model as best checkpoint for easy loading
+        final_checkpoint_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
         print(f"\nSaving final model to {final_checkpoint_path}")
         torch.save({
             'model': model_without_ddp.state_dict(),
@@ -852,10 +902,6 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             'epoch': args.epochs - 1,
             'args': args,
         }, final_checkpoint_path)
-        if model_ema is not None:
-            torch.save({
-                'model': model_ema.module.state_dict(),
-            }, Path(args.output_dir) / 'checkpoint-ema-best.pth')
     
     # Return final metrics including task-type-specific results
     final_metrics = {
@@ -889,7 +935,8 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
 
 def main(args, ds_init):
     """Main function that handles both regular and CV experiments."""
-    
+    print("LaBraM fine-tuning starting...", flush=True)
+
     # Pre-load datasets to check if this is a CV experiment
     if args.dataset in CUSTOM_DATASET_CONFIGS:
         # Get dataset configuration dynamically
@@ -912,6 +959,7 @@ def main(args, ds_init):
 
         # Check if this is a CV experiment by calling prepare_custom_dataset early
         # This will load all folds into memory, so we know if it's CV
+        print("Loading dataset configuration (this may take a moment)...", flush=True)
         try:
             result = utils.prepare_custom_dataset(dataset_type, data_path, **kwargs)
             
