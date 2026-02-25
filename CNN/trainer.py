@@ -638,9 +638,14 @@ class EEGTrainer:
         if hasattr(self, '_val_collapse_batch_count'):
             self._val_collapse_batch_count = 0
         val_collapse_error = None  # Break then raise so DataLoader iterator can close
+        val_batch_start = time.time()
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_loader):
                 num_batches = batch_idx + 1
+                if batch_idx > 0 and batch_idx % 1000 == 0:
+                    elapsed = time.time() - val_batch_start
+                    print(f"  Validation: {batch_idx} batches, elapsed: {elapsed:.1f}s")
+                    sys.stdout.flush()
                 # Non-blocking transfer for faster data loading
                 inputs = batch['eeg_data'].to(self.device, non_blocking=True)
                 

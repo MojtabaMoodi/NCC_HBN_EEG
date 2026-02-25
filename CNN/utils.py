@@ -9,11 +9,12 @@ import numpy as np
 from typing import Any, Dict, List, Union
 from config import DataConfig
 
-# Data paths and segment lengths (HDF5 format)
+# Data paths and segment lengths (HDF5 format). All segment lengths use the same dir (multipart: part00, part01, ...).
+# Set to scratch output from: python preprocess_eeg_to_hdf5.py --data_root .../preprocessed_new --output_dir .../processed_eeg_data_hdf5 --num_channels 60 --window_sizes 1s 2s 4s
 DATA_PATHS = {
-    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '2s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
+    '1s': "/home/mojtabam/scratch/processed_eeg_data_hdf5",
+    '2s': "/home/mojtabam/scratch/processed_eeg_data_hdf5",
+    '4s': "/home/mojtabam/scratch/processed_eeg_data_hdf5"
 }
 
 SEGMENT_LENGTHS = {
@@ -58,11 +59,9 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
     # With 'spawn' context, each worker uses significant memory (full Python env)
     # So we need fewer workers than with 'fork' context
     if segment_length == '1s':
-        # 1s has many more samples (955K vs 308K for 4s)
-        # With maximum batch size (6144), we have very few batches, so many workers help
-        # without causing excessive HDF5 file contention
-        # With 64GB RAM, we can support more workers (each worker uses ~1-2GB with spawn context)
-        num_workers = max(24, 6 * num_gpus)  # Use 24 workers minimum, or 6 per GPU (optimized for 64GB RAM)
+        # 1s has many more samples (955K vs 308K for 4s). Use enough workers for throughput
+        # but cap at 16 to avoid PyTorch warning and potential DataLoader slowness/freeze.
+        num_workers = min(16, max(8, 6 * num_gpus))
     elif segment_length == '2s':
         # 2s: use fewer workers to prevent OOM (2s segments are larger)
         num_workers = max(6, 2 * num_gpus)  # 2 workers per GPU
