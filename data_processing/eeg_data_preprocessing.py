@@ -375,6 +375,11 @@ class EEGDataPreprocessor:
         Uses a two-pass approach to minimize memory usage:
         1. First pass: Collect only metadata to create splits
         2. Second pass: Process participants and save directly to split files
+
+        Shuffling for age/gender prediction: Participant-level splits are stratified by
+        stratify_by (gender, age, or both). Samples are written in participant order;
+        training data must be shuffled at load time (EEGDataset shuffle=True), which
+        mixes participants within batches and avoids batch-level correlations.
         
         Args:
             train_ratio: Ratio of data for training
@@ -1888,7 +1893,7 @@ def main():
                        help='Ratio of data for testing')
     parser.add_argument('--random_seed', type=int, default=42,
                        help='Random seed for reproducible splits')
-    parser.add_argument('--stratify_by', type=str, default='gender',
+    parser.add_argument('--stratify_by', type=str, default='both',
                        choices=['gender', 'age', 'both'],
                        help='Field to stratify by')
     

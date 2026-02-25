@@ -8,7 +8,7 @@ This comprehensive guide covers the entire EEG data processing pipeline, from ra
 - **Configurable Window Sizes**: Choose which segment lengths to process (1s, 2s, 4s) to save time and storage
 - **Multi-Part File Support**: Automatic file splitting for all window sizes prevents large file performance issues
 - **Improved Performance**: Large datasets are automatically split into multiple files (100K samples per file)
-- **Command-Line Script**: New `preprocess_128channels.py` script for easy preprocessing of 128-channel data
+- **Command-Line Script**: `preprocess_eeg_to_hdf5.py` for preprocessing 60ch .npy or 128ch .h5 to HDF5 (age/gender)
 - **Imbalanced data (gender/age)**: Optional stratified train batches or oversampling via `train_balance_method` in `create_train_val_test_loaders`; `compute_class_weights_from_train_hdf5()` for inverse-frequency class weights (e.g. for use in loss when not oversampling)
 
 ## Quick Start
@@ -337,22 +337,18 @@ preprocessor.process_all_participants(
 )
 ```
 
-**Using the command-line script (recommended for 128-channel data)**:
+**Using the command-line script** (`preprocess_eeg_to_hdf5.py`):
 ```bash
-# Process with 1s and 4s windows
-python preprocess_128channels.py --window_sizes 1s 4s
+# 128ch .h5: 1s and 4s windows
+python preprocess_eeg_to_hdf5.py --window_sizes 1s 4s
 
-# Process only 4s windows
-python preprocess_128channels.py --window_sizes 4s
+# 60ch .npy (preprocessed_new) for age and gender, 1s/2s/4s
+python preprocess_eeg_to_hdf5.py --data_root /path/to/preprocessed_new --output_dir /path/to/out --num_channels 60 --window_sizes 1s 2s 4s
 
-# Use custom paths and parameters
-python preprocess_128channels.py \
-    --data_root /path/to/preprocessed_128_channels \
-    --output_dir /path/to/output \
-    --window_sizes 1s 4s \
-    --num_channels 128 \
-    --stratify_by both
+# Custom paths (128ch)
+python preprocess_eeg_to_hdf5.py --data_root /path/to/preprocessed_128_channels --output_dir /path/to/output --window_sizes 1s 4s --num_channels 128 --stratify_by both
 ```
+Train/val/test splits are stratified by age and/or gender (`--stratify_by`). Training data is shuffled at load time (see Dataset and DataLoader) so batches mix participants for age/gender prediction.
 
 **Output Files**:
 - Creates HDF5 files with multi-part support (automatic splitting at 100K samples):
@@ -695,7 +691,7 @@ EEG/data_processing/
 ├── target_transforms.py        # Target transformation functions
 ├── constants.py                 # Shared constants (e.g. age/gender class bounds)
 ├── aggregation.py              # Segment→participant aggregation (majority vote, median)
-├── preprocess_128channels.py    # Script for preprocessing 128-channel .h5 files
+├── preprocess_eeg_to_hdf5.py    # Preprocess 60ch .npy or 128ch .h5 to HDF5 (age/gender)
 ├── preprocess_user_identification.py  # User identification preprocessing
 ├── multi_file_dataset.py       # Multi-file dataset support
 ├── validate_128channels.py     # Validation for 128-channel data
