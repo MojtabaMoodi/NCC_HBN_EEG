@@ -20,8 +20,8 @@ SEGMENT_LENGTH="1s"  # Use 1s segments for gender classification
 # Note: data_path is optional - if not specified, dataset_config.py will use HDF5 path automatically
 DATA_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5"
 
-# Output directory
-OUTPUT_DIR="./outputs/gender_baseline_$(date +%Y%m%d_%H%M%S)"
+# Output directory: set OUTPUT_DIR and LOG_DIR here or export before running
+OUTPUT_DIR="${OUTPUT_DIR:-./outputs/gender_baseline_$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$OUTPUT_DIR"
 
 # Model configuration (LaBraM-Base)
@@ -65,8 +65,8 @@ DISABLE_EVAL_DURING_FINETUNING=false
 MODEL_EMA=true
 MODEL_EMA_DECAY=0.996
 
-# Logging
-LOG_DIR="$OUTPUT_DIR/logs"
+# Logging (default: subdir of OUTPUT_DIR; override with LOG_DIR)
+LOG_DIR="${LOG_DIR:-$OUTPUT_DIR/logs}"
 mkdir -p "$LOG_DIR"
 
 echo "=========================================="
