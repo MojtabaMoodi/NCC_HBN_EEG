@@ -5,6 +5,8 @@ This module provides dynamic configuration generation for all experiment types,
 following DRY principles to eliminate redundant configuration dictionaries.
 """
 
+import os
+
 # Comprehensive list of all valid dataset names (matching CNN experiment naming)
 VALID_DATASET_NAMES = [
     # === AGE CLASSIFICATION EXPERIMENTS ===
@@ -48,12 +50,12 @@ DATASET_TYPE_CONFIGS = {
     'multi_output': {'nb_classes': 2, 'metrics': ["accuracy", "balanced_accuracy", "f1_weighted"]},
 }
 
-# Data paths for different segment lengths (HDF5 format)
-# Using processed_eeg_data_hdf5_no_compression to match CNN experiments
+# Data paths for different segment lengths (HDF5 format). Same dir for all; multipart: eeg_data_{train,val,test}_{1s|2s|4s}_part*.h5
+# Override with environment variable EEG_HDF5_DIR or --data_path when running.
 DATA_PATHS = {
-    '1s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '2s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression",
-    '4s': "/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_hdf5_no_compression"
+    '1s': "/home/mojtabam/scratch/processed_eeg_data_hdf5",
+    '2s': "/home/mojtabam/scratch/processed_eeg_data_hdf5",
+    '4s': "/home/mojtabam/scratch/processed_eeg_data_hdf5"
 }
 
 def get_dataset_type_and_params(dataset_name):
@@ -159,16 +161,26 @@ def get_dataset_config(dataset_name):
 
 def get_data_path(segment_length='1s'):
     """
-    Get data path for the specified segment length.
-    
+    Get HDF5 data directory for the given segment length.
+    Directory must contain multipart or single HDF5 files:
+    eeg_data_train_{1s|2s|4s}[_part*.h5], eeg_data_val_*, eeg_data_test_*.
+
+    Uses EEG_HDF5_DIR if set, otherwise DATA_PATHS[segment_length] (same as CNN).
+
     Args:
         segment_length: '1s', '2s', or '4s'
-        
+
     Returns:
-        Path to the HDF5 data directory
+        Path to the HDF5 data directory (string)
+
+    Raises:
+        ValueError: If segment_length is invalid.
     """
     if segment_length not in DATA_PATHS:
-        raise ValueError(f"Invalid segment length: {segment_length}. Must be '1s', '2s', or '4s'")
+        raise ValueError(f"Invalid segment length: {segment_length!r}. Must be '1s', '2s', or '4s'")
+    path = os.environ.get("EEG_HDF5_DIR")
+    if path and path.strip():
+        return path.strip()
     return DATA_PATHS[segment_length]
 
 # Generate the comprehensive dataset configs dynamically
