@@ -83,6 +83,19 @@ unset MASTER_ADDR
 unset MASTER_PORT
 unset SLURM_PROCID
 
+# Parse script arguments: pass --output_dir DIR and/or --log_dir DIR when running
+OUTPUT_DIR_OVERRIDE=""
+LOG_DIR_OVERRIDE=""
+OTHER_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --output_dir) OUTPUT_DIR_OVERRIDE="$2"; shift 2 ;;
+    --log_dir)    LOG_DIR_OVERRIDE="$2"; shift 2 ;;
+    *)            OTHER_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${{OTHER_ARGS[@]}}"
+
 # Dataset configuration
 DATASET="{dataset_name}"
 NB_CLASSES={config['nb_classes']}
@@ -95,16 +108,17 @@ NB_CLASSES={config['nb_classes']}
 #   - 128 for cross-task CV (1s, eval uses 1.5x = 192) - increased from 64
 #   - 16 for cross-task CV with 4s segments (eval uses 1.5x = 24) - increased from 8
 # Note: Data is loaded from HDF5 format (processed_eeg_data_hdf5)
+# Baseline: use conservative LR (2e-4) and clip_grad (1.0) to reduce training collapse risk
 EPOCHS={20 if is_cv else 50}
 BATCH_SIZE={batch_size}
-LEARNING_RATE={2e-4 if is_cross_task_cv else 5e-4}
+LEARNING_RATE={2e-4 if is_cross_task_cv else (2e-4 if not is_cv and not is_cross_task else 5e-4)}
 WEIGHT_DECAY=0.05
 WARMUP_EPOCHS=5
 MIN_LR=1e-5
 DROP_PATH=0.1
 SMOOTHING=0.0
 LAYER_DECAY=0.65
-CLIP_GRAD={10.0 if is_cross_task_cv else 3.0}
+CLIP_GRAD={10.0 if is_cross_task_cv else (1.0 if not is_cv and not is_cross_task else 3.0)}
 LAYER_SCALE_INIT_VALUE=0.1
 MODEL_EMA_DECAY=0.996
 """
@@ -136,9 +150,11 @@ SEGMENT_LENGTH="{segment_length}"
 MODEL="labram_base_patch200_200"
 PRETRAINED_PATH="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth"
 
-# Output configuration
-OUTPUT_DIR="./outputs/${{DATASET}}_${{SEGMENT_LENGTH}}"
-LOG_DIR="./logs/${{DATASET}}_${{SEGMENT_LENGTH}}"
+# Output configuration (defaults; overridden by --output_dir/--log_dir when running the script)
+OUTPUT_DIR="${{OUTPUT_DIR:-./outputs/${{DATASET}}_${{SEGMENT_LENGTH}}}}"
+LOG_DIR="${{LOG_DIR:-./logs/${{DATASET}}_${{SEGMENT_LENGTH}}}}"
+[[ -n "${{OUTPUT_DIR_OVERRIDE:-}}" ]] && OUTPUT_DIR="$OUTPUT_DIR_OVERRIDE"
+[[ -n "${{LOG_DIR_OVERRIDE:-}}" ]] && LOG_DIR="$LOG_DIR_OVERRIDE"
 
 # Create output directories
 mkdir -p "${{OUTPUT_DIR}}"
@@ -160,6 +176,8 @@ echo "=========================================="
 cd "$(dirname "$0")/.."
 
 # Run the fine-tuning (handles CV automatically)
+# Unbuffered output so progress appears in log file when stdout is redirected
+export PYTHONUNBUFFERED=1
 python run_class_finetuning.py \\
     --model $MODEL \\
     --finetune $PRETRAINED_PATH \\
