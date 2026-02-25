@@ -222,7 +222,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             if nan_params:
                 print(f"ERROR: Parameters with NaN/Inf detected: {nan_params[:5]}...")
                 print("  Model is corrupted, stopping training immediately")
-                sys.exit(1)
+                raise RuntimeError("Training unstable: model parameters contain NaN/Inf")
             
             # If learning rate is extremely small, it may cause numerical instability
             # Note: With layer decay, some layers can have very small effective LR
@@ -242,14 +242,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 print(f"  Effective LR for this layer: {current_lr:.2e}")
                 print("  This may be due to learning rate schedule being too aggressive.")
                 print("  Stopping training to prevent further corruption.")
-                sys.exit(1)
+                raise RuntimeError("Training unstable: learning rate too small")
             
             # If we've skipped too many batches in a row, stop training
-            # Reduced from 10 to 5 to catch issues earlier
             if skipped_batches > 5:
                 print(f"ERROR: Skipped {skipped_batches} batches in a row. Training unstable, stopping.")
                 print("  This suggests the model may be corrupted or there's a systematic issue.")
-                sys.exit(1)
+                raise RuntimeError("Training unstable: too many consecutive NaN/Inf batches")
             
             # Skip this batch and continue
             continue
@@ -508,8 +507,11 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
                 batch_acc = (batch_pred == batch_target).mean()
                 metric_logger.meters['accuracy'].update(batch_acc, n=batch_size)
                 
-                # For other metrics, only update if batch has both classes
-                # This prevents showing 0.0000 during progress
+                # Update balanced_accuracy only when batch has both classes.
+                # Note: If the model predicts only one class in a batch (all 0 or all 1),
+                # balanced_accuracy = (recall_0 + recall_1)/2 is exactly 0.5 (one recall 0, one 1).
+                # So progress-bar balanced_accuracy staying at 0.5 while accuracy ~65% usually
+                # means the model is collapsed to the majority class; final metrics use full-set pred/true.
                 has_both_classes = (batch_target.sum() > 0) and (batch_target.sum() < len(batch_target))
                 if has_both_classes:
                     results = utils.get_metrics(batch_output, batch_target, metrics, is_binary)
