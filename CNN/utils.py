@@ -8,6 +8,7 @@ import json
 import numpy as np
 from typing import Any, Dict, List, Union
 from config import DataConfig
+from data_processing.eeg_dataset import get_recommended_num_workers
 
 # Data paths and segment lengths (HDF5 format). All segment lengths use the same dir (multipart: part00, part01, ...).
 # Set to scratch output from: python preprocess_eeg_to_hdf5.py --data_root .../preprocessed_new --output_dir .../processed_eeg_data_hdf5 --num_channels 60 --window_sizes 1s 2s 4s
@@ -54,24 +55,8 @@ def create_data_config_for_segment_length(segment_length: str, batch_size: int =
         else:  # 4s
             batch_size = 192  # Reduced to prevent OOM
     
-    # Use num_workers based on segment length and number of GPUs
-    # Balanced to prevent OOM while maintaining good data loading performance
-    # With 'spawn' context, each worker uses significant memory (full Python env)
-    # So we need fewer workers than with 'fork' context
-    if segment_length == '1s':
-        # 1s has many more samples (955K vs 308K for 4s). Use enough workers for throughput
-        # but cap at 16 to avoid PyTorch warning and potential DataLoader slowness/freeze.
-        num_workers = min(16, max(8, 6 * num_gpus))
-    elif segment_length == '2s':
-        # 2s: use fewer workers to prevent OOM (2s segments are larger)
-        num_workers = max(6, 2 * num_gpus)  # 2 workers per GPU
-    else:  # 4s mode
-        # 4s segments are larger, use fewer workers to avoid memory issues
-        if num_gpus >= 2:
-            num_workers = 2 * num_gpus  # 2 workers per GPU
-        else:
-            num_workers = 4  # Use 4 workers for faster loading with single GPU
-    
+    num_workers = get_recommended_num_workers(segment_length, num_gpus)
+
     config = DataConfig(
         hdf5_dir=DATA_PATHS[segment_length],
         segment_length=SEGMENT_LENGTHS[segment_length],
