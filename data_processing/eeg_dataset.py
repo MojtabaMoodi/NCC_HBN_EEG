@@ -47,6 +47,61 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def get_dataloader_multiprocessing_kwargs(
+    num_workers: int,
+    prefetch_factor: int = 2,
+) -> Dict[str, Any]:
+    """
+    Return DataLoader kwargs for safe multiprocessing with HDF5/IterableDataset.
+    Use 'spawn' context to avoid hangs and crashes with fork + HDF5; persistent_workers
+    to avoid repeated worker spawn overhead. Single source of truth for CNN and LaBraM.
+
+    Args:
+        num_workers: Number of DataLoader workers.
+        prefetch_factor: Batches to prefetch per worker (only used when num_workers > 0).
+
+    Returns:
+        Dict to merge into DataLoader(..., **returned_dict). Empty if num_workers == 0.
+    """
+    if num_workers <= 0:
+        return {}
+    return {
+        "multiprocessing_context": multiprocessing.get_context("spawn"),
+        "persistent_workers": True,
+        "prefetch_factor": prefetch_factor,
+    }
+
+
+def get_recommended_num_workers(segment_length: str, num_gpus: int) -> int:
+    """
+    Recommended DataLoader num_workers by segment length and GPU count.
+    Prevents 1s from hanging (spawn + capped workers). Same logic as CNN's
+    create_data_config_for_segment_length; single source of truth.
+
+    Args:
+        segment_length: '1s', '2s', or '4s'.
+        num_gpus: Number of GPUs (e.g. torch.cuda.device_count()).
+
+    Returns:
+        Recommended num_workers (>= 1 when num_gpus >= 1).
+
+    Raises:
+        ValueError: If segment_length is not '1s', '2s', or '4s'.
+    """
+    if segment_length not in ("1s", "2s", "4s"):
+        raise ValueError(
+            f"segment_length must be '1s', '2s', or '4s', got {segment_length!r}"
+        )
+    n = max(1, num_gpus)
+    if segment_length == "1s":
+        # 1s has many more samples; cap to avoid DataLoader slowness/freeze (e.g. with spawn).
+        return min(16, max(8, 6 * n))
+    if segment_length == "2s":
+        return max(6, 2 * n)
+    # 4s
+    return 2 * n if n >= 2 else 4
+
+
 def compute_class_weights_from_train_hdf5(
     hdf5_dir: Union[str, Path],
     segment_length_str: str,
@@ -423,108 +478,74 @@ class EEGDataset(IterableDataset):
         if self.participant_filter is not None:
             logger.info(f"Filtering to {len(self.participant_filter)} participants")
     
+    def _fill_sample_name_cache(self, worker_info=None) -> None:
+        """Fill _cached_sample_names from HDF5. Call from main process before DataLoader so workers get pre-filled cache."""
+        hdf5_path = Path(self.hdf5_file_str)
+        if not hdf5_path.exists():
+            raise FileNotFoundError(f"HDF5 file not found: {self.hdf5_file_str}")
+        current_mtime = hdf5_path.stat().st_mtime
+        if (self._cached_sample_names is not None and self._cache_file_mtime is not None
+                and self._cache_file_mtime == current_mtime):
+            return
+        is_main = worker_info is None or (worker_info is not None and worker_info.id == 0)
+        with h5py.File(self.hdf5_file_str, "r") as f:
+            # Get total_samples from file attributes (fast, no B-tree traversal)
+            total_samples = f.attrs.get('total_samples', 0)
+            # For very large datasets (>500K), collecting keys via group.keys() is extremely slow
+            if total_samples > 500000:
+                if is_main:
+                    logger.info(f"Large dataset detected ({total_samples:,} samples).")
+                    logger.info("Collecting sample names (this may take 10-30 minutes for 955K samples)...")
+                task_groups = []
+                if self.task_type in ["active", "both"] and "active" in f:
+                    task_groups.append(("active", f["active"]))
+                if self.task_type in ["passive", "both"] and "passive" in f:
+                    task_groups.append(("passive", f["passive"]))
+                all_samples = []
+                for task_type, group in task_groups:
+                    if is_main:
+                        logger.info(f"Collecting {task_type} sample names...")
+                    sample_names = []
+                    count = 0
+                    for name in group.keys():
+                        if name.startswith("sample_"):
+                            sample_names.append(name)
+                            count += 1
+                            if count % 100000 == 0 and is_main:
+                                logger.info(f"  Collected {count:,} {task_type} sample names...")
+                    if is_main:
+                        logger.info(f"  Collected {len(sample_names):,} {task_type} sample names total")
+                    for sample_name in sample_names:
+                        all_samples.append((task_type, sample_name))
+            else:
+                # Small/medium datasets
+                task_groups = []
+                if self.task_type in ["active", "both"] and "active" in f:
+                    task_groups.append(("active", f["active"]))
+                if self.task_type in ["passive", "both"] and "passive" in f:
+                    task_groups.append(("passive", f["passive"]))
+                all_samples = []
+                for task_type, group in task_groups:
+                    sample_names = [name for name in group.keys() if name.startswith("sample_")]
+                    if len(sample_names) < 100000:
+                        sample_names = sorted(sample_names)
+                    for sample_name in sample_names:
+                        all_samples.append((task_type, sample_name))
+            self._cached_sample_names = all_samples
+            self._cache_file_mtime = current_mtime
+            if is_main:
+                logger.info(f"Cached {len(all_samples)} sample names from HDF5 file")
+
     def __iter__(self):
-        """
-        Iterate through the dataset, yielding samples from HDF5 file.
-        
-        Samples are shuffled if self.shuffle=True to avoid feeding all samples
-        from one participant consecutively, which can lead to batch-level
-        correlations and training instability.
-        
-        Yields:
-            Dictionary containing sample data with transforms applied
-        """
+        """Iterate through the dataset, yielding samples from HDF5 file."""
         try:
-            # Handle worker sharding for multiprocessing (num_workers > 0)
-            # We need to determine sharding BEFORE opening the file, so each worker
-            # processes a different subset of samples
             worker_info = get_worker_info()
-            
-            # Check if we need to refresh the cache (file modified or cache doesn't exist)
-            # Use string path for HDF5 (required for spawn multiprocessing)
             hdf5_path = Path(self.hdf5_file_str)
             current_mtime = hdf5_path.stat().st_mtime
-            if (self._cached_sample_names is None or 
-                self._cache_file_mtime is None or 
-                self._cache_file_mtime != current_mtime):
-                # Cache sample names (only done once per file modification)
-                # Use string path for HDF5 compatibility with multiprocessing
-                with h5py.File(self.hdf5_file_str, 'r') as f:
-                    # Get total_samples from file attributes (fast, no B-tree traversal)
-                    total_samples = f.attrs.get('total_samples', 0)
-                    
-                    # For very large datasets (>500K), collecting keys via group.keys() is extremely slow
-                    # (requires full B-tree traversal which can take hours for 955K items)
-                    # We must still collect keys, but we'll add progress logging
-                    if total_samples > 500000:
-                        if worker_info is None or worker_info.id == 0:
-                            logger.info(f"Large dataset detected ({total_samples:,} samples).")
-                            logger.info("Collecting sample names (this may take 10-30 minutes for 955K samples)...")
-                            logger.info("This is a one-time operation - cache will be saved for future use.")
-                        
-                        task_groups = []
-                        if self.task_type in ["active", "both"]:
-                            if 'active' in f:
-                                task_groups.append(('active', f['active']))
-                        if self.task_type in ["passive", "both"]:
-                            if 'passive' in f:
-                                task_groups.append(('passive', f['passive']))
-                        
-                        all_samples = []
-                        # Unfortunately, we still need to collect keys to know which samples exist in which group
-                        # But we'll add progress indication
-                        for task_type, group in task_groups:
-                            if worker_info is None or worker_info.id == 0:
-                                logger.info(f"Collecting {task_type} sample names...")
-                            # Collect keys - this is the slow part but necessary
-                            sample_names = []
-                            count = 0
-                            for name in group.keys():
-                                if name.startswith('sample_'):
-                                    sample_names.append(name)
-                                    count += 1
-                                    # Log progress every 100K samples
-                                    if count % 100000 == 0 and (worker_info is None or worker_info.id == 0):
-                                        logger.info(f"  Collected {count:,} {task_type} sample names...")
-                            
-                            if worker_info is None or worker_info.id == 0:
-                                logger.info(f"  Collected {len(sample_names):,} {task_type} sample names total")
-                            
-                            # Don't sort for large datasets (saves time)
-                            for sample_name in sample_names:
-                                all_samples.append((task_type, sample_name))
-                    else:
-                        # Small/medium datasets: use original approach (collect keys)
-                        task_groups = []
-                        if self.task_type in ["active", "both"]:
-                            if 'active' in f:
-                                task_groups.append(('active', f['active']))
-                        if self.task_type in ["passive", "both"]:
-                            if 'passive' in f:
-                                task_groups.append(('passive', f['passive']))
-                        
-                        # Collect all (task_type, sample_name) pairs
-                        all_samples = []
-                        for task_type, group in task_groups:
-                            # Use list comprehension for faster collection
-                            # Only sort if we have a reasonable number of samples (< 100K)
-                            sample_names = [name for name in group.keys() if name.startswith('sample_')]
-                            if len(sample_names) < 100000:
-                                sample_names = sorted(sample_names)  # Only sort for smaller datasets
-                            for sample_name in sample_names:
-                                all_samples.append((task_type, sample_name))
-                    
-                    # Cache the results
-                    self._cached_sample_names = all_samples
-                    self._cache_file_mtime = current_mtime
-                    if worker_info is None or worker_info.id == 0:
-                        logger.info(f"Cached {len(all_samples)} sample names from HDF5 file")
-            else:
-                # Use cached sample names (much faster!)
-                all_samples = self._cached_sample_names.copy()
-                if worker_info is None or worker_info.id == 0:
-                    logger.debug(f"Using cached sample names ({len(all_samples)} samples)")
-            
+            if (self._cached_sample_names is None or self._cache_file_mtime is None
+                    or self._cache_file_mtime != current_mtime):
+                self._fill_sample_name_cache(worker_info)
+            all_samples = self._cached_sample_names.copy()
             # Shuffle if requested (do this BEFORE sharding for proper randomization)
             # Important for training to avoid participant-level batch correlations
             if self.shuffle:
@@ -918,10 +939,7 @@ class EEGDataLoader:
             "pin_memory": True,
             "collate_fn": EEGDataLoader.collate_fn,
         }
-        if num_workers > 0:
-            kwargs["prefetch_factor"] = 2
-            kwargs["persistent_workers"] = True
-            kwargs["multiprocessing_context"] = multiprocessing.get_context("spawn")
+        kwargs.update(get_dataloader_multiprocessing_kwargs(num_workers, prefetch_factor=2))
         if random_seed is not None:
             gen = torch.Generator()
             gen.manual_seed(random_seed)
@@ -1130,19 +1148,10 @@ class EEGDataLoader:
             'drop_last': drop_last,
             'collate_fn': EEGDataLoader.collate_fn
         }
-        
-        # prefetch_factor only works with num_workers > 0
-        if num_workers > 0:
-            # Increase prefetch_factor for better GPU utilization (higher = more prefetching)
-            # Higher prefetch means more batches ready when GPU needs them, reducing idle time
-            # For very large batch sizes (6144), we can use higher prefetch since each worker handles fewer batches
-            # With maximum batches, memory per prefetched batch is manageable
-            loader_kwargs['prefetch_factor'] = max(prefetch_factor, 16)  # Increased to 16 for maximum GPU utilization
-            loader_kwargs['persistent_workers'] = True  # Keep workers alive between epochs (avoids worker restart overhead)
-            # Use 'spawn' for better HDF5 compatibility with multiprocessing
-            # 'fork' can cause issues with HDF5 file handles
-            loader_kwargs['multiprocessing_context'] = multiprocessing.get_context('spawn')
-        
+        prefetch = max(prefetch_factor, 16) if num_workers > 0 else 2
+        loader_kwargs.update(
+            get_dataloader_multiprocessing_kwargs(num_workers, prefetch_factor=prefetch)
+        )
         return DataLoader(**loader_kwargs)
     
     @staticmethod
