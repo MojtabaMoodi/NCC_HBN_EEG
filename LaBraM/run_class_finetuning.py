@@ -11,6 +11,19 @@
 import argparse
 import datetime
 import sys
+from pathlib import Path
+
+# Ensure LaBraM directory is first on sys.path so "utils" and other local imports
+# resolve to this package. Required when DataLoader workers re-execute this script
+# (multiprocessing spawn); otherwise they may import the project-level EEG/utils package.
+_script_dir = Path(__file__).resolve().parent
+_script_dir_str = str(_script_dir)
+try:
+    sys.path.remove(_script_dir_str)
+except ValueError:
+    pass
+sys.path.insert(0, _script_dir_str)
+
 from pyexpat import model
 import numpy as np
 import time
@@ -19,7 +32,6 @@ import torch.backends.cudnn as cudnn
 import json
 import os
 
-from pathlib import Path
 from collections import OrderedDict
 from timm.data.mixup import Mixup
 from timm.models import create_model
@@ -42,7 +54,11 @@ from dataset_config import (
     DATA_PATHS,
 )
 from labram_dataset import collate_labram_with_participant_ids
-from data_processing.eeg_dataset import compute_class_weights_from_train_hdf5
+from data_processing.eeg_dataset import (
+    compute_class_weights_from_train_hdf5,
+    get_dataloader_multiprocessing_kwargs,
+    get_recommended_num_workers,
+)
 
 def get_args():
     parser = argparse.ArgumentParser('LaBraM fine-tuning and evaluation script for EEG classification', add_help=False)
@@ -406,41 +422,66 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     labram_collate = collate_labram_with_participant_ids if use_labram_collate else None
     val_test_collate = labram_collate
 
+    # num_workers: for custom HDF5 datasets use segment-length-aware recommendation (avoids 1s hang with fork + many workers).
+    if args.dataset in CUSTOM_DATASET_CONFIGS:
+        segment_length = getattr(args, "segment_length", "1s")
+        num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        if segment_length == "1s":
+            num_workers = 0
+            if utils.is_main_process():
+                print("DataLoader num_workers: 0 (1s segments: single process to avoid each worker building HDF5 cache; first batch may take 10-30 min)")
+        else:
+            num_workers = get_recommended_num_workers(segment_length, num_gpus)
+            if utils.is_main_process():
+                print(f"DataLoader num_workers: {num_workers} (segment_length={segment_length}, num_gpus={num_gpus})")
+    else:
+        num_workers = args.num_workers
+
+    # Multiprocessing kwargs for HDF5/IterableDataset: spawn context to avoid hang (same as CNN).
+    loader_mp_kwargs = get_dataloader_multiprocessing_kwargs(num_workers, prefetch_factor=2)
+
     # IterableDataset doesn't support samplers - DataLoader iterates directly
     data_loader_train = torch.utils.data.DataLoader(
         train_dataset,  # No sampler for IterableDataset
         batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=args.pin_mem,
         drop_last=True,
         collate_fn=labram_collate,
+        **loader_mp_kwargs,
     )
     if val_dataset is not None:
         data_loader_val = torch.utils.data.DataLoader(
             val_dataset,  # No sampler for IterableDataset
             batch_size=int(1.5 * args.batch_size),
-            num_workers=args.num_workers,
+            num_workers=num_workers,
             pin_memory=args.pin_mem,
             drop_last=False,
-            collate_fn=val_test_collate
+            collate_fn=val_test_collate,
+            **loader_mp_kwargs,
         )
         if type(test_dataset) == list:
-            data_loader_test = [torch.utils.data.DataLoader(
-                dataset,  # No sampler for IterableDataset
-                batch_size=int(1.5 * args.batch_size),
-                num_workers=args.num_workers,
-                pin_memory=args.pin_mem,
-                drop_last=False,
-                collate_fn=val_test_collate
-            ) for dataset in test_dataset]
+            data_loader_test = [
+                torch.utils.data.DataLoader(
+                    dataset,  # No sampler for IterableDataset
+                    batch_size=int(1.5 * args.batch_size),
+                    num_workers=num_workers,
+                    pin_memory=args.pin_mem,
+                    drop_last=False,
+                    collate_fn=val_test_collate,
+                    **loader_mp_kwargs,
+                )
+                for dataset in test_dataset
+            ]
         else:
             data_loader_test = torch.utils.data.DataLoader(
                 test_dataset,  # No sampler for IterableDataset
                 batch_size=int(1.5 * args.batch_size),
-                num_workers=args.num_workers,
+                num_workers=num_workers,
                 pin_memory=args.pin_mem,
                 drop_last=False,
-                collate_fn=val_test_collate
+                collate_fn=val_test_collate,
+                **loader_mp_kwargs,
             )
     else:
         data_loader_val = None
