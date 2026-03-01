@@ -37,6 +37,7 @@ import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import f1_score
 from scipy.stats import pearsonr
 
 # CRITICAL: Patch sklearn BEFORE importing pyhealth, otherwise pyhealth caches old reference
@@ -704,6 +705,11 @@ def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, mode
                         latest_ckpt = max(int(t), latest_ckpt)
                 if latest_ckpt >= 0:
                     args.resume = os.path.join(output_dir, 'checkpoint-%d.pth' % latest_ckpt)
+                # Only checkpoint-best.pth is saved (no periodic checkpoint-N.pth); use it to resume
+                if len(args.resume) == 0:
+                    best_path = os.path.join(output_dir, CHECKPOINT_BEST_FILENAME)
+                    if os.path.isfile(best_path):
+                        args.resume = best_path
             print("Auto resume checkpoint: %s" % args.resume)
 
         if args.resume:
@@ -714,12 +720,12 @@ def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, mode
                 checkpoint = torch.load(args.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model']) # strict: bool=True, , strict=False
             print("Resume checkpoint %s" % args.resume)
+            if 'model_ema' in checkpoint and model_ema is not None and hasattr(args, 'model_ema') and args.model_ema:
+                _load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
             if 'optimizer' in checkpoint and 'epoch' in checkpoint:
                 optimizer.load_state_dict(checkpoint['optimizer'])
                 print(f"Resume checkpoint at epoch {checkpoint['epoch']}")
                 args.start_epoch = 1#checkpoint['epoch'] + 1
-                if hasattr(args, 'model_ema') and args.model_ema:
-                    _load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
                 if 'scaler' in checkpoint:
                     loss_scaler.load_state_dict(checkpoint['scaler'])
                 print("With optim & sched!")
@@ -942,11 +948,13 @@ def get_metrics(output, target, metrics, is_binary, threshold=0.5):
     target = np.array(target).astype(np.int64) if not is_binary else np.array(target)
     
     if is_binary:
-        if 'roc_auc' not in metrics or sum(target) * (len(target) - sum(target)) != 0:  # to prevent all 0 or all 1 and raise the AUROC error
+        # pyhealth binary_metrics_fn does not support 'f1_weighted'; pass only supported metrics
+        metrics_for_pyhealth = [m for m in metrics if m != 'f1_weighted']
+        if 'roc_auc' not in metrics_for_pyhealth or sum(target) * (len(target) - sum(target)) != 0:  # to prevent all 0 or all 1 and raise the AUROC error
             results = binary_metrics_fn(
                 target,
                 output,
-                metrics=metrics,
+                metrics=metrics_for_pyhealth,
                 threshold=threshold,
             )
         else:
@@ -956,6 +964,10 @@ def get_metrics(output, target, metrics, is_binary, threshold=0.5):
                 "pr_auc": 0.0,
                 "roc_auc": 0.0,
             }
+        # Binary F1 for reporting (pyhealth does not support f1_weighted; use sklearn so task-type summary shows F1)
+        pred_binary = (np.asarray(output).ravel() >= threshold).astype(np.int64)
+        target_int = np.asarray(target).ravel().astype(np.int64)
+        results['f1_weighted'] = float(f1_score(target_int, pred_binary, average='binary', zero_division=0.0))
     else:
         # Suppress sklearn warnings during per-batch evaluation
         # Warnings occur because batches don't contain all classes (expected behavior)
