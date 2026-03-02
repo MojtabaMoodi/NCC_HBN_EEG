@@ -222,7 +222,7 @@ class EEGTrainer:
         scheduler_factor = config.scheduler_factor
         
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, verbose=True
+            self.optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience
         )
         print(f"✅ Learning rate scheduler: factor={scheduler_factor}, patience={scheduler_patience}")
         
