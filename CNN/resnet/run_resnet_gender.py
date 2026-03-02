@@ -3,12 +3,21 @@
 Script to run ResNet gender classification experiment.
 Supports ResNet18, ResNet34, and ResNet50 architectures.
 Trains on both active and passive tasks, evaluates separately on active and passive.
+Uses the same multipart train/val/test HDF5 data pipeline as the CNN (EEGDataLoader.create_train_val_test_loaders).
 """
 
+import sys
+from pathlib import Path
+
+# Ensure project root (EEG) is on path so "CNN" and "data_processing" resolve when run from any CWD
+_root = Path(__file__).resolve().parent.parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 import argparse
-from config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
-from experiment import run_experiments
-from utils import create_data_config_for_segment_length, get_resnet_model_type
+from CNN.config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
+from CNN.experiment import run_experiments
+from CNN.utils import create_data_config_for_segment_length, get_resnet_model_type
 
 
 def main():
@@ -28,6 +37,8 @@ def main():
                        help='Directory to save results')
     parser.add_argument('--reports_dir', type=str, default='reports', 
                        help='Directory to save reports')
+    parser.add_argument('--data_path', type=str, default=None,
+                       help='Override HDF5 data directory (train/val/test multipart or single files). If not set, uses CNN.utils.DATA_PATHS for the segment length.')
     
     args = parser.parse_args()
     
@@ -78,6 +89,9 @@ def main():
     )
     # Set task_type to "both" to train on both active and passive tasks
     base_data_config.task_type = "both"
+    if args.data_path is not None:
+        base_data_config.hdf5_dir = args.data_path
+        print(f"Using data path (override): {args.data_path}")
     
     num_workers = base_data_config.num_workers
     print(f"Number of workers: {num_workers}")
