@@ -39,6 +39,8 @@ def main():
                        help='Directory to save reports')
     parser.add_argument('--data_path', type=str, default=None,
                        help='Override HDF5 data directory (train/val/test multipart or single files). If not set, uses CNN.utils.DATA_PATHS for the segment length.')
+    parser.add_argument('--no_stratified', action='store_true',
+                       help='Disable stratified train batches (avoids slow metadata scan on large 4s HDF5; uses class weights in loss instead).')
     
     args = parser.parse_args()
     
@@ -93,6 +95,16 @@ def main():
         base_data_config.hdf5_dir = args.data_path
         print(f"Using data path (override): {args.data_path}")
     
+    training_config_kw = dict(
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        target_key="gender",
+        prediction_type="classification",
+    )
+    if args.no_stratified:
+        training_config_kw["use_stratified_train_batches"] = False
+        print("Stratified train batches disabled (--no_stratified); using class weights in loss.")
+    
     num_workers = base_data_config.num_workers
     print(f"Number of workers: {num_workers}")
     print("="*80)
@@ -108,12 +120,7 @@ def main():
         description=f"ResNet{args.resnet_type} gender classification with {args.mode} segments (train on both, evaluate separately on active and passive)",
         data_config=base_data_config,
         model_config=model_config,
-        training_config=TrainingConfig(
-            epochs=args.epochs, 
-            learning_rate=args.learning_rate, 
-            target_key="gender", 
-            prediction_type="classification"
-        )
+        training_config=TrainingConfig(**training_config_kw)
     )
     
     print(f"\nStarting ResNet{args.resnet_type} gender classification experiment...")

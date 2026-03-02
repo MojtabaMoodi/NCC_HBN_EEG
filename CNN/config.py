@@ -119,6 +119,10 @@ class TrainingConfig:
     label_smoothing_large: float = 0.1  # For num_classes > 100
     label_smoothing_very_large: float = 0.05  # For num_classes > 2000
 
+    # Whether to use stratified train batches (each batch has balanced class counts). Only for gender/age classification.
+    # None = use default (True for gender/age). Set False to disable when building the sample list is slow (e.g. large 4s HDF5).
+    use_stratified_train_batches: Optional[bool] = None  # None = default (True for gender/age), False = plain shuffle
+
     # How to balance classes for gender/age classification training. Options:
     # - None: no balancing (iterable dataset); class_weight in loss is set from data if not provided.
     # - 'stratified': stratified batch sampling (each batch has equal counts per class); class_weight can still be used.

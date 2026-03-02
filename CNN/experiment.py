@@ -589,7 +589,10 @@ class Experiment:
                 user_identification_transform=user_identification_transform,
                 shuffle_train=True,
                 random_seed=data_config.random_seed,
-                use_stratified_train_batches=(target_type in ("gender", "age")),
+                use_stratified_train_batches=(
+                    _stratified_opt if (_stratified_opt := getattr(self.config.training_config, "use_stratified_train_batches", None)) is not None
+                    else (target_type in ("gender", "age"))
+                ),
                 train_balance_method=getattr(self.config.training_config, "balance_method", None),
                 prediction_type=getattr(self.config.training_config, "prediction_type", "classification"),
             )
