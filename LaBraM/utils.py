@@ -943,9 +943,10 @@ def prepare_TUAB_dataset(root):
 
 
 def get_metrics(output, target, metrics, is_binary, threshold=0.5):
-    # Ensure inputs are numpy arrays with correct dtype for sklearn
-    output = np.array(output)
-    target = np.array(target).astype(np.int64) if not is_binary else np.array(target)
+    # Ensure inputs are numpy arrays with correct dtype and at least 1D for sklearn/pyhealth
+    # np.atleast_1d avoids scalar np.int64 inputs, which sklearn rejects for y_true/y_pred.
+    output = np.atleast_1d(np.array(output))
+    target = np.atleast_1d(np.array(target).astype(np.int64) if not is_binary else np.array(target))
     
     if is_binary:
         # pyhealth binary_metrics_fn does not support 'f1_weighted'; pass only supported metrics
