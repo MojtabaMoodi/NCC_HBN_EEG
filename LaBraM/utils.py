@@ -943,10 +943,22 @@ def prepare_TUAB_dataset(root):
 
 
 def get_metrics(output, target, metrics, is_binary, threshold=0.5):
-    # Ensure inputs are numpy arrays with correct dtype and at least 1D for sklearn/pyhealth
-    # np.atleast_1d avoids scalar np.int64 inputs, which sklearn rejects for y_true/y_pred.
-    output = np.atleast_1d(np.asarray(output).ravel())
-    target = np.atleast_1d(np.asarray(target).ravel().astype(np.int64) if not is_binary else np.asarray(target).ravel())
+    # Ensure inputs are numpy arrays with correct dtype and shape for sklearn/pyhealth.
+    # Do not ravel multiclass output: pyhealth expects (n_samples, n_classes) logits/probs.
+    output = np.asarray(output)
+    target = np.asarray(target)
+    if not is_binary:
+        target = target.astype(np.int64)
+    if is_binary:
+        output = np.atleast_1d(output.ravel())
+        target = np.atleast_1d(target.ravel())
+    else:
+        target = np.atleast_1d(target.ravel())
+        if output.ndim == 0:
+            output = np.atleast_1d(output)
+        elif output.ndim == 1:
+            output = np.atleast_1d(output)
+        # else keep output 2D (n_samples, n_classes) for multiclass_metrics_fn
     # Guard: empty arrays (e.g. participant-level aggregation with 0 groups) — return defaults without calling sklearn
     if output.size == 0 or target.size == 0:
         if is_binary:
