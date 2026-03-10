@@ -1,20 +1,31 @@
 #!/bin/bash
-# Run saliency analysis for a single model
-# 
-# Usage:
-#   bash run_saliency_single.sh \
-#       --checkpoint <path> \
-#       --target_type <gender|age> \
-#       --segment_length <1s|2s|4s> \
-#       [additional options]
+# Run saliency analysis for a single model and generate the topography map.
+# Saliency maps and topography are written to --output_dir (default: saliency_results).
 #
-# Example:
-#   bash run_saliency_single.sh \
-#       --checkpoint CNN/report_2025-12-16/results_1s/checkpoints/gender_baseline_1s_best.pth \
+# HOW TO USE — provide the path to your best model (.pth):
+#
+#   bash saliency_analysis/run_saliency_single.sh \
+#       --checkpoint /path/to/your/best_model.pth \
 #       --target_type gender \
-#       --segment_length 1s \
-#       --method integrated_gradients \
-#       --max_samples 500
+#       --segment_length 4s \
+#       --output_dir /path/to/save/results
+#
+# Or with environment variables (e.g. in SLURM or a wrapper script):
+#
+#   export CHECKPOINT=/path/to/your/best_model.pth
+#   export OUTPUT_DIR=/path/to/save/results
+#   bash saliency_analysis/run_saliency_single.sh --target_type gender --segment_length 4s
+#
+# Required:
+#   --checkpoint <path>   Path to the best model checkpoint (.pth)
+#   --target_type        gender | age | combined
+#   --segment_length     1s | 2s | 4s  (must match the data the model was trained on)
+#
+# Output (in --output_dir):
+#   topography_<method>.png              Topography (scalp) map
+#   saliency_results_<method>.npz        Saliency data
+#   average_importance_<method>.png      Bar chart of channel importance
+#   ... and other plots (see README)
 
 # Initialize conda if available
 source ~/.bashrc 2>/dev/null || true
@@ -49,7 +60,8 @@ if command -v nvidia-smi &> /dev/null; then
     echo ""
 fi
 
-# Default configuration (can be overridden by command line arguments)
+# Default configuration (can be overridden by command line arguments or env)
+# Use same HDF5 dir as training (e.g. export HDF5_DIR=~/scratch/processed_eeg_data_hdf5)
 DEFAULT_HDF5_DIR="data_processing/processed_eeg_data_hdf5_no_compression"
 DEFAULT_OUTPUT_DIR="saliency_results"
 DEFAULT_DEVICE="cuda"
@@ -63,13 +75,12 @@ DEFAULT_TASK_TYPE="both"
 DEFAULT_NUM_STEPS="50"
 DEFAULT_TOP_K="10"
 
-# Parse command line arguments
-# This is a simple parser - for complex cases, pass arguments directly to Python
-CHECKPOINT=""
+# Parse command line arguments (CHECKPOINT, OUTPUT_DIR, HDF5_DIR can be set via environment)
+CHECKPOINT="${CHECKPOINT:-}"
 TARGET_TYPE=""
 SEGMENT_LENGTH=""
-HDF5_DIR="$DEFAULT_HDF5_DIR"
-OUTPUT_DIR="$DEFAULT_OUTPUT_DIR"
+HDF5_DIR="${HDF5_DIR:-$DEFAULT_HDF5_DIR}"
+OUTPUT_DIR="${OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
 DEVICE="$DEFAULT_DEVICE"
 NUM_GPUS="$DEFAULT_NUM_GPUS"
 METHOD="$DEFAULT_METHOD"
@@ -156,14 +167,14 @@ done
 if [ -z "$CHECKPOINT" ] || [ -z "$TARGET_TYPE" ] || [ -z "$SEGMENT_LENGTH" ]; then
     echo "Error: Missing required arguments"
     echo ""
-    echo "Required arguments:"
-    echo "  --checkpoint <path>        Path to model checkpoint"
+    echo "Required: checkpoint path, --target_type, --segment_length"
+    echo "  --checkpoint <path>        Path to best model .pth (or set CHECKPOINT env var)"
     echo "  --target_type <type>       Target type (gender, age, combined)"
     echo "  --segment_length <length>  Segment length (1s, 2s, 4s)"
     echo ""
-    echo "Optional arguments:"
+    echo "Optional (or set OUTPUT_DIR / HDF5_DIR env vars):"
+    echo "  --output_dir <dir>         Where to save saliency and topography (default: $DEFAULT_OUTPUT_DIR)"
     echo "  --hdf5_dir <dir>           HDF5 data directory (default: $DEFAULT_HDF5_DIR)"
-    echo "  --output_dir <dir>         Output directory (default: $DEFAULT_OUTPUT_DIR)"
     echo "  --device <device>          Device (auto, cuda, cpu) (default: $DEFAULT_DEVICE)"
     echo "  --num_gpus <n>             Number of GPUs (default: $DEFAULT_NUM_GPUS)"
     echo "  --method <method>          Method (vanilla_gradients, integrated_gradients, both) (default: $DEFAULT_METHOD)"
@@ -178,17 +189,17 @@ if [ -z "$CHECKPOINT" ] || [ -z "$TARGET_TYPE" ] || [ -z "$SEGMENT_LENGTH" ]; th
     exit 1
 fi
 
-# Build command
+# Build command (quote paths so paths with spaces work)
 CMD="python3 saliency_analysis/main.py \
-    --checkpoint $CHECKPOINT \
+    --checkpoint \"$CHECKPOINT\" \
     --target_type $TARGET_TYPE \
     --segment_length $SEGMENT_LENGTH \
-    --hdf5_dir $HDF5_DIR \
+    --hdf5_dir \"$HDF5_DIR\" \
     --device $DEVICE \
     --num_gpus $NUM_GPUS \
     --method $METHOD \
     --batch_size $BATCH_SIZE \
-    --output_dir $OUTPUT_DIR \
+    --output_dir \"$OUTPUT_DIR\" \
     --split $SPLIT \
     --task_type $TASK_TYPE \
     --num_steps $NUM_STEPS \

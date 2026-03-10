@@ -10,6 +10,9 @@
 #
 # Usage (interactive SLURM session):
 #   salloc --gres=gpu:4 --time=24:00:00 --mem=64G bash run_saliency_batch.sh
+#
+# To use your own list of checkpoint paths (one per line in a file):
+#   CHECKPOINT_LIST=my_checkpoints.txt SEGMENT_LENGTH=4s OUTPUT_DIR=results bash run_saliency_batch.sh
 
 # Initialize conda if available
 source ~/.bashrc 2>/dev/null || true
@@ -62,6 +65,9 @@ SPLIT="${SPLIT:-test}"
 TASK_TYPE="${TASK_TYPE:-both}"
 NUM_STEPS="${NUM_STEPS:-50}"
 TOP_K="${TOP_K:-10}"
+# Optional: process only these checkpoints (file with one path per line). Requires SEGMENT_LENGTH.
+CHECKPOINT_LIST="${CHECKPOINT_LIST:-}"
+SEGMENT_LENGTH="${SEGMENT_LENGTH:-}"
 
 # Build command
 CMD="python3 saliency_analysis/main.py \
@@ -82,6 +88,15 @@ if [ -n "$MAX_SAMPLES" ] && [ "$MAX_SAMPLES" != "none" ] && [ "$MAX_SAMPLES" != 
     CMD="$CMD --max_samples $MAX_SAMPLES"
 fi
 
+# Add checkpoint list and segment length if using custom checkpoint list
+if [ -n "$CHECKPOINT_LIST" ]; then
+    if [ -z "$SEGMENT_LENGTH" ]; then
+        echo "Error: SEGMENT_LENGTH is required when using CHECKPOINT_LIST (e.g. export SEGMENT_LENGTH=4s)"
+        exit 1
+    fi
+    CMD="$CMD --checkpoint_list $CHECKPOINT_LIST --segment_length $SEGMENT_LENGTH"
+fi
+
 # Print configuration
 echo "Configuration:"
 echo "  HDF5 directory: $HDF5_DIR"
@@ -99,6 +114,7 @@ echo "  Split: $SPLIT"
 echo "  Task type: $TASK_TYPE"
 echo "  Integrated gradients steps: $NUM_STEPS"
 echo "  Top K channels: $TOP_K"
+[ -n "$CHECKPOINT_LIST" ] && echo "  Checkpoint list: $CHECKPOINT_LIST (segment_length: $SEGMENT_LENGTH)"
 echo ""
 
 # Run the command

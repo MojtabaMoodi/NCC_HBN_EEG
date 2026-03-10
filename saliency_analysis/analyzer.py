@@ -72,7 +72,9 @@ class SaliencyAnalyzer:
                  device: Optional[torch.device] = None,
                  num_channels: int = 60,
                  device_preference: str = 'auto',
-                 prediction_type: str = 'classification'):
+                 prediction_type: str = 'classification',
+                 segment_length: Optional[str] = None,
+                 model_display_name: Optional[str] = None):
         """
         Initialize saliency analyzer.
         
@@ -83,6 +85,8 @@ class SaliencyAnalyzer:
             num_channels: Number of EEG channels
             device_preference: Device preference ('auto', 'cuda', 'cpu')
             prediction_type: Type of prediction ('classification' or 'regression')
+            segment_length: EEG segment length (e.g. '1s', '2s', '4s') for plot titles
+            model_display_name: Short name for plots (e.g. 'CNN', 'ResNet34', 'LaBraM')
         
         Raises:
             RuntimeError: If CUDA is requested but not available
@@ -91,6 +95,8 @@ class SaliencyAnalyzer:
         self.target_type = target_type
         self.num_channels = num_channels
         self.prediction_type = prediction_type
+        self.segment_length = segment_length or ''
+        self.model_display_name = model_display_name or 'Model'
         
         # Setup device (explicit, no fallbacks)
         if device is None:
@@ -310,11 +316,18 @@ class SaliencyAnalyzer:
         
         print(f"\nGenerating visualizations...")
         
+        # Title prefix: Task, segment length, model (e.g. "Gender Classification, 4s, CNN")
+        task_label = f"{self.target_type.capitalize()} Classification" if self.target_type != 'combined' else "Combined Classification"
+        if self.target_type == 'age' and self.prediction_type == 'regression':
+            task_label = "Age Regression"
+        title_suffix = ", ".join(filter(None, [self.segment_length, self.model_display_name]))
+        title_prefix = f"{task_label}" + (f" ({title_suffix})" if title_suffix else "")
+        
         # 1. Average channel importance bar chart (overall)
         plot_average_channel_importance(
             channel_importance,
             channel_names=channel_names,
-            title=f"Average Channel Importance ({self.target_type.capitalize()}) - All Tasks",
+            title=f"Average Channel Importance - {title_prefix}",
             save_path=os.path.join(output_dir, f"average_importance_{method}.png"),
             top_k=top_k
         )
@@ -328,7 +341,7 @@ class SaliencyAnalyzer:
         plot_topography(
             channel_importance,
             channel_names=channel_names,
-            title=f"Channel Importance Topography ({self.target_type.capitalize()}) - All Tasks",
+            title=f"Channel Importance Topography - {title_prefix}",
             save_path=os.path.join(output_dir, f"topography_{method}.png"),
             cmap='viridis'
         )
@@ -338,7 +351,7 @@ class SaliencyAnalyzer:
         plot_channel_importance_distribution(
             channel_importance,
             channel_names=channel_names,
-            title=f"Channel Importance Distribution ({self.target_type.capitalize()}) - All Tasks",
+            title=f"Channel Importance Distribution - {title_prefix}",
             save_path=os.path.join(output_dir, f"importance_distribution_{method}.png"),
             top_k=top_k
         )
@@ -349,7 +362,7 @@ class SaliencyAnalyzer:
                 channel_importance,
                 labels,
                 class_names=class_names,
-                title=f"Channel Importance by Class ({self.target_type.capitalize()}) - All Tasks",
+                title=f"Channel Importance by Class - {title_prefix}",
                 save_path=os.path.join(output_dir, f"importance_by_class_{method}.png"),
                 top_k=top_k
             )
@@ -371,7 +384,7 @@ class SaliencyAnalyzer:
             plot_saliency_map_sample(
                 aggregated_saliency_map,
                 channel_names=channel_names,
-                title=f"Aggregated Saliency Map - All Participants ({self.target_type.capitalize()}){norm_info}\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples, method={aggregated['aggregation_method']}\n(Absolute values - showing importance magnitude)",
+                title=f"Aggregated Saliency Map - {title_prefix}{norm_info}\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples, method={aggregated['aggregation_method']}\n(Absolute values - showing importance magnitude)",
                 save_path=os.path.join(output_dir, f"saliency_aggregated_all_participants_{method}.png"),
                 use_absolute=True  # Standard practice: absolute values for aggregated maps
             )
@@ -382,7 +395,7 @@ class SaliencyAnalyzer:
                 plot_saliency_map_sample(
                     aggregated_variance,
                     channel_names=channel_names,
-                    title=f"Saliency Map Consistency (Std Dev) - All Participants ({self.target_type.capitalize()})\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples",
+                    title=f"Saliency Map Consistency (Std Dev) - {title_prefix}\n{aggregated['num_participants']} participants, {aggregated['num_samples']} samples",
                     save_path=os.path.join(output_dir, f"saliency_consistency_all_participants_{method}.png"),
                     cmap='viridis'  # Use different colormap for variance (no negative values)
                 )
@@ -398,7 +411,7 @@ class SaliencyAnalyzer:
             plot_saliency_map_sample(
                 saliency_maps[i],
                 channel_names=channel_names,
-                title=f"Saliency Map - Individual Sample {i+1} ({self.target_type.capitalize()})\n(Absolute values - showing importance magnitude)",
+                title=f"Saliency Map - Individual Sample {i+1} - {title_prefix}\n(Absolute values - showing importance magnitude)",
                 save_path=os.path.join(output_dir, f"saliency_sample_{i+1}_{method}.png"),
                 use_absolute=True  # Standard: absolute values show importance magnitude
             )
@@ -431,7 +444,7 @@ class SaliencyAnalyzer:
                 plot_average_channel_importance(
                     task_channel_importance,
                     channel_names=channel_names,
-                    title=f"Average Channel Importance ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
+                    title=f"Average Channel Importance - {title_prefix} - {task_type.capitalize()} Tasks",
                     save_path=os.path.join(task_output_dir, f"average_importance_{method}.png"),
                     top_k=top_k
                 )
@@ -440,7 +453,7 @@ class SaliencyAnalyzer:
                 plot_topography(
                     task_channel_importance,
                     channel_names=channel_names,
-                    title=f"Channel Importance Topography ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
+                    title=f"Channel Importance Topography - {title_prefix} - {task_type.capitalize()} Tasks",
                     save_path=os.path.join(task_output_dir, f"topography_{method}.png"),
                     cmap='viridis'
                 )
@@ -449,7 +462,7 @@ class SaliencyAnalyzer:
                 plot_channel_importance_distribution(
                     task_channel_importance,
                     channel_names=channel_names,
-                    title=f"Channel Importance Distribution ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
+                    title=f"Channel Importance Distribution - {title_prefix} - {task_type.capitalize()} Tasks",
                     save_path=os.path.join(task_output_dir, f"importance_distribution_{method}.png"),
                     top_k=top_k
                 )
@@ -460,7 +473,7 @@ class SaliencyAnalyzer:
                         task_channel_importance,
                         task_labels,
                         class_names=class_names,
-                        title=f"Channel Importance by Class ({self.target_type.capitalize()}) - {task_type.capitalize()} Tasks",
+                        title=f"Channel Importance by Class - {title_prefix} - {task_type.capitalize()} Tasks",
                         save_path=os.path.join(task_output_dir, f"importance_by_class_{method}.png"),
                         top_k=top_k
                     )
@@ -479,23 +492,25 @@ class SaliencyAnalyzer:
                     task_saliency_maps = saliency_maps[task_mask]
                     task_participant_ids = participant_ids[task_mask]
                     task_unique_participants = len(np.unique(task_participant_ids))
-                    
-                    # Normalize each sample's saliency map before aggregation (best practice)
-                    task_saliency_maps_normalized = task_saliency_maps.copy()
-                    for i in range(len(task_saliency_maps)):
-                        sample_map = task_saliency_maps[i]
-                        l2_norm = np.linalg.norm(sample_map)
-                        if l2_norm > 0:
-                            task_saliency_maps_normalized[i] = sample_map / l2_norm
-                    
-                    # Aggregate across all samples for this task type
-                    task_aggregated_saliency = task_saliency_maps_normalized.mean(axis=0)
-                    task_aggregated_variance = task_saliency_maps_normalized.std(axis=0)
+                    _task_chunk = 10000
+                    if len(task_saliency_maps) > _task_chunk:
+                        task_aggregated_saliency, task_aggregated_variance = self._chunked_normalized_mean_std(
+                            task_saliency_maps, chunk_size=_task_chunk
+                        )
+                    else:
+                        task_saliency_maps_normalized = task_saliency_maps.copy()
+                        for i in range(len(task_saliency_maps)):
+                            sample_map = task_saliency_maps[i]
+                            l2_norm = np.linalg.norm(sample_map)
+                            if l2_norm > 0:
+                                task_saliency_maps_normalized[i] = sample_map / l2_norm
+                        task_aggregated_saliency = task_saliency_maps_normalized.mean(axis=0)
+                        task_aggregated_variance = task_saliency_maps_normalized.std(axis=0)
                     
                     plot_saliency_map_sample(
                         task_aggregated_saliency,
                         channel_names=channel_names,
-                        title=f"Aggregated Saliency Map - {task_type.capitalize()} Tasks ({self.target_type.capitalize()}) (L2-normalized)\n{task_unique_participants} participants, {len(task_saliency_maps)} samples\n(Absolute values - showing importance magnitude)",
+                        title=f"Aggregated Saliency Map - {title_prefix} - {task_type.capitalize()} Tasks (L2-normalized)\n{task_unique_participants} participants, {len(task_saliency_maps)} samples\n(Absolute values - showing importance magnitude)",
                         save_path=os.path.join(task_output_dir, f"saliency_aggregated_all_participants_{method}.png"),
                         use_absolute=True  # Standard practice: absolute values for aggregated maps
                     )
@@ -504,7 +519,7 @@ class SaliencyAnalyzer:
                     plot_saliency_map_sample(
                         task_aggregated_variance,
                         channel_names=channel_names,
-                        title=f"Saliency Consistency (Std Dev) - {task_type.capitalize()} Tasks ({self.target_type.capitalize()})\n{task_unique_participants} participants, {len(task_saliency_maps)} samples",
+                        title=f"Saliency Consistency (Std Dev) - {title_prefix} - {task_type.capitalize()} Tasks\n{task_unique_participants} participants, {len(task_saliency_maps)} samples",
                         save_path=os.path.join(task_output_dir, f"saliency_consistency_all_participants_{method}.png"),
                         cmap='viridis'
                     )
@@ -605,6 +620,27 @@ class SaliencyAnalyzer:
         
         return task_analyses
     
+    @staticmethod
+    def _chunked_normalized_mean_std(saliency_maps: np.ndarray, chunk_size: int = 10000) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute L2-normalized mean and std over samples without a full copy (avoids OOM)."""
+        n = len(saliency_maps)
+        shape = saliency_maps.shape[1:]
+        running_sum = np.zeros(shape, dtype=np.float64)
+        running_sq = np.zeros(shape, dtype=np.float64)
+        for start in range(0, n, chunk_size):
+            end = min(start + chunk_size, n)
+            chunk = saliency_maps[start:end]
+            for i in range(len(chunk)):
+                sample = chunk[i]
+                l2_norm = np.linalg.norm(sample)
+                if l2_norm > 0:
+                    sample = sample / l2_norm
+                running_sum += sample
+                running_sq += sample.astype(np.float64) ** 2
+        mean_map = running_sum / n
+        std_map = np.sqrt(np.maximum(running_sq / n - mean_map ** 2, 0.0))
+        return mean_map, std_map
+    
     def aggregate_across_participants(self,
                                      method: str = 'integrated_gradients',
                                      aggregation: str = 'mean') -> Dict[str, np.ndarray]:
@@ -641,46 +677,53 @@ class SaliencyAnalyzer:
         channel_importance = results['channel_importance']
         saliency_maps = results['saliency_maps']
         participant_ids = results['participant_ids']
+        n_samples = len(saliency_maps)
         
         # BEST PRACTICE: Normalize each sample's saliency map before aggregation
         # This prevents samples with high-magnitude gradients from dominating the average
-        # Normalization options:
-        # - 'none': No normalization (raw aggregation) - may be dominated by high-magnitude samples
-        # - 'l2': L2 normalize each sample (preserves relative patterns)
-        # - 'max_abs': Normalize by max absolute value (preserves sign, scales to [-1, 1])
-        # - 'zscore': Z-score normalization (mean=0, std=1 per sample)
         normalize_before_aggregation = True  # Best practice: normalize before aggregating
         
-        if normalize_before_aggregation:
-            # Normalize each saliency map by its L2 norm to preserve relative patterns
-            # This ensures each sample contributes equally regardless of gradient magnitude
-            saliency_maps_normalized = saliency_maps.copy()
-            for i in range(len(saliency_maps)):
-                sample_map = saliency_maps[i]
-                l2_norm = np.linalg.norm(sample_map)
-                if l2_norm > 0:
-                    saliency_maps_normalized[i] = sample_map / l2_norm
-                # If norm is 0, keep as is (all zeros)
-        else:
-            saliency_maps_normalized = saliency_maps
-        
-        # Aggregate across all samples (all participants)
-        # Note: We aggregate the normalized maps to ensure equal contribution from each sample
-        if aggregation == 'mean':
-            aggregated_channel_importance = channel_importance.mean(axis=0)
-            aggregated_saliency_maps = saliency_maps_normalized.mean(axis=0)
-        elif aggregation == 'median':
+        # Process in chunks to avoid OOM (exit code 137) when n_samples is large (e.g. 100k+)
+        _AGG_CHUNK_SIZE = 10000
+        if aggregation == 'median':
+            # Median: compute per-chunk median then median of chunk medians to avoid full copy
+            chunk_medians = []
+            for start in range(0, n_samples, _AGG_CHUNK_SIZE):
+                end = min(start + _AGG_CHUNK_SIZE, n_samples)
+                chunk = np.array(saliency_maps[start:end], copy=True)
+                if normalize_before_aggregation:
+                    for i in range(len(chunk)):
+                        l2_norm = np.linalg.norm(chunk[i])
+                        if l2_norm > 0:
+                            chunk[i] = chunk[i] / l2_norm
+                chunk_medians.append(np.median(chunk, axis=0))
+                del chunk
+            aggregated_saliency_maps = np.median(chunk_medians, axis=0)
+            saliency_maps_variance = np.std(chunk_medians, axis=0) if len(chunk_medians) > 1 else np.zeros_like(aggregated_saliency_maps)
             aggregated_channel_importance = np.median(channel_importance, axis=0)
-            aggregated_saliency_maps = np.median(saliency_maps_normalized, axis=0)
-        elif aggregation == 'std':
-            aggregated_channel_importance = channel_importance.std(axis=0)
-            aggregated_saliency_maps = saliency_maps_normalized.std(axis=0)
         else:
-            raise ValueError(f"Unknown aggregation method: {aggregation}. "
-                           "Must be 'mean', 'median', or 'std'")
-        
-        # Also compute variance/consistency map to show how consistent patterns are
-        saliency_maps_variance = saliency_maps_normalized.std(axis=0)
+            # Mean or std: use running statistics so we never hold a full normalized copy
+            shape = saliency_maps.shape[1:]
+            running_sum = np.zeros(shape, dtype=np.float64)
+            running_sq = np.zeros(shape, dtype=np.float64)
+            for start in range(0, n_samples, _AGG_CHUNK_SIZE):
+                end = min(start + _AGG_CHUNK_SIZE, n_samples)
+                chunk = saliency_maps[start:end]
+                # Normalize chunk in a small buffer (reused each iteration)
+                for i in range(len(chunk)):
+                    sample = chunk[i]
+                    l2_norm = np.linalg.norm(sample)
+                    if l2_norm > 0:
+                        sample = sample / l2_norm
+                    running_sum += sample
+                    running_sq += sample.astype(np.float64) ** 2
+            count = n_samples
+            aggregated_saliency_maps = running_sum / count
+            saliency_maps_variance = np.sqrt(np.maximum(running_sq / count - aggregated_saliency_maps ** 2, 0.0))
+            if aggregation == 'mean':
+                aggregated_channel_importance = channel_importance.mean(axis=0)
+            else:  # std
+                aggregated_channel_importance = channel_importance.std(axis=0)
         
         unique_participants = np.unique(participant_ids)
         

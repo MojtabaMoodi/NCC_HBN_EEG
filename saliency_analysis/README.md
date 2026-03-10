@@ -88,6 +88,76 @@ pip install tqdm
 
 ## Usage
 
+### Commands to run (summary)
+
+**From project root (EEG/):**
+
+1. **Single model** — specify the best-model path and where to save saliency/topography:
+   ```bash
+   python saliency_analysis/main.py \
+       --checkpoint /path/to/your/best_model.pth \
+       --target_type gender \
+       --segment_length 4s \
+       --output_dir /path/to/saliency_output
+   ```
+   You can also use environment variables (e.g. in scripts or SLURM):
+   ```bash
+   export CHECKPOINT=/path/to/best_model.pth
+   export OUTPUT_DIR=/path/to/saliency_output
+   python saliency_analysis/main.py --target_type gender --segment_length 4s
+   ```
+
+2. **Single ResNet model** — same as above; model type is auto-detected from the checkpoint:
+   ```bash
+   python saliency_analysis/main.py \
+       --checkpoint /path/to/resnet_best.pth \
+       --target_type age \
+       --segment_length 4s \
+       --output_dir /path/to/saliency_output
+   ```
+
+3. **Batch (config in code)**  
+   Set `RESNET_BASE` and `CNN_BASE` in `saliency_analysis/main.py`; then run:
+   ```bash
+   python saliency_analysis/main.py --batch --output_dir saliency_results
+   ```
+   Or use the shell script: `bash saliency_analysis/run_saliency_batch.sh` (uses `OUTPUT_DIR` env var if set).
+
+4. **Batch (your list of checkpoint paths)**  
+   Put one checkpoint path per line in a file (e.g. `my_checkpoints.txt`), then run with a single segment length and output dir:
+   ```bash
+   python saliency_analysis/main.py --batch \
+       --checkpoint_list my_checkpoints.txt \
+       --segment_length 4s \
+       --output_dir saliency_results
+   ```
+   Model type and target type are inferred from each checkpoint; segment length applies to all.
+
+5. **Topography from saved saliency results** (no model needed):
+   ```bash
+   conda activate eeg_env
+   python saliency_analysis/create_topography.py
+   ```
+   Choose option 1 and enter the path to a saved `saliency_results_<method>.npz` file.
+
+**Using the single-model shell script (`run_saliency_single.sh`)**  
+From the project root, pass the **path to your best model** with `--checkpoint`; saliency and **topography are generated together** into `--output_dir`:
+
+```bash
+# Replace with your actual best-model path and desired output directory
+bash saliency_analysis/run_saliency_single.sh \
+    --checkpoint /path/to/your/best_model.pth \
+    --target_type gender \
+    --segment_length 4s \
+    --output_dir /path/to/save/results
+```
+
+Topography is saved as `topography_<method>.png` (e.g. `topography_vanilla_gradients.png`) in the same output directory. You can also set `CHECKPOINT` and `OUTPUT_DIR` in the environment and omit those flags (see script header).
+
+**Note:** LaBraM age/gender checkpoints use a different format and data pipeline; saliency for LaBraM is not supported in this script yet. Use CNN or ResNet checkpoints (same HDF5 data and segment lengths). To run only a subset of models in batch mode: `python saliency_analysis/main.py --batch --models gender_resnet34_4s age_cnn_1s` (use the short name derived from the checkpoint path).
+
+Plot titles now include **task, segment length, and model** (e.g. "Gender Classification (4s, CNN)", "Age Classification (4s, ResNet34)").
+
 ### Command Line Interface
 
 The easiest way to run saliency analysis is using the main script:
@@ -129,7 +199,7 @@ python saliency_analysis/main.py \
 - `--task_type`: Task type (`active`, `passive`, or `both`)
 
 **Model Options:**
-- `--model_type`: Model type (auto-detected if not specified)
+- `--model_type`: Model type (auto-detected from checkpoint if not specified). Examples: `gender_cnn`, `age_cnn`, `age_resnet34`, `gender_resnet50`
 - `--num_channels`: Number of EEG channels (default: 60)
 - `--prediction_type`: For age models (`classification` or `regression`)
 
