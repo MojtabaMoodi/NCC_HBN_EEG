@@ -696,7 +696,12 @@ class EEGDataset(IterableDataset):
         
         # Convert EEG data to tensor
         eeg_tensor = torch.FloatTensor(eeg_data)
-        
+        if eeg_tensor.dim() < 2:
+            raise ValueError(
+                f"EEG data must have shape (n_channels, n_timepoints). "
+                f"Got shape {eeg_tensor.shape} for participant {participant_id}, sample {sample_idx}. "
+                "Check HDF5: each sample dataset should be (60, timepoints), e.g. (60, 800) for 4s at 200Hz."
+            )
         # Apply transforms if provided
         if self.transform:
             eeg_tensor = self.transform(eeg_tensor)

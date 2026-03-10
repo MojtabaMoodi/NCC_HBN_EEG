@@ -1302,11 +1302,29 @@ class EEGDataPreprocessor:
         
         return result
     
+    def get_all_participant_dirs(self) -> List[Path]:
+        """
+        Return all participant directories from data_root (same order used by user-id preprocessing).
+        Used for partitioning participants into folds without duplicating discovery logic.
+        
+        Returns:
+            List of Paths to participant directories (sub-* under cmi_bids_R*).
+        """
+        release_dirs = [d for d in self.data_root.iterdir() if d.is_dir() and d.name.startswith("cmi_bids_R")]
+        release_dirs.sort()
+        all_participant_dirs = []
+        for release_dir in release_dirs:
+            participant_dirs = [d for d in release_dir.iterdir() if d.is_dir() and d.name.startswith("sub-")]
+            all_participant_dirs.extend(participant_dirs)
+        return all_participant_dirs
+
     def process_all_participants_user_identification(self, train_ratio: float = 0.7, val_ratio: float = 0.15, 
                                                       test_ratio: float = 0.15, 
                                                       random_seed: int = 42,
                                                       consider_unknown_users: bool = False,
-                                                      unknown_user_ratio: float = 0.2) -> None:
+                                                      unknown_user_ratio: float = 0.2,
+                                                      known_participant_dirs: Optional[List[Path]] = None,
+                                                      unknown_participant_dirs: Optional[List[Path]] = None) -> None:
         """
         Process all participants for user identification task.
         
@@ -1315,8 +1333,8 @@ class EEGDataPreprocessor:
         - 15% of each participant's samples -> val
         - 15% of each participant's samples -> test
         
-        When consider_unknown_users=True:
-        - A fraction (unknown_user_ratio, default 20%) of participants are held out as "unknown"
+        When consider_unknown_users=True (or when known_participant_dirs/unknown_participant_dirs are provided):
+        - A fraction of participants are held out as "unknown"
         - Unknown participants' samples go entirely into an "unknown" split (no train/val/test)
         - Only the remaining "known" participants get train/val/test splits and class indices
         - Saves unknown_participant_ids.json for evaluation on unseen users
@@ -1328,50 +1346,78 @@ class EEGDataPreprocessor:
             random_seed: Random seed for reproducible splits
             consider_unknown_users: If True, hold out unknown_user_ratio of users as "unknown" (default: False)
             unknown_user_ratio: Fraction of participants to treat as unknown when consider_unknown_users=True (default: 0.2)
+            known_participant_dirs: If set, use these as known participants (must set unknown_participant_dirs too).
+            unknown_participant_dirs: If set, use these as unknown participants (must set known_participant_dirs too).
         """
         # Validate ratios
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
         if consider_unknown_users and (unknown_user_ratio <= 0 or unknown_user_ratio >= 1.0):
             raise ValueError(f"unknown_user_ratio must be in (0, 1), got {unknown_user_ratio}")
+        has_explicit_split = known_participant_dirs is not None or unknown_participant_dirs is not None
+        if (known_participant_dirs is None) != (unknown_participant_dirs is None):
+            raise ValueError(
+                "known_participant_dirs and unknown_participant_dirs must be both set or both unset. "
+                f"Got known_participant_dirs={known_participant_dirs is not None}, "
+                f"unknown_participant_dirs={unknown_participant_dirs is not None}"
+            )
         
         # Set random seed
         np.random.seed(random_seed)
         
-        # Get all release directories
-        release_dirs = [d for d in self.data_root.iterdir() if d.is_dir() and d.name.startswith("cmi_bids_R")]
-        release_dirs.sort()  # Process in order
-        
-        logger.info(f"Found {len(release_dirs)} release directories")
-        
-        # Collect all participant directories
-        all_participant_dirs = []
-        for release_dir in release_dirs:
-            participant_dirs = [d for d in release_dir.iterdir() if d.is_dir() and d.name.startswith("sub-")]
-            all_participant_dirs.extend(participant_dirs)
-        
-        total_participants = len(all_participant_dirs)
-        logger.info(f"Found {total_participants} total participants")
-        
-        # Split into known vs unknown when consider_unknown_users is True
-        if consider_unknown_users:
-            # Shuffle with seed for reproducibility
-            rng = np.random.RandomState(random_seed)
-            indices = np.arange(total_participants)
-            rng.shuffle(indices)
-            n_unknown = max(1, int(round(total_participants * unknown_user_ratio)))
-            n_known = total_participants - n_unknown
-            known_indices = indices[:n_known]
-            unknown_indices = indices[n_known:]
-            known_participant_dirs = [all_participant_dirs[i] for i in known_indices]
-            unknown_participant_dirs = [all_participant_dirs[i] for i in unknown_indices]
-            unknown_participant_ids = [d.name for d in unknown_participant_dirs]
-            logger.info(f"consider_unknown_users=True: {n_known} known, {n_unknown} unknown ({unknown_user_ratio:.1%})")
+        # Resolve known/unknown participant lists
+        if has_explicit_split:
+            known_participant_dirs = list(known_participant_dirs)
+            unknown_participant_dirs = list(unknown_participant_dirs)
+            known_set = {p.name for p in known_participant_dirs}
+            unknown_set = {p.name for p in unknown_participant_dirs}
+            if known_set & unknown_set:
+                overlap = sorted(known_set & unknown_set)
+                raise ValueError(
+                    f"known_participant_dirs and unknown_participant_dirs must be disjoint. "
+                    f"Overlap: {overlap[:10]}{'...' if len(overlap) > 10 else ''}"
+                )
+            unknown_participant_ids = [p.name for p in unknown_participant_dirs]
+            total_participants = len(known_participant_dirs)  # for progress logging
+            logger.info(
+                f"Using explicit split: {len(known_participant_dirs)} known, "
+                f"{len(unknown_participant_dirs)} unknown (no overlap)"
+            )
         else:
-            known_participant_dirs = all_participant_dirs
-            unknown_participant_dirs = []
-            unknown_participant_ids = []
-            logger.info("Processing all participants for user identification (no unknown users)")
+            # Get all release directories
+            release_dirs = [d for d in self.data_root.iterdir() if d.is_dir() and d.name.startswith("cmi_bids_R")]
+            release_dirs.sort()  # Process in order
+            
+            logger.info(f"Found {len(release_dirs)} release directories")
+            
+            # Collect all participant directories
+            all_participant_dirs = []
+            for release_dir in release_dirs:
+                participant_dirs = [d for d in release_dir.iterdir() if d.is_dir() and d.name.startswith("sub-")]
+                all_participant_dirs.extend(participant_dirs)
+            
+            total_participants = len(all_participant_dirs)
+            logger.info(f"Found {total_participants} total participants")
+            
+            # Split into known vs unknown when consider_unknown_users is True
+            if consider_unknown_users:
+                # Shuffle with seed for reproducibility
+                rng = np.random.RandomState(random_seed)
+                indices = np.arange(total_participants)
+                rng.shuffle(indices)
+                n_unknown = max(1, int(round(total_participants * unknown_user_ratio)))
+                n_known = total_participants - n_unknown
+                known_indices = indices[:n_known]
+                unknown_indices = indices[n_known:]
+                known_participant_dirs = [all_participant_dirs[i] for i in known_indices]
+                unknown_participant_dirs = [all_participant_dirs[i] for i in unknown_indices]
+                unknown_participant_ids = [d.name for d in unknown_participant_dirs]
+                logger.info(f"consider_unknown_users=True: {n_known} known, {n_unknown} unknown ({unknown_user_ratio:.1%})")
+            else:
+                known_participant_dirs = all_participant_dirs
+                unknown_participant_dirs = []
+                unknown_participant_ids = []
+                logger.info("Processing all participants for user identification (no unknown users)")
         
         logger.info(f"Known participants to process: {len(known_participant_dirs)}")
         if consider_unknown_users:
