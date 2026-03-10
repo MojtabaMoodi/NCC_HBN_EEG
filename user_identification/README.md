@@ -2,7 +2,7 @@
 
 This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (training, evaluation, open-set analysis with known vs unknown participants) and an alternative **CNN experiment pipeline** via `main.py`.
 
-**Run from project root:** All scripts and wrappers assume the EEG project root as the current working directory (e.g. `cd /path/to/EEG` before running). The shell wrappers set this explicitly; when calling Python scripts directly, run them from the project root so imports and paths resolve correctly.
+**Run from project root:** All scripts and wrappers assume the EEG project root as the current working directory (e.g. `cd /path/to/EEG` before running). The shell wrappers set this explicitly; when calling Python scripts directly, run them from the project root so imports and paths resolve correctly. **Usage steps:** [Prepare data → Validate → Train → (optional) Analyze](#usage-steps).
 
 **Requirements:** Conda env `eeg_env`, LaBraM (with pretrained checkpoint under `LaBraM/checkpoints/`), and `data_processing` with HDF5 data prepared for user identification (including `participant_id_to_class_idx.json`). See `data_processing/README.md` for preprocessing.
 
@@ -13,16 +13,91 @@ This module provides tools for **user identification**: the model learns which *
 | What | Where |
 |------|--------|
 | Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
+| **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`) |
 | Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
 | CNN/LaBraM experiments (non-ArcFace) | `main.py` |
 | Validate HDF5 setup | `validate.py` |
 | Preprocessing | `data_processing/preprocess_user_identification.py` |
+
+## Usage steps
+
+Run all commands from the **project root** (e.g. `cd /path/to/EEG`).
+
+### 1. Prepare data
+
+User-identification data must be preprocessed so each participant’s samples are split 70% train / 15% val / 15% test, and (optionally) some participants are held out as “unknown” for open-set evaluation.
+
+**Single run (one train/val/test + optional unknown):**
+```bash
+python data_processing/preprocess_user_identification.py \
+  --data_root /path/to/preprocessed_new \
+  --output_dir /path/to/processed_eeg_data_user_identification \
+  --segment_length 4s \
+  --random_seed 42
+# Optional: add --consider_unknown --unknown_ratio 0.2 for open-set evaluation
+```
+
+**5-fold (disjoint unknown sets for mean ± std reporting):**
+```bash
+python data_processing/preprocess_user_identification.py \
+  --data_root /path/to/preprocessed_new \
+  --output_dir /path/to/user_id_5fold \
+  --n_folds 5 \
+  --segment_length 4s \
+  --random_seed 42
+```
+This creates `output_dir/fold_0` … `output_dir/fold_4`; in each fold a different 20% of participants are unknown.
+
+### 2. Validate setup (optional but recommended)
+
+```bash
+python user_identification/validate.py --hdf5_dir /path/to/processed_eeg_data_user_identification
+```
+For 5-fold data, validate one fold: `--hdf5_dir /path/to/user_id_5fold/fold_0`.
+
+### 3. Train
+
+**Single run:**
+```bash
+# Easiest: use wrapper (output under ./results_user_id_4s_labram_arcface)
+OUTPUT_DIR=/path/to/my_run ./user_identification/run_4s.sh
+
+# Or call the training script directly (set paths explicitly)
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir /path/to/processed_eeg_data_user_identification \
+  --output_dir /path/to/my_run \
+  --segment_length 4s --epochs 200 --batch_size 192 --seed 42
+```
+
+**5-fold CV (train one model per fold, then get mean ± std):**
+```bash
+python user_identification/run_5fold_cv.py \
+  --hdf5_root /path/to/user_id_5fold \
+  --output_root /path/to/results_5fold \
+  --n_folds 5 \
+  --segment_length 4s --epochs 200 --batch_size 192 --seed 42
+```
+Summary is written to `output_root/cv_summary.json`.
+
+### 4. Optional: open-set analysis
+
+If you used `--consider_unknown` (or 5-fold data), you can evaluate on test + unknown and tune an open-set threshold:
+
+```bash
+CHECKPOINT=/path/to/best_model.pth \
+  HDF5_DIR=/path/to/processed_eeg_data_user_identification \
+  ./user_identification/run_analysis_test_unknown.sh
+# Or: python user_identification/analyze_confidence.py --checkpoint ... --hdf5_dir ... --split both --output_dir ...
+```
+
+See [Confidence and Open-Set Analysis](#confidence-and-open-set-analysis) for outputs and metrics.
 
 ## Structure
 
 | File | Description |
 |------|-------------|
 | `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
+| `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. |
 | `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
 | `run_4s.slurm` | SLURM batch script for cluster runs (output_dir and hdf5_dir are fixed in the script; no resume by default—edit to add `--resume` or `OUTPUT_DIR` if needed). |
 | `labram_model.py` | LaBraM wrapper for user identification |
@@ -86,6 +161,31 @@ python user_identification/train_labram_arcface.py \
 ```
 
 **Key arguments:** `--hdf5_dir` (required), `--segment_length` (1s/2s/4s), `--output_dir` (default when run directly: `./results_labram_arcface`; `run_4s.sh` uses `OUTPUT_DIR`), `--resume` (e.g. `best_model.pth`), `--distributed` (only for multi-GPU). ArcFace: `--arcface_margin`, `--arcface_scale`. Early stopping: `--early_stopping_patience`, `--early_stopping_min_delta`. Optimizer: `--lr`, `--layer_decay`, `--weight_decay`, `--warmup_epochs`, `--clip_grad`. Run `python user_identification/train_labram_arcface.py --help` for full list.
+
+### 5-fold cross-validation (disjoint unknown participants)
+
+To report mean ± std across 5 folds with **no overlap** in unknown participants (each fold holds out a different 20% as unknown):
+
+1. **Preprocess with 5 folds** (from project root):
+   ```bash
+   python data_processing/preprocess_user_identification.py \
+     --data_root /path/to/preprocessed_new \
+     --output_dir /path/to/user_id_5fold \
+     --n_folds 5 \
+     --segment_length 4s \
+     --random_seed 42
+   ```
+   This creates `output_dir/fold_0`, ..., `output_dir/fold_4`; in fold *k*, the *k*-th group of participants is unknown and the rest are known.
+
+2. **Run 5-fold training and aggregation**:
+   ```bash
+   python user_identification/run_5fold_cv.py \
+     --hdf5_root /path/to/user_id_5fold \
+     --output_root /path/to/results_5fold \
+     --n_folds 5 \
+     --segment_length 4s --epochs 200 --batch_size 192 --seed 42
+   ```
+   Each fold is trained with `train_labram_arcface.py`; then val/test accuracy are read from each fold's `results.json` and summarized as mean ± std. Summary is written to `output_root/cv_summary.json`.
 
 ## How unknown participants are handled
 

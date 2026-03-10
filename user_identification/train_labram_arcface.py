@@ -6,6 +6,7 @@ but with ArcFace loss for large-scale user identification.
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -338,6 +339,7 @@ def main():
     # Resume from checkpoint if specified
     start_epoch = 0
     max_accuracy = 0.0
+    best_test_accuracy = 0.0  # test accuracy at best val epoch (for results.json)
     patience_counter = 0  # For early stopping (tracks epochs without improvement)
     if args.resume:
         if not args.distributed or labram_utils.is_main_process():
@@ -394,6 +396,8 @@ def main():
             start_epoch = checkpoint_epoch_1indexed  # Keep as-is: checkpoint epoch 50 means start from 50 (0-indexed)
         if 'val_accuracy' in checkpoint:
             max_accuracy = checkpoint['val_accuracy']
+        if 'test_accuracy' in checkpoint:
+            best_test_accuracy = checkpoint['test_accuracy']
         
         # Reset patience counter when resuming (we'll start counting from the resumed epoch)
         patience_counter = 0
@@ -486,6 +490,7 @@ def main():
                 # Significant improvement - save new best and reset patience
                 improvement = val_acc - max_accuracy
                 max_accuracy = val_acc
+                best_test_accuracy = test_acc
                 patience_counter = 0
                 checkpoint = {
                     'epoch': epoch + 1,
@@ -530,10 +535,19 @@ def main():
     
     total_time = time.time() - start_time
     if not args.distributed or labram_utils.is_main_process():
+        results = {
+            'val_accuracy': float(max_accuracy),
+            'test_accuracy': float(best_test_accuracy),
+        }
+        results_path = output_dir / 'results.json'
+        with open(results_path, 'w') as f:
+            json.dump(results, f, indent=2)
         print(f"\n{'='*80}")
         print(f"Training completed!")
         print(f"   Total time: {total_time:.2f}s ({total_time/3600:.2f} hours)")
         print(f"   Best validation accuracy: {max_accuracy:.4f}%")
+        print(f"   Test accuracy (at best val): {best_test_accuracy:.4f}%")
+        print(f"   Results written to: {results_path}")
         print(f"{'='*80}")
 
 
