@@ -717,7 +717,7 @@ def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, mode
                 checkpoint = torch.hub.load_state_dict_from_url(
                     args.resume, map_location='cpu', check_hash=True)
             else:
-                checkpoint = torch.load(args.resume, map_location='cpu')
+                checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
             model_without_ddp.load_state_dict(checkpoint['model']) # strict: bool=True, , strict=False
             print("Resume checkpoint %s" % args.resume)
             if 'model_ema' in checkpoint and model_ema is not None and hasattr(args, 'model_ema') and args.model_ema:
@@ -956,8 +956,12 @@ def get_metrics(output, target, metrics, is_binary, threshold=0.5):
         target = np.atleast_1d(target.ravel())
         if output.ndim == 0:
             output = np.atleast_1d(output)
-        elif output.ndim == 1:
-            output = np.atleast_1d(output)
+        if output.ndim == 1:
+            # pyhealth multiclass_metrics_fn expects (n_samples, n_classes) probabilities; argmax(axis=-1) on 1D yields a scalar and breaks accuracy_score. Convert class indices to one-hot.
+            n_classes = int(max(np.max(target), np.max(output))) + 1
+            out_2d = np.zeros((output.size, n_classes), dtype=np.float64)
+            out_2d[np.arange(output.size), np.asarray(output, dtype=np.int64)] = 1.0
+            output = out_2d
         # else keep output 2D (n_samples, n_classes) for multiclass_metrics_fn
     # Guard: empty arrays (e.g. participant-level aggregation with 0 groups) — return defaults without calling sklearn
     if output.size == 0 or target.size == 0:

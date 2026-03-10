@@ -8,6 +8,7 @@
 # https://github.com/facebookresearch/dino
 # ---------------------------------------------------------
 import math
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -20,6 +21,9 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*autocast.*"
 from timm.utils import ModelEma
 import utils
 from einops import rearrange
+
+# Set DEBUG_EVALUATE=1 to print batch-structure debug in evaluate()
+_DEBUG_EVALUATE = os.environ.get("DEBUG_EVALUATE", "").lower() in ("1", "true", "yes")
 
 # Add LaBraM directory and project root for imports (labram_dataset, data_processing)
 _labram_dir = Path(__file__).parent
@@ -425,7 +429,50 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         else:
             target = batch[-1]
             participant_ids_batch = None
+        # If first element is not valid EEG (0-dim or 1-dim), find EEG-shaped tensor in batch.
+        # Happens when dataset/collate yields wrong order: (label, pids, eeg) or (label, eeg, pids).
+        if EEG.dim() < 2:
+            if _DEBUG_EVALUATE and step == 0:
+                for i, elem in enumerate(batch):
+                    if torch.is_tensor(elem):
+                        print(f"[DEBUG evaluate] batch[{i}]: tensor shape={elem.shape}, dim={elem.dim()}, dtype={elem.dtype}")
+                    else:
+                        t = type(elem).__name__
+                        l = len(elem) if isinstance(elem, (list, tuple)) else "n/a"
+                        print(f"[DEBUG evaluate] batch[{i}]: type={t}, len={l}")
+            eeg_candidate = None
+            for i, elem in enumerate(batch):
+                if torch.is_tensor(elem) and elem.dim() >= 2 and elem.shape[-2] == 60:
+                    eeg_candidate = (i, elem)
+                    break
+            if eeg_candidate is not None:
+                idx, eeg_candidate = eeg_candidate
+                if _DEBUG_EVALUATE and step == 0:
+                    print(f"[DEBUG evaluate] Using batch[{idx}] as EEG (shape={eeg_candidate.shape})")
+                warnings.warn(
+                    "Batch first element not valid EEG; using EEG-shaped tensor from batch. Fix dataset yield order (eeg, label, pid).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                EEG = eeg_candidate
+                # Target is the scalar/small tensor; pids are the list of strings.
+                if idx == 1:
+                    target = batch[0]
+                elif idx == 2 and len(batch) >= 2:
+                    target = batch[0]
+                    participant_ids_batch = batch[1]
+            if EEG.dim() < 2:
+                if _DEBUG_EVALUATE:
+                    for i, elem in enumerate(batch):
+                        if torch.is_tensor(elem):
+                            print(f"[DEBUG evaluate] batch[{i}]: tensor shape={elem.shape}, dim={elem.dim()}, shape[-2]={elem.shape[-2] if elem.dim() >= 2 else 'n/a'}")
+                raise ValueError(
+                    f"EEG batch has wrong shape: dim={EEG.dim()}, shape={EEG.shape}. "
+                    "Expected (B, n_channels, n_timepoints). Check dataset yield order (eeg_data, label, participant_id)."
+                )
         EEG = EEG.float().to(device, non_blocking=True) / 100
+        if EEG.dim() == 2:
+            EEG = EEG.unsqueeze(0)  # batch_size=1: (N, T) -> (1, N, T)
         EEG = rearrange(EEG, 'B N (A T) -> B N A T', T=200)
         
         # Handle multi-output targets
@@ -434,8 +481,31 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
             age_target = target[1].to(device, non_blocking=True).long()
         else:
             target = target.to(device, non_blocking=True)
+            B = EEG.shape[0]
             if is_binary:
                 target = target.float().unsqueeze(-1)
+                # BCE and metrics expect target (B, 1) with binary 0/1. If target has wrong shape, normalize.
+                if target.dim() > 2 or target.shape != (B, 1):
+                    warnings.warn(
+                        f"Binary target had shape {target.shape}, expected ({B}, 1). "
+                        "Using first element per sample clamped to 0/1. Fix dataset/collate.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    flat = target.reshape(-1)[:B]
+                    target = torch.clamp(flat.round().long(), 0, 1).float().unsqueeze(1)
+            else:
+                # Multi-class (e.g. age): CrossEntropyLoss expects target (B,) with class indices.
+                if target.dim() == 0:
+                    target = target.unsqueeze(0)
+                if target.dim() > 1 or target.size(0) != B:
+                    warnings.warn(
+                        f"Multi-class target had shape {target.shape}, expected ({B},). "
+                        "Using first B elements as class indices. Fix dataset/collate.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    target = target.reshape(-1)[:B].long()
         
         # compute output
         with torch.amp.autocast(device_type='cuda'):
@@ -663,13 +733,13 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
             prediction_type='classification', aggregation=AGGREGATION_MAJORITY_VOTE,
             probabilities=probs)
         ret['segment_metrics'] = {k: v for k, v in ret.items() if k not in ('loss',)}
-        # Multiclass: pass predictions (class indices) so participant-level accuracy is (pred==true).mean().
         # Binary: use probabilities when available (for ROC etc.), else predictions.
+        # Multiclass: mean_prob has 2D prob_mp — pass it so get_metrics/multiclass_metrics_fn get (n, n_classes). Majority vote gives 1D class indices; get_metrics converts to 2D when needed.
         if is_binary:
             out_mp = prob_mp if prob_mp is not None else pred_mp
             out_mv = prob_mv if prob_mv is not None else pred_mv
         else:
-            out_mp = pred_mp
+            out_mp = prob_mp if prob_mp is not None else pred_mp
             out_mv = pred_mv
         ret['participant_mean_prob_metrics'] = utils.get_metrics(out_mp, true_mp, metrics, is_binary, 0.5)
         ret['participant_metrics'] = utils.get_metrics(out_mv, true_mv, metrics, is_binary, 0.5)

@@ -12,6 +12,7 @@ original EEGDataset while providing LaBraM's expected interface.
 import numpy as np
 import sys
 import os
+import warnings
 from pathlib import Path
 import torch
 from scipy.signal import resample
@@ -171,6 +172,12 @@ class LaBraMEEGDataset(IterableDataset):
         for sample in self.eeg_dataset:
             # Extract EEG data
             eeg_data = sample['eeg_data']
+            if not isinstance(eeg_data, torch.Tensor) or eeg_data.dim() < 2:
+                raise ValueError(
+                    f"Expected eeg_data to be a 2D+ tensor (channels x time). "
+                    f"Got type={type(eeg_data).__name__}, dim={getattr(eeg_data, 'dim', lambda: None)()}. "
+                    "Check HDF5 data: each sample dataset should have shape (n_channels, n_timepoints), e.g. (60, 800) for 4s at 200Hz."
+                )
             eeg_data = self._resample_if_needed(eeg_data)
             label = self._extract_label(sample)
             participant_id = sample.get('participant_id')
@@ -181,7 +188,18 @@ def collate_labram_with_participant_ids(batch):
     """
     Collate batch of (eeg, label, participant_id) into (eeg_stacked, label_stacked, participant_ids).
     Use with DataLoader when participant-level aggregation (e.g. majority vote) is needed.
+    Expects eeg to be (n_channels, n_timepoints) per sample; labels scalar. Does not change dimensions.
     """
+    if not batch:
+        raise ValueError("collate_labram_with_participant_ids received an empty batch. Check DataLoader and dataset.")
+    for i, b in enumerate(batch):
+        x = b[0]
+        if not torch.is_tensor(x) or x.dim() < 2:
+            raise ValueError(
+                f"Batch item {i}: expected eeg tensor with dim >= 2 (channels x time). "
+                f"Got type={type(x).__name__}, shape={getattr(x, 'shape', None)}. "
+                "Check HDF5 data: sample datasets should have shape (n_channels, n_timepoints), e.g. (60, 800) for 4s."
+            )
     eeg = torch.stack([b[0] for b in batch])
     labels = [b[1] for b in batch]
     if isinstance(labels[0], tuple):
@@ -191,7 +209,32 @@ def collate_labram_with_participant_ids(batch):
             torch.stack([l[1] for l in labels]),
         )
     else:
-        label = torch.stack(labels) if torch.is_tensor(labels[0]) else torch.tensor(labels)
+        # Single task: ensure each label is scalar so stacking gives (B,)
+        scalar_labels = []
+        for i, L in enumerate(labels):
+            if torch.is_tensor(L):
+                if L.numel() > 1:
+                    warnings.warn(
+                        f"Label at index {i} had {L.numel()} elements (shape {L.shape}); expected scalar. "
+                        "Using first element as class index. Check dataset _extract_label and sample.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    val = int(round(L.flatten()[0].item()))
+                    scalar_labels.append(torch.tensor(val, dtype=torch.long))
+                else:
+                    scalar_labels.append(L.flatten()[0].long() if L.numel() > 0 else torch.tensor(0, dtype=torch.long))
+            elif isinstance(L, (list, tuple)):
+                if len(L) > 1:
+                    warnings.warn(
+                        f"Label at index {i} had len {len(L)}; expected scalar. Using first element. Check dataset.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                scalar_labels.append(torch.tensor(L[0] if len(L) > 0 else 0, dtype=torch.long))
+            else:
+                scalar_labels.append(torch.tensor(L, dtype=torch.long))
+        label = torch.stack(scalar_labels)
     participant_ids = [b[2] for b in batch]
     return (eeg, label, participant_ids)
 

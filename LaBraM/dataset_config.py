@@ -11,6 +11,7 @@ import os
 VALID_DATASET_NAMES = [
     # === AGE CLASSIFICATION EXPERIMENTS ===
     'age_baseline',
+    'age_classification',  # alias for age prediction (same as age_baseline; used in eval scripts)
     'age_cv_age_stratified',
     'age_cross_task_active_to_passive',
     'age_cross_task_passive_to_active',

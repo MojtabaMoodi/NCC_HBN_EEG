@@ -344,7 +344,14 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     Returns:
         Dictionary with metrics for this fold
     """
-    utils.init_distributed_mode(args)
+    # Eval-only: run single-process to avoid requiring MASTER_ADDR/MASTER_PORT
+    if args.eval:
+        args.distributed = False
+        args.rank = 0
+        args.gpu = 0
+        args.world_size = 1
+    else:
+        utils.init_distributed_mode(args)
 
     if ds_init is not None:
         utils.create_ds_config(args)
@@ -667,12 +674,29 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema)
             
     if args.eval:
+        aggregate = getattr(args, 'aggregate_by_participant', None)
         balanced_accuracy = []
         accuracy = []
-        for data_loader in data_loader_test:
-            test_stats = evaluate(data_loader, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=(args.nb_classes == 1))
+        # Wrap single DataLoader in a list so we iterate over loaders, not over batches
+        test_loaders = data_loader_test if isinstance(data_loader_test, list) else [data_loader_test]
+        for data_loader in test_loaders:
+            test_stats = evaluate(
+                data_loader, model, device, header='Test:', ch_names=ch_names, metrics=metrics,
+                is_binary=(args.nb_classes == 1),
+                aggregate_by_participant=aggregate,
+            )
             accuracy.append(test_stats['accuracy'])
-            balanced_accuracy.append(test_stats['balanced_accuracy'])
+            balanced_accuracy.append(test_stats.get('balanced_accuracy', 0.0))
+            if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
+                seg_acc = test_stats['segment_metrics'].get('accuracy')
+                part_mp = test_stats.get('participant_mean_prob_metrics') or {}
+                part_mv = test_stats.get('participant_metrics') or {}
+                part_mp_acc = part_mp.get('accuracy')
+                part_mv_acc = part_mv.get('accuracy')
+                if seg_acc is not None:
+                    _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
+                    _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
+                    print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
         print(f"======Accuracy: {np.mean(accuracy)} {np.std(accuracy)}, balanced accuracy: {np.mean(balanced_accuracy)} {np.std(balanced_accuracy)}")
         exit(0)
 
