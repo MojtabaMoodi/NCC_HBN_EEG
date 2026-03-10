@@ -330,6 +330,7 @@ class Experiment:
         self.val_loader = None
         self.test_loader = None
         self.is_cross_validation = False
+        self.eval_only = False  # Set True by run_experiments when --eval_only; skips stratified train scan
 
     def cleanup(self):
         """
@@ -571,9 +572,12 @@ class Experiment:
             # Train on both task types (task_type="both")
             prediction_type = getattr(self.config.training_config, "prediction_type", "classification")
             task_label = "classification" if prediction_type == "classification" else "regression"
-            print(
-                f"Creating standard loaders for {target_type} {task_label} (train on both task types)"
-            )
+            if self.eval_only:
+                print("Creating loaders for evaluation only (skipping stratified train-batch scan).")
+            else:
+                print(
+                    f"Creating standard loaders for {target_type} {task_label} (train on both task types)"
+                )
             segment_length_str = f"{data_config.segment_length // 200}s"  # Convert 200->1s, 800->4s
             self.data_loaders = EEGDataLoader.create_train_val_test_loaders(
                 hdf5_dir=data_config.hdf5_dir,
@@ -590,8 +594,9 @@ class Experiment:
                 shuffle_train=True,
                 random_seed=data_config.random_seed,
                 use_stratified_train_batches=(
-                    _stratified_opt if (_stratified_opt := getattr(self.config.training_config, "use_stratified_train_batches", None)) is not None
-                    else (target_type in ("gender", "age"))
+                    False if self.eval_only else
+                    (_stratified_opt if (_stratified_opt := getattr(self.config.training_config, "use_stratified_train_batches", None)) is not None
+                     else (target_type in ("gender", "age")))
                 ),
                 train_balance_method=getattr(self.config.training_config, "balance_method", None),
                 prediction_type=getattr(self.config.training_config, "prediction_type", "classification"),
@@ -844,10 +849,15 @@ class Experiment:
         task_label = "regression" if prediction_type == "regression" else "classification"
         self.logger.log_evaluation_start(self.config.model_type, self.config.target_type, task_label=task_label)
         
-        # Load best model
-        checkpoint_path = self._get_checkpoint_path()
+        # Load best model (explicit path if set, else default under results_dir)
+        checkpoint_path = getattr(self.config, 'checkpoint_path', None) or self._get_checkpoint_path()
         if os.path.exists(checkpoint_path):
             self.evaluator.load_checkpoint(checkpoint_path)
+        else:
+            raise FileNotFoundError(
+                f"Checkpoint not found: {checkpoint_path}. "
+                "Set --checkpoint /path/to/best.pth (ResNet) or ensure the file exists at the path above (CNN: --results_dir/checkpoints/<experiment_name>_best.pth)."
+            )
         
         # Evaluate on overall test set
         results = self.evaluator.evaluate(self.test_loader)
@@ -1002,17 +1012,17 @@ class Experiment:
     
     def _get_checkpoint_path(self) -> str:
         """Get the path to the best model checkpoint."""
-        # Create experiment-specific checkpoint directory
+        if getattr(self.config, 'checkpoint_path', None):
+            return self.config.checkpoint_path
+        if getattr(self.config, 'checkpoint_dir', None):
+            return os.path.join(self.config.checkpoint_dir, f'{self.config.name}_best.pth')
+        # Default: results_dir/checkpoints/<name>_best.pth
         exp_checkpoint_dir = os.path.join(
             self.logger.results_dir,
             'checkpoints'
         )
         os.makedirs(exp_checkpoint_dir, exist_ok=True)
-        
-        return os.path.join(
-            exp_checkpoint_dir,
-            f'{self.config.name}_best.pth'
-        )
+        return os.path.join(exp_checkpoint_dir, f'{self.config.name}_best.pth')
 
 def run_experiments(experiments: List[ExperimentConfig],
                    system_config: SystemConfig = None,
@@ -1067,6 +1077,7 @@ def run_experiments(experiments: List[ExperimentConfig],
         try:
             # Create and run experiment (data loaders created internally)
             experiment = Experiment(config, system_config)
+            experiment.eval_only = eval_only  # Skip stratified train scan when only evaluating
             experiment.setup()  # Setup data loaders, model, trainer, evaluator
             if eval_only:
                 result = experiment.run_eval_only()

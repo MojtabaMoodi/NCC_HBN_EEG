@@ -1,36 +1,35 @@
 #!/usr/bin/env bash
 #
 # Run CNN evaluation with majority vote (no retraining).
-# Loads saved checkpoints and reports:
-#   - Segment-level (per-window) accuracy
-#   - Participant-level mean probability accuracy
-#   - Participant-level majority vote accuracy
+# Loads saved checkpoints and reports segment-level, participant (mean prob), and participant (majority vote) accuracy.
 #
-# Usage:
-#   From EEG project root:  ./CNN/run_eval_majority_vote.sh
-#   From CNN directory:     ./run_eval_majority_vote.sh
+# Usage (from EEG project root):
+#   ./CNN/run_eval_majority_vote.sh [--mode 2s] [--results_dir DIR] [--checkpoint_dir DIR] [--data_path DIR]
 #
-# Override results directory (where checkpoints live):
-#   ./CNN/run_eval_majority_vote.sh --results_dir CNN_4s_majority_vote
+# Options (or pass directly to main.py via extra args):
+#   --target         Task: gender | age | all (default: all). Use gender or age to evaluate only that task.
+#   --mode           Segment length: 1s, 2s, 4s (default: 4s)
+#   --results_dir    Where to save evaluation outputs (default: experiment_results)
+#   --checkpoint_dir Directory containing <experiment_name>_best.pth files (default: results_dir/checkpoints)
+#   --data_path      Path to multipart HDF5 data (e.g. ~/scratch/processed_eeg_data_hdf5)
 #
-# Override segment length (must match the trained checkpoints):
-#   ./CNN/run_eval_majority_vote.sh --mode 4s --results_dir experiment_results
+# Examples:
+#   ./CNN/run_eval_majority_vote.sh --target gender --mode 2s --results_dir ./eval_out --checkpoint_dir /path/to/ckpts --data_path ~/scratch/processed_eeg_data_hdf5
+#   ./CNN/run_eval_majority_vote.sh --target age --mode 2s
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Project root = parent of CNN
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Defaults (override with env or pass as args, e.g. --results_dir my_dir)
 MODE="${MODE:-4s}"
 RESULTS_DIR="${RESULTS_DIR:-experiment_results}"
 
 echo "Running CNN evaluation with majority vote (eval only, no training)."
 echo "  Mode: $MODE  |  Results dir: $RESULTS_DIR"
-echo "  Override: $0 --mode 4s --results_dir /path/to/checkpoints"
+echo "  Pass --checkpoint_dir /path/to/ckpts --data_path /path/to/hdf5 to override defaults."
 echo ""
 
 python CNN/main.py \

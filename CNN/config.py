@@ -188,6 +188,10 @@ class ExperimentConfig:
     data_config: Optional[DataConfig] = None
     model_config: Optional[ModelConfig] = None
     training_config: Optional[TrainingConfig] = None
+    # When set (e.g. for eval_only), load this path instead of results_dir/checkpoints/<name>_best.pth
+    checkpoint_path: Optional[str] = None
+    # When set, load from this directory (expects <name>_best.pth inside). Ignored if checkpoint_path is set.
+    checkpoint_dir: Optional[str] = None
     
     def __post_init__(self):
         if self.data_config is None:

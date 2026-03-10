@@ -18,11 +18,14 @@ import argparse
 from CNN.config import SystemConfig, ModelConfig, TrainingConfig, ExperimentConfig
 from CNN.experiment import run_experiments
 from CNN.utils import create_data_config_for_segment_length, get_resnet_model_type
+from CNN.gpu_utils import detect_available_gpus
 
 
 def main():
-    """Main function for running ResNet age classification experiment."""
-    parser = argparse.ArgumentParser(description='ResNet Age Classification Experiment')
+    """Main function for running ResNet age classification experiment (age prediction)."""
+    parser = argparse.ArgumentParser(
+        description='ResNet age prediction: train or evaluate (--eval_only) a ResNet on EEG for age classification (3 classes).'
+    )
     parser.add_argument('--mode', choices=['1s', '2s', '4s'], default='1s',
                        help='EEG segment length: 1s (1-second segments), 2s (2-second segments), or 4s (4-second segments)')
     parser.add_argument('--resnet_type', type=int, choices=[18, 34, 50], default=18,
@@ -32,7 +35,8 @@ def main():
     parser.add_argument('--batch_size', type=int, default=None, 
                        help='Batch size (if None, uses default: 512 for 1s, 192 for 2s, 128 for 4s)')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--num_gpus', type=int, default=2, help='Number of GPUs to use for DataParallel (default: 2)')
+    parser.add_argument('--num_gpus', type=int, default=None,
+                       help='Number of GPUs for DataParallel (default: auto-detect, use all available)')
     parser.add_argument('--results_dir', type=str, default='experiment_results', 
                        help='Directory to save results')
     parser.add_argument('--reports_dir', type=str, default='reports', 
@@ -41,13 +45,21 @@ def main():
                        help='Override HDF5 data directory (train/val/test multipart or single files). If not set, uses CNN.utils.DATA_PATHS for the segment length.')
     parser.add_argument('--no_stratified', action='store_true',
                        help='Disable stratified train batches (avoids slow metadata scan on large 4s HDF5; uses class weights in loss instead).')
+    parser.add_argument('--eval_only', action='store_true',
+                       help='Skip training; load saved checkpoint and run evaluation only (e.g. with majority vote).')
+    parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
+                       help="Participant-level aggregation: 'majority_vote' for confidence-weighted majority. Use with --eval_only to evaluate with majority vote.")
+    parser.add_argument('--checkpoint', type=str, default=None, metavar='PATH',
+                       help='Path to the saved best model (e.g. .../age_resnet34_2s_best.pth). Use with --eval_only. If not set, uses results_dir/checkpoints/<experiment_name>_best.pth.')
     
     args = parser.parse_args()
     
-    # Auto-select fewer GPUs for 4s mode to reduce memory usage
-    actual_num_gpus = args.num_gpus
-    if args.mode == '4s' and args.num_gpus == 2:
-        actual_num_gpus = 1  # Use single GPU for 4s to reduce memory pressure
+    if args.num_gpus is None:
+        actual_num_gpus = detect_available_gpus()
+    else:
+        actual_num_gpus = args.num_gpus
+    if actual_num_gpus < 1:
+        actual_num_gpus = 1  # Use 1 (CPU) if no GPUs detected
     
     # Create system configuration
     system_config = SystemConfig(
@@ -113,6 +125,11 @@ def main():
     # Merge model_config_dict with ModelConfig
     model_config = ModelConfig(num_channels=60, **model_config_dict)
     
+    training_config = TrainingConfig(**training_config_kw)
+    if args.aggregate_by_participant:
+        training_config.aggregate_by_participant = args.aggregate_by_participant
+        print(f"Evaluation will use participant-level aggregation: {args.aggregate_by_participant}")
+    
     experiment = ExperimentConfig(
         name=f"age_resnet{args.resnet_type}_{args.mode}",
         model_type=model_type,
@@ -120,7 +137,8 @@ def main():
         description=f"ResNet{args.resnet_type} age classification with {args.mode} segments (train on both, evaluate separately on active and passive)",
         data_config=base_data_config,
         model_config=model_config,
-        training_config=TrainingConfig(**training_config_kw)
+        training_config=training_config,
+        checkpoint_path=args.checkpoint,
     )
     
     print(f"\nStarting ResNet{args.resnet_type} age classification experiment...")
@@ -131,7 +149,10 @@ def main():
     print("-" * 80)
     
     # Run the experiment
-    results = run_experiments([experiment], system_config, args.random_seed, generate_reports=True)
+    results = run_experiments(
+        [experiment], system_config, args.random_seed,
+        generate_reports=True, eval_only=args.eval_only
+    )
     
     if results[0].success:
         print("\n" + "="*80)

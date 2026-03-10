@@ -117,11 +117,14 @@ python main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --
 ```
 
 - `--eval_only`: skip training, load checkpoint from `results_dir/checkpoints/<experiment_name>_best.pth`.
+- `--target gender` | `age` | `all`: run only **gender** prediction, only **age** prediction, or all tasks (default).
 - `--aggregate_by_participant majority_vote`: aggregate segment predictions per participant. **Classification:** confidence-weighted majority vote (each segment’s vote weighted by the probability it assigned to its predicted class; when probabilities are not available, plain mode with tie-break). **Regression:** median of predicted values per participant.
 
 Evaluation reports three metrics for comparison: **segment-level** (one prediction per window), **participant (mean probability)** (mean of softmax probs over segments then argmax), and **participant (majority vote)** (confidence-weighted majority as above). On some datasets mean probability can be slightly higher than majority vote; both are reported for transparency.
 
 Use the same `--mode` (e.g. `4s`) and `--results_dir` as for the original run. Keep the whole command on one line (no line break inside `--results_dir ...`).
+
+**Data path:** Use `--data_path /path/to/multipart/hdf5` to point to your HDF5 directory (e.g. `~/scratch/processed_eeg_data_hdf5`). It must contain `eeg_data_train_*`, `eeg_data_val_*`, and `eeg_data_test_*` for the segment length. For **eval_only**, only the **test** multipart files are used for evaluation; train/val are not loaded for inference.
 
 ### ResNet experiments (gender / age)
 
@@ -138,6 +141,46 @@ python -m resnet.run_resnet_gender --mode 4s --resnet_type 18
 ```
 
 Options: `--mode` (1s/2s/4s), `--resnet_type` (18/34/50), `--epochs`, `--learning_rate`, `--batch_size`, `--num_gpus`, `--results_dir`, `--reports_dir`. Full usage, architecture, and API: **[docs/ResNet.md](docs/ResNet.md)**.
+
+**ResNet evaluation with majority vote (no retraining):** load the saved best checkpoint and report participant-level metrics:
+
+```bash
+# From project root; use same --mode and --results_dir as training
+python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --results_dir experiment_results
+python -m CNN.resnet.run_resnet_age --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --results_dir experiment_results
+```
+
+### Evaluate saved models with majority vote (CNN, ResNet, LaBraM)
+
+After training, you can re-run evaluation only (no retraining) with **participant-level majority vote** so the reported accuracy is one prediction per participant (aggregated from segments).
+
+**How to specify the best saved model path:**
+
+| Model   | How to specify checkpoint | Example |
+|--------|---------------------------|--------|
+| **CNN** | Default: `results_dir/checkpoints/<experiment_name>_best.pth`. Override directory: `--checkpoint_dir /path/to/dir` (dir must contain `<experiment_name>_best.pth` files). | `--results_dir experiment_results` or `--checkpoint_dir /path/to/ckpts` |
+| **ResNet** | Default: `results_dir/checkpoints/<experiment_name>_best.pth`. Explicit file: `--checkpoint /path/to/model.pth`. | `--checkpoint /path/to/gender_resnet34_2s_best.pth` |
+| **LaBraM** | Default: `output_dir/checkpoint-best.pth` (with `--auto_resume`). Explicit file: `--resume /path/to/checkpoint-best.pth`. | `--resume /path/to/checkpoint-best.pth` or `--output_dir /path/to/run` |
+
+**Commands:**
+
+| Model   | Command / script |
+|--------|------------------------------------------|
+| **CNN** | `python CNN/main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --results_dir <DIR>` or `--checkpoint_dir <DIR>` (dir with `*_best.pth` files) |
+| **ResNet** | `python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint /path/to/gender_resnet34_2s_best.pth` (or omit `--checkpoint` to use `results_dir/checkpoints/...`) |
+| **LaBraM** | `python run_class_finetuning.py --eval --aggregate_by_participant majority_vote --resume /path/to/checkpoint-best.pth --output_dir <DIR> --dataset ... --segment_length 2s ...` (or use `--output_dir` only so it loads `output_dir/checkpoint-best.pth`) |
+
+Use the same `--mode` / `--segment_length` and other args as in your training run.
+
+**Specifying task (gender vs age) and paths (all three pipelines):**
+
+| Pipeline | Task (gender vs age) | Best model path | Results directory | Data (multipart HDF5) |
+|----------|----------------------|-----------------|-------------------|------------------------|
+| **CNN** | `--target gender` \| `age` \| `all` (default). Gender = gender baseline; age = age classification + regression. | `--checkpoint_dir DIR` (dir with `*_best.pth`). Default: `results_dir/checkpoints/`. | `--results_dir DIR` | `--data_path DIR` |
+| **ResNet** | **Gender:** `run_resnet_gender.py`. **Age:** `run_resnet_age.py`. (Separate scripts.) | `--checkpoint /path/to/model.pth`. Default: `results_dir/checkpoints/<name>_best.pth`. | `--results_dir DIR` | `--data_path DIR` |
+| **LaBraM** | **Gender:** `--dataset gender_baseline --nb_classes 1`. **Age:** `--dataset age_classification --nb_classes 3`. | `--resume /path/to/checkpoint-best.pth` or `--output_dir DIR` (loads `DIR/checkpoint-best.pth`). | `--output_dir DIR` | `--data_path DIR` |
+
+You can set task and all three paths independently (e.g. load checkpoint from one place, save eval results to another, read data from a third).
 
 ### Advanced Usage
 

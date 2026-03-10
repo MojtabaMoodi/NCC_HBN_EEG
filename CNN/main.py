@@ -339,10 +339,16 @@ def main():
                        help='Directory to save results')
     parser.add_argument('--reports_dir', type=str, default='reports',
                        help='Directory to save reports')
+    parser.add_argument('--data_path', type=str, default=None, metavar='DIR',
+                       help='Path to multipart HDF5 data (e.g. ~/scratch/processed_eeg_data_hdf5). Must contain eeg_data_train_*, eeg_data_val_*, eeg_data_test_* for the segment length. For eval_only, only test files are used for evaluation. If not set, uses default from CNN.utils.DATA_PATHS.')
     parser.add_argument('--eval_only', action='store_true',
                        help='Skip training; load saved checkpoint and run evaluation only (e.g. with majority vote).')
     parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
                        help="Participant-level aggregation: 'majority_vote' for classification (confidence-weighted majority when probs available) / median for regression. Use with --eval_only to re-evaluate without retraining.")
+    parser.add_argument('--checkpoint_dir', type=str, default=None, metavar='DIR',
+                       help="Directory containing saved best models (files named <experiment_name>_best.pth). Use with --eval_only. If not set, uses results_dir/checkpoints/.")
+    parser.add_argument('--target', type=str, default='all', choices=['gender', 'age', 'all'],
+                       help="Task to run: 'gender' (gender prediction only), 'age' (age classification + age regression), or 'all' (default). Useful with --eval_only to evaluate only one task.")
     parser.add_argument('--balance_method', type=str, default=None, choices=['stratified', 'oversample'],
                        help="Train balancing for gender/age: 'stratified' (balanced batches) or 'oversample' (sampling with replacement, no class weights). Default: None (no balanced sampling; class weights from data still applied when not using oversample).")
 
@@ -416,12 +422,25 @@ def main():
         batch_size=actual_batch_size,
         num_gpus=actual_num_gpus
     )
+    if args.data_path is not None:
+        for exp in experiments:
+            exp.data_config.hdf5_dir = args.data_path
+        print(f"Using data path (override): {args.data_path}")
 
     # Apply participant-level aggregation (e.g. majority vote) when requested
     if args.aggregate_by_participant:
         for exp in experiments:
             exp.training_config.aggregate_by_participant = args.aggregate_by_participant
         print(f"Evaluation will use participant-level aggregation: {args.aggregate_by_participant}")
+    if getattr(args, 'checkpoint_dir', None):
+        for exp in experiments:
+            exp.checkpoint_dir = args.checkpoint_dir
+        print(f"Loading checkpoints from: {args.checkpoint_dir}")
+    if args.target != 'all':
+        experiments = [e for e in experiments if e.target_type == args.target]
+        if not experiments:
+            raise ValueError(f"No experiments match --target {args.target}. Valid: gender, age.")
+        print(f"Running only {args.target} prediction: {[e.name for e in experiments]}")
     if args.balance_method is not None:
         for exp in experiments:
             exp.training_config.balance_method = args.balance_method
