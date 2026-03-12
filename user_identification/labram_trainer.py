@@ -189,8 +189,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 raise ValueError("user_identification target not found in batch dictionary. "
                                "Ensure target_type='user_identification' when creating data loaders.")
         else:
-            # Tuple format (samples, targets) from LaBraM dataset
-            samples, targets = batch
+            # Tuple format from LaBraM dataset: (samples, targets) or (samples, targets, participant_ids)
+            samples = batch[0]
+            targets = batch[1]
         
         if count_samples:
             sample_count += samples.shape[0]
@@ -375,9 +376,9 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
                 raise ValueError("user_identification target not found in batch dictionary. "
                                "Ensure target_type='user_identification' when creating data loaders.")
         else:
-            # Tuple format (EEG, target) from LaBraM dataset
+            # Tuple format from LaBraM dataset: (EEG, target) or (EEG, target, participant_ids)
             EEG = batch[0]
-            target = batch[-1]
+            target = batch[1]
         
         EEG = EEG.float().to(device, non_blocking=True) / 100
         EEG = rearrange(EEG, 'B N (A T) -> B N A T', T=200)
