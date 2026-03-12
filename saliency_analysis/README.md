@@ -133,7 +133,18 @@ pip install tqdm
    ```
    Model type and target type are inferred from each checkpoint; segment length applies to all.
 
-5. **Topography from saved saliency results** (no model needed):
+5. **User identification (LaBraM + ArcFace)** — topography and saliency for trained user-ID models:
+   ```bash
+   python saliency_analysis/main.py \
+       --checkpoint /path/to/best_model.pth \
+       --target_type user_identification \
+       --segment_length 4s \
+       --hdf5_dir /path/to/fold_dir \
+       --output_dir saliency_results/user_id_fold0
+   ```
+   Use the same `--hdf5_dir` as for training that fold (must contain `participant_id_to_class_idx.json` and HDF5 files).
+
+6. **Topography from saved saliency results** (no model needed):
    ```bash
    conda activate eeg_env
    python saliency_analysis/create_topography.py
@@ -154,7 +165,9 @@ bash saliency_analysis/run_saliency_single.sh \
 
 Topography is saved as `topography_<method>.png` (e.g. `topography_vanilla_gradients.png`) in the same output directory. You can also set `CHECKPOINT` and `OUTPUT_DIR` in the environment and omit those flags (see script header).
 
-**Note:** LaBraM age/gender checkpoints use a different format and data pipeline; saliency for LaBraM is not supported in this script yet. Use CNN or ResNet checkpoints (same HDF5 data and segment lengths). To run only a subset of models in batch mode: `python saliency_analysis/main.py --batch --models gender_resnet34_4s age_cnn_1s` (use the short name derived from the checkpoint path).
+**User identification (LaBraM + ArcFace):** Use `--target_type user_identification` with a checkpoint from `user_identification/train_labram_arcface.py` (e.g. `best_model.pth`). Set `--hdf5_dir` to the **same directory used for training** that fold (e.g. the fold directory containing `participant_id_to_class_idx.json` and the HDF5 files). Example: `python saliency_analysis/main.py --checkpoint final_user_identification/fold_0/best_model.pth --target_type user_identification --segment_length 4s --hdf5_dir /path/to/fold_0 --output_dir saliency_results/user_id_fold0`. Topography and saliency maps are written to the output directory.
+
+**Note:** LaBraM age/gender checkpoints use a different format; for those use CNN or ResNet checkpoints (same HDF5 data and segment lengths). To run only a subset of models in batch mode: `python saliency_analysis/main.py --batch --models gender_resnet34_4s age_cnn_1s` (use the short name derived from the checkpoint path).
 
 Plot titles now include **task, segment length, and model** (e.g. "Gender Classification (4s, CNN)", "Age Classification (4s, ResNet34)").
 
@@ -190,7 +203,7 @@ python saliency_analysis/main.py \
 
 **Required:**
 - `--checkpoint`: Path to trained model checkpoint
-- `--target_type`: Type of prediction (`gender`, `age`, or `combined`)
+- `--target_type`: Type of prediction (`gender`, `age`, `combined`, or `user_identification`)
 - `--segment_length`: EEG segment length (`1s`, `2s`, or `4s`)
 
 **Data Options:**
