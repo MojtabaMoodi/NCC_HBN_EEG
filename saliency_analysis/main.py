@@ -6,9 +6,11 @@ Single model: specify checkpoint and output locations via args or env (CHECKPOIN
 Batch: use BEST_MODELS_CONFIG in code, or --checkpoint_list <file> to specify checkpoint paths.
 
 Usage (Single Model):
-    python main.py --checkpoint <path> --target_type <gender|age> --segment_length <1s|2s|4s> [options]
+    python main.py --checkpoint <path> --target_type <gender|age|user_identification> --segment_length <1s|2s|4s> [options]
     # Or: export CHECKPOINT=/path/to/best.pth OUTPUT_DIR=/path/to/results
     python main.py --target_type gender --segment_length 4s
+    # User identification (LaBraM+ArcFace): use same --hdf5_dir as training (fold directory with participant_id_to_class_idx.json)
+    python main.py --checkpoint final_user_identification/fold_0/best_model.pth --target_type user_identification --segment_length 4s --hdf5_dir /path/to/fold_0 --output_dir saliency_results/user_id_fold0
 
 Usage (Batch - config in code):
     python main.py --batch [--output_dir <dir>]
@@ -37,8 +39,10 @@ if str(cnn_dir) not in sys.path:
 from analyzer import SaliencyAnalyzer
 from visualization import plot_method_comparison, save_method_comparison_report
 from CNN.models import ModelFactory
+from CNN.models.arcface_loss import ArcFaceLoss
 from CNN.gpu_utils import detect_available_gpus, setup_model_for_gpus, print_gpu_info, get_device
 from data_processing.eeg_dataset import EEGDataset, EEGDataLoader
+from data_processing.target_transforms import create_user_identification_transform_from_hdf5
 
 
 def parse_args():
@@ -56,7 +60,7 @@ def parse_args():
     parser.add_argument('--checkpoint', type=str, default=os.environ.get('CHECKPOINT'),
                        help='Path to model checkpoint (best model .pth). Can also set CHECKPOINT env var.')
     parser.add_argument('--target_type', type=str, default=None,
-                       choices=['gender', 'age', 'combined'],
+                       choices=['gender', 'age', 'combined', 'user_identification'],
                        help='Type of prediction target (required for single model mode)')
     parser.add_argument('--segment_length', type=str, default=None,
                        choices=['1s', '2s', '4s'],
@@ -267,6 +271,21 @@ class LaBraMSaliencyWrapper(torch.nn.Module):
         if out.dim() == 2 and out.size(1) == 1:
             out = out.squeeze(1)
         return out
+
+
+class UserIdSaliencyWrapper(torch.nn.Module):
+    """
+    Wraps LaBraM user-identification model + ArcFace so forward(x) returns logits.
+    Used for saliency: gradients flow to input (B, 60, T).
+    """
+    def __init__(self, model, arcface_criterion):
+        super().__init__()
+        self.model = model
+        self.arcface_criterion = arcface_criterion
+
+    def forward(self, x):
+        features = self.model.extract_features(x)
+        return self.arcface_criterion.compute_logits(features)
 
 
 def _create_labram_model(num_classes: int) -> tuple:
@@ -527,16 +546,53 @@ def process_single_model(args):
         model_type = get_model_type_from_checkpoint(args.checkpoint)
         print(f"Detected model type: {model_type}")
     
-    # Create model (for LaBraM, num_classes: 1=gender, 3=age)
+    # Create model (for LaBraM, num_classes: 1=gender, 3=age; for user_identification use checkpoint + transform)
     print(f"\nCreating model: {model_type}")
-    if model_type == 'labram':
+    if args.target_type == 'user_identification':
+        hdf5_dir_expanded = Path(os.path.expanduser(args.hdf5_dir))
+        user_id_transform, num_classes = create_user_identification_transform_from_hdf5(str(hdf5_dir_expanded))
+        args._user_id_transform = user_id_transform
+        from user_identification.labram_model import LaBraMUserIdentificationWrapper
+        backbone = LaBraMUserIdentificationWrapper(num_classes=num_classes, dropout_rate=0.1)
+        ckpt = torch.load(args.checkpoint, map_location='cpu', weights_only=False)
+        state = ckpt.get('model_state_dict', ckpt.get('model'))
+        if state is None:
+            raise KeyError(
+                f"User ID checkpoint must contain 'model_state_dict' or 'model'. Keys: {list(ckpt.keys())}"
+            )
+        new_state = {k.replace('module.', ''): v for k, v in state.items()}
+        backbone.load_state_dict(new_state, strict=False)
+        embedding_dim = ckpt.get('embedding_dim')
+        if embedding_dim is None and 'arcface_state_dict' in ckpt:
+            w = ckpt['arcface_state_dict'].get('weight')
+            if w is not None:
+                embedding_dim = w.shape[1]
+        if embedding_dim is None:
+            raise ValueError(
+                "Checkpoint must contain 'embedding_dim' or ArcFace weight for embedding_dim"
+            )
+        arcface = ArcFaceLoss(
+            num_classes=num_classes,
+            embedding_dim=embedding_dim,
+            margin=0.5,
+            scale=256.0,
+            easy_margin=False
+        )
+        if 'arcface_state_dict' in ckpt:
+            arcface.load_state_dict(ckpt['arcface_state_dict'])
+        model = UserIdSaliencyWrapper(backbone, arcface)
+        model_display_name = 'LaBraM (User ID)'
+        print(f"✅ Loaded user identification model from {args.checkpoint} (num_classes={num_classes})")
+    elif model_type == 'labram':
         labram_num_classes = 1 if args.target_type == 'gender' else 3
         model, num_classes = create_model(model_type, args.num_channels,
                                           num_classes=labram_num_classes,
                                           prediction_type=args.prediction_type)
+        model_display_name = get_model_display_name(model_type)
     else:
         model, num_classes = create_model(model_type, args.num_channels,
                                           prediction_type=args.prediction_type)
+        model_display_name = get_model_display_name(model_type)
     
     # Setup device and multi-GPU if needed
     device = get_device(args.device)
@@ -559,9 +615,7 @@ def process_single_model(args):
         else:
             print(f"  ✅ Using CPU")
     
-    # Display name for plot titles (e.g. CNN, ResNet34, LaBraM)
-    model_display_name = get_model_display_name(model_type)
-    # Create analyzer (segment_length and model_display_name used in plot titles)
+    # Create analyzer (segment_length and model_display_name set in create-model block above)
     analyzer = SaliencyAnalyzer(
         model=model,
         target_type=args.target_type,
@@ -573,17 +627,18 @@ def process_single_model(args):
         model_display_name=model_display_name
     )
     
-    # Load checkpoint
-    print(f"\nLoading checkpoint: {args.checkpoint}")
-    if model_type == 'labram':
-        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
-        if 'model' not in ckpt:
-            raise KeyError(f"LaBraM checkpoint must contain 'model' key. Keys: {list(ckpt.keys())}")
-        labram_model = model.module.model if isinstance(model, torch.nn.DataParallel) else model.model
-        labram_model.load_state_dict(ckpt['model'], strict=True)
-        print(f"✅ Loaded LaBraM checkpoint from {args.checkpoint}")
-    else:
-        analyzer.load_checkpoint(args.checkpoint)
+    # Load checkpoint (skip for user_identification: already loaded above)
+    if args.target_type != 'user_identification':
+        print(f"\nLoading checkpoint: {args.checkpoint}")
+        if model_type == 'labram':
+            ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+            if 'model' not in ckpt:
+                raise KeyError(f"LaBraM checkpoint must contain 'model' key. Keys: {list(ckpt.keys())}")
+            labram_model = model.module.model if isinstance(model, torch.nn.DataParallel) else model.model
+            labram_model.load_state_dict(ckpt['model'], strict=True)
+            print(f"✅ Loaded LaBraM checkpoint from {args.checkpoint}")
+        else:
+            analyzer.load_checkpoint(args.checkpoint)
     
     # Create data loader (expand ~ to match training data path, e.g. ~/scratch/processed_eeg_data_hdf5)
     hdf5_dir_raw = os.path.expanduser(args.hdf5_dir)
@@ -632,7 +687,7 @@ def process_single_model(args):
         gender_transform=None,
         age_transform=None,
         combined_transform=None,
-        user_identification_transform=None,
+        user_identification_transform=getattr(args, '_user_id_transform', None),
         shuffle=False  # Don't shuffle for consistent analysis
     )
     
