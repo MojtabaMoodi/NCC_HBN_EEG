@@ -355,7 +355,7 @@ def compute_batch_saliency(model: nn.Module,
         model: Trained model (may be wrapped with DataParallel)
         data_loader: DataLoader providing batches
         saliency_method: Saliency computation method
-        target_key: Key for target labels ('gender', 'age', 'combined')
+        target_key: Key for target labels ('gender', 'age', 'combined', 'user_identification')
         max_samples: Maximum number of samples to process (None = all)
         device: Device to use (None = auto-detect from device_preference)
         device_preference: Device preference ('auto', 'cuda', 'cpu')
@@ -382,7 +382,7 @@ def compute_batch_saliency(model: nn.Module,
     if not target_key:
         raise ValueError(
             "target_key cannot be empty. "
-            "Must be one of: 'gender', 'age', 'combined'. "
+            "Must be one of: 'gender', 'age', 'combined', 'user_identification'. "
             "Ensure analyzer is initialized with a valid target_type."
         )
     
