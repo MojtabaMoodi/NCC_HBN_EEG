@@ -13,7 +13,7 @@ This module provides tools for **user identification**: the model learns which *
 | What | Where |
 |------|--------|
 | Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
-| **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`) |
+| **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`); use `--aggregate_only` to aggregate results from folds trained on separate machines |
 | Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
 | CNN/LaBraM experiments (non-ArcFace) | `main.py` |
 | Validate HDF5 setup | `validate.py` |
@@ -97,7 +97,7 @@ See [Confidence and Open-Set Analysis](#confidence-and-open-set-analysis) for ou
 | File | Description |
 |------|-------------|
 | `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
-| `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. |
+| `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. Use `--aggregate_only` to only aggregate existing fold results (e.g. after training each fold on a separate machine). |
 | `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
 | `run_4s.slurm` | SLURM batch script for cluster runs (output_dir and hdf5_dir are fixed in the script; no resume by default—edit to add `--resume` or `OUTPUT_DIR` if needed). |
 | `labram_model.py` | LaBraM wrapper for user identification |
@@ -177,7 +177,7 @@ To report mean ± std across 5 folds with **no overlap** in unknown participants
    ```
    This creates `output_dir/fold_0`, ..., `output_dir/fold_4`; in fold *k*, the *k*-th group of participants is unknown and the rest are known.
 
-2. **Run 5-fold training and aggregation**:
+2. **Run 5-fold training and aggregation** (single machine):
    ```bash
    python user_identification/run_5fold_cv.py \
      --hdf5_root /path/to/user_id_5fold \
@@ -186,6 +186,25 @@ To report mean ± std across 5 folds with **no overlap** in unknown participants
      --segment_length 4s --epochs 200 --batch_size 192 --seed 42
    ```
    Each fold is trained with `train_labram_arcface.py`; then val/test accuracy are read from each fold's `results.json` and summarized as mean ± std. Summary is written to `output_root/cv_summary.json`.
+
+3. **Distributed: train each fold on a separate machine**, then aggregate once:
+   - Prepare data once (step 1 above); copy or share `user_id_5fold/fold_0` … `fold_4` as needed.
+   - On the machine for fold *k*, run (from project root):
+     ```bash
+     python user_identification/train_labram_arcface.py \
+       --hdf5_dir /path/to/fold_k \
+       --output_dir /path/to/results_5fold/fold_k \
+       --segment_length 4s --epochs 200 --batch_size 192 --seed 42
+     ```
+     Use the same training args for all folds so results are comparable.
+   - After all folds are done, copy `results_5fold/fold_0` … `fold_4` (each must contain `results.json`) to one `output_root`, then run:
+     ```bash
+     python user_identification/run_5fold_cv.py \
+       --output_root /path/to/results_5fold \
+       --n_folds 5 \
+       --aggregate_only
+     ```
+   This writes `output_root/cv_summary.json` from the existing `results.json` files without running training.
 
 ## How unknown participants are handled
 
@@ -302,4 +321,4 @@ python user_identification/main.py \
 
 - LaBraM training in `run_4s.sh` uses a pre-trained LaBraM backbone (`--pretrained_path`); the checkpoint saves the full model and ArcFace state for analysis.
 - Unknown participants are created at preprocessing: run `data_processing/preprocess_user_identification.py` with **`--consider_unknown`** (and optionally `--unknown_ratio`); otherwise the unknown split is empty. See [How unknown participants are handled](#how-unknown-participants-are-handled) above.
-- For saliency/interpretability on **CNN** age/gender models, use the `saliency_analysis` module; user identification (LaBraM) is not supported there.
+- For **saliency and topography** on user identification models (LaBraM + ArcFace), use the `saliency_analysis` module with `--target_type user_identification`. Run from project root: `python saliency_analysis/main.py --checkpoint <path/to/best_model.pth> --target_type user_identification --segment_length 4s --hdf5_dir <same_as_training_fold> --output_dir <output_dir>`. Use the same `--hdf5_dir` as for training that fold (directory containing `participant_id_to_class_idx.json` and HDF5 files). See `saliency_analysis/README.md` and `saliency_analysis/TOPOGRAPHY_GUIDE.md`.
