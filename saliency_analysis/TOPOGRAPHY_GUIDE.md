@@ -16,12 +16,21 @@ The topography plots use MNE's `standard_1020` montage for accurate 10-20 system
 Topography plots are **automatically generated** when you run saliency analysis:
 
 ```bash
+# Gender/age (CNN or ResNet)
 python saliency_analysis/main.py \
     --checkpoint <checkpoint_path> \
     --target_type gender \
     --segment_length 4s \
     --method integrated_gradients \
     --output_dir saliency_results/gender_analysis
+
+# User identification (LaBraM + ArcFace): use same --hdf5_dir as training for that fold
+python saliency_analysis/main.py \
+    --checkpoint final_user_identification/fold_0/best_model.pth \
+    --target_type user_identification \
+    --segment_length 4s \
+    --hdf5_dir /path/to/fold_0 \
+    --output_dir saliency_results/user_id_fold0
 ```
 
 **Output files:**
