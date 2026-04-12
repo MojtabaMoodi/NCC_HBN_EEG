@@ -191,11 +191,23 @@ def run_inference(model: nn.Module, data_loader: DataLoader, device: torch.devic
     print("Running inference...")
     with torch.no_grad():
         for batch_idx, batch in enumerate(data_loader):
-            # Handle both tuple and dict formats
-            # LaBraM datasets return (X, Y) tuples
+            # Handle tuple/list and dict formats.
+            # LaBraM IterableDataset yields (X, Y, participant_id); default_collate → (eeg, labels, ids).
             if isinstance(batch, (list, tuple)) and len(batch) == 2:
                 eeg_data, labels = batch
                 user_ids_batch = [None] * len(labels)
+            elif isinstance(batch, (list, tuple)) and len(batch) == 3:
+                eeg_data, labels, raw_ids = batch
+                n = int(labels.shape[0]) if torch.is_tensor(labels) else len(labels)
+                if raw_ids is None:
+                    user_ids_batch = [None] * n
+                elif isinstance(raw_ids, (list, tuple)):
+                    user_ids_batch = list(raw_ids)
+                else:
+                    user_ids_batch = [None] * n
+                while len(user_ids_batch) < n:
+                    user_ids_batch.append(None)
+                user_ids_batch = user_ids_batch[:n]
             elif isinstance(batch, dict):
                 eeg_data = batch['eeg_data']
                 labels = batch.get('user_identification', batch.get('label'))
@@ -702,6 +714,13 @@ def main():
     parser.add_argument('--split', type=str, default='test',
                        choices=['train', 'val', 'test', 'unknown', 'both'],
                        help='Data split to analyze (unknown=held-out users; both=test and unknown)')
+    parser.add_argument(
+        '--task_type',
+        type=str,
+        default='both',
+        choices=['both', 'active', 'passive'],
+        help='Restrict data to active tasks, passive tasks, or both (must match training scope for fair comparison)',
+    )
     parser.add_argument('--batch_size', type=int, default=128,
                        help='Batch size for inference')
     parser.add_argument('--num_workers', type=int, default=4,
@@ -843,13 +862,13 @@ def main():
 
     if args.split == 'both':
         # Run on test
-        print(f"\nLoading test data...")
+        print(f"\nLoading test data (task_type={args.task_type})...")
         transform, num_classes = create_user_identification_transform_from_hdf5(args.hdf5_dir)
         train_dataset, _, test_dataset = prepare_labram_dataset(
             dataset_type="user_identification",
             hdf5_dir=args.hdf5_dir,
             segment_length=args.segment_length,
-            task_type="both",
+            task_type=args.task_type,
             random_seed=42,
             user_identification_transform=transform,
             sampling_rate=200
@@ -867,7 +886,7 @@ def main():
         unknown_dataset = prepare_labram_unknown_dataset(
             hdf5_dir=args.hdf5_dir,
             segment_length=args.segment_length,
-            task_type="both",
+            task_type=args.task_type,
             sampling_rate=200
         )
         # Run test once (with embeddings for open-set when centroids and unknown exist)
@@ -920,7 +939,7 @@ def main():
             dataset = prepare_labram_unknown_dataset(
                 hdf5_dir=args.hdf5_dir,
                 segment_length=args.segment_length,
-                task_type="both",
+                task_type=args.task_type,
                 sampling_rate=200
             )
             if dataset is None:
@@ -933,7 +952,7 @@ def main():
                     dataset_type="user_identification",
                     hdf5_dir=args.hdf5_dir,
                     segment_length=args.segment_length,
-                    task_type="both",
+                    task_type=args.task_type,
                     random_seed=42,
                     user_identification_transform=transform,
                     sampling_rate=200
@@ -952,7 +971,7 @@ def main():
                 dataset_type="user_identification",
                 hdf5_dir=args.hdf5_dir,
                 segment_length=args.segment_length,
-                task_type="both",
+                task_type=args.task_type,
                 random_seed=42,
                 user_identification_transform=transform,
                 sampling_rate=200
