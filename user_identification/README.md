@@ -14,6 +14,8 @@ This module provides tools for **user identification**: the model learns which *
 |------|--------|
 | Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
 | **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`); use `--aggregate_only` to aggregate results from folds trained on separate machines |
+| Test active/passive accuracy (per fold or all folds) | `eval_active_passive_test.py` |
+| Full eval runner (test active/passive + unknown/open-set, folds/segments, logs) | `run_all_folds_active_passive_test_unknown_eval.py` |
 | Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
 | CNN/LaBraM experiments (non-ArcFace) | `main.py` |
 | Validate HDF5 setup | `validate.py` |
@@ -47,6 +49,20 @@ python data_processing/preprocess_user_identification.py \
   --random_seed 42
 ```
 This creates `output_dir/fold_0` … `output_dir/fold_4`; in each fold a different 20% of participants are unknown.
+
+**5-fold in parallel (same partition as above):** use `--fold_index k` with the same `--data_root`, `--output_dir`, `--n_folds`, `--random_seed`, and `--segment_length` as a full run. Each job writes only `output_dir/fold_k/`. Example (SLURM array 0–4):
+
+```bash
+python data_processing/preprocess_user_identification.py \
+  --data_root /path/to/preprocessed_new \
+  --output_dir /path/to/user_id_5fold \
+  --n_folds 5 \
+  --fold_index $SLURM_ARRAY_TASK_ID \
+  --segment_length 4s \
+  --random_seed 42
+```
+
+**Check fold outputs (no HDF5 I/O):** from project root, `python data_processing/verify_user_id_fold_partition.py --output_dir /path/to/user_id_5fold --n_folds 5` — reads each `fold_k/participant_id_to_class_idx.json` and `unknown_participant_ids.json` and checks disjoint unknowns, same universe per fold, and full cover. Optional: add `--data_root ... --random_seed 42` to assert JSON unknown sets match a recomputed partition from source data.
 
 ### 2. Validate setup (optional but recommended)
 
@@ -92,12 +108,159 @@ CHECKPOINT=/path/to/best_model.pth \
 
 See [Confidence and Open-Set Analysis](#confidence-and-open-set-analysis) for outputs and metrics.
 
+### 5. Evaluate active vs passive tasks (test + unknown, fold-wise + summary)
+
+Use this when you want:
+- **Per-fold test accuracy** for `active` and `passive` tasks separately, and
+- **Per-fold open-set metrics** (`test + unknown`) for `active` and `passive` separately,
+- plus a single **cross-fold summary JSON**.
+
+```bash
+python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
+  --final_root final_user_identification \
+  --hdf5_root_4s /path/to/hdf5_parent_with_fold_dirs \
+  --n_folds 5 \
+  --device cuda \
+  --log_dir final_user_identification
+```
+
+Expected HDF5 layout for each segment length root:
+- `/path/to/hdf5_parent_with_fold_dirs/fold_0`
+- ...
+- `/path/to/hdf5_parent_with_fold_dirs/fold_4`
+
+Each `fold_k` must contain matching segment files (e.g. `eeg_data_*_4s*.h5`) and `participant_id_to_class_idx.json`.
+
+**Outputs (example for 4s):**
+- Per-fold test active/passive accuracy JSON: `final_user_identification/4s/fold_k/eval_task_type_test_accuracy.json`
+- Per-fold unknown/open-set outputs:
+  - `final_user_identification/4s/fold_k/eval_test_unknown_active/...`
+  - `final_user_identification/4s/fold_k/eval_test_unknown_passive/...`
+- All-fold summary: `final_user_identification/active_passive_test_unknown_eval_summary.json`
+- Logs (when `--log_dir` is set):
+  - `final_user_identification/eval_run_4s_fold0.log` ... `eval_run_4s_fold4.log`
+  - `final_user_identification/eval_run_4s.log`
+
+**1s checkpoints:** pass the parent of `fold_0` … `fold_4` for 1s data, e.g.:
+
+```bash
+python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
+  --final_root final_user_identification \
+  --hdf5_root_1s "${HOME}/scratch" \
+  --n_folds 5 \
+  --device cuda \
+  --log_dir final_user_identification
+```
+
+Omit any `--hdf5_root_*` you do not have; each segment length is evaluated only if its root is set (see `run_all_folds_active_passive_test_unknown_eval.py --help`).
+
+### 6. Example: 1s five-fold LaBraM + ArcFace (`final_user_identification`)
+
+End-to-end commands for **1s** segments, **20% unknown per fold**, HDF5 under `~/scratch/fold_k`, and checkpoints under `final_user_identification/fold_k` (same training and aggregate layout as `final_user_identification/note.txt` in the repo).
+
+**Layout:** `run_5fold_cv.py --aggregate_only` reads `final_user_identification/fold_k/results.json`. The script `run_all_folds_active_passive_test_unknown_eval.py` looks for `best_model.pth` under `final_user_identification/1s/fold_k/`. After steps 2–3, link the flat fold dirs into `1s/` before step 5 (or train directly into `final_user_identification/1s/fold_k` and use `--output_root final_user_identification/1s` in step 3):
+
+```bash
+mkdir -p final_user_identification/1s
+for k in 0 1 2 3 4; do ln -sfn "../fold_${k}" "final_user_identification/1s/fold_${k}"; done
+```
+
+**1. Prepare 5-fold data (20% unknown per fold)**
+
+```bash
+python data_processing/preprocess_user_identification.py \
+  --data_root ~/scratch/preprocessed_new \
+  --output_dir ~/scratch \
+  --n_folds 5 \
+  --segment_length 1s \
+  --random_seed 42
+```
+
+Or run one fold per job (same `--data_root`, `--output_dir`, `--n_folds`, `--segment_length`, `--random_seed`; only writes `output_dir/fold_k/`):
+
+```bash
+python data_processing/preprocess_user_identification.py \
+  --data_root ~/scratch/preprocessed_new \
+  --output_dir ~/scratch \
+  --n_folds 5 \
+  --fold_index 4 \
+  --segment_length 1s \
+  --random_seed 42
+```
+
+**2. Train each fold**
+
+```bash
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir ~/scratch/fold_0 \
+  --output_dir final_user_identification/fold_0 \
+  --segment_length 1s --epochs 200 --batch_size 768 --seed 42
+
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir ~/scratch/fold_1 \
+  --output_dir final_user_identification/fold_1 \
+  --segment_length 1s --epochs 200 --batch_size 768 --seed 42 \
+  --resume final_user_identification/fold_1/best_model.pth
+
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir ~/scratch/fold_2 \
+  --output_dir final_user_identification/fold_2 \
+  --segment_length 1s --epochs 200 --batch_size 768 --seed 42 \
+  --resume final_user_identification/fold_2/best_model.pth
+
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir ~/scratch/fold_3 \
+  --output_dir final_user_identification/fold_3 \
+  --segment_length 1s --epochs 200 --batch_size 768 --seed 42 \
+  --resume final_user_identification/fold_3/best_model.pth
+
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir ~/scratch/fold_4 \
+  --output_dir final_user_identification/fold_4 \
+  --segment_length 1s --epochs 200 --batch_size 768 --seed 42 \
+  --resume final_user_identification/fold_4/best_model.pth
+```
+
+**3. Collect results and aggregate**
+
+```bash
+python user_identification/run_5fold_cv.py \
+  --output_root final_user_identification \
+  --n_folds 5 \
+  --aggregate_only
+```
+
+**4. Saliency map (example: fold 3)**
+
+```bash
+conda deactivate && conda activate eeg_env && \
+  python saliency_analysis/main.py \
+  --checkpoint final_user_identification/fold_3/best_model.pth \
+  --target_type user_identification \
+  --segment_length 1s \
+  --hdf5_dir ~/scratch/fold_3 \
+  --output_dir final_user_identification/fold_3/saliency/
+```
+
+**5. Accuracy per task type (active / passive / unknown eval)**
+
+```bash
+python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
+  --final_root final_user_identification \
+  --hdf5_root_1s "${HOME}/scratch" \
+  --n_folds 5 \
+  --device cuda \
+  --log_dir final_user_identification
+```
+
 ## Structure
 
 | File | Description |
 |------|-------------|
 | `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
 | `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. Use `--aggregate_only` to only aggregate existing fold results (e.g. after training each fold on a separate machine). |
+| `eval_active_passive_test.py` | Evaluate saved checkpoint(s) on **test** split with `task_type=active` and `task_type=passive` separately; writes per-fold metrics and mean ± std summary. |
+| `run_all_folds_active_passive_test_unknown_eval.py` | Orchestrates fold/segment evaluation: per-fold test active/passive accuracy + per-fold `analyze_confidence.py --split both` for active/passive; writes aggregate summary JSON and optional split logs. |
 | `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
 | `run_4s.slurm` | SLURM batch script for cluster runs (output_dir and hdf5_dir are fixed in the script; no resume by default—edit to add `--resume` or `OUTPUT_DIR` if needed). |
 | `labram_model.py` | LaBraM wrapper for user identification |
@@ -254,12 +417,18 @@ python user_identification/analyze_confidence.py \
 | `--hdf5_dir` | script default | HDF5 directory (user-identification preprocessed); run with `--help` to see the default path |
 | `--segment_length` | `4s` | `1s`, `2s`, or `4s` (must match training) |
 | `--split` | `test` | `train`, `val`, `test`, `unknown`, or `both` |
+| `--task_type` | `both` | `both`, `active`, or `passive` (filters train/test/unknown datasets by task type) |
 | `--output_dir` | `./confidence_analysis` | Base directory for all outputs (wrapper `run_analysis_test_unknown.sh` uses `./confidence_analysis_test_unknown`) |
 | `--batch_size` | 128 | Inference batch size |
 | `--num_workers` | 4 | DataLoader workers |
 | `--device` | `cuda` | `cuda` or `cpu` |
 
 **`--split both`** runs on test and unknown; when the checkpoint uses ArcFace, it also computes feature-space OOD (distance to known-user centroids), **known-user score** (1/(1+OOD distance)), and **open-set threshold** tuning.
+
+**Split semantics:**
+- `test` = known participants only
+- `unknown` = held-out participants only (`-1` label)
+- open-set summary (in `open_set_summary.json`) is computed on **test + unknown**
 
 ### Analysis outputs (when `--split both`)
 
