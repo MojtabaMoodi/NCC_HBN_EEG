@@ -277,19 +277,21 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         Returns:
             Output tensor of shape [batch_size, num_classes]
         """
-        # Reshape input to LaBraM format if needed
-        # Check if already in LaBraM format [B, N, A, T]
-        if x.dim() == 4 and x.shape[2] > 1:
-            # Already in LaBraM format
+        # Reshape input to LaBraM format if needed.
+        # [B, N, A, patch_size] is already LaBraM layout; A may be 1 (e.g. 1s @ 200 Hz -> one patch of 200).
+        if x.dim() == 4:
             pass
-        else:
-            # Need to reshape
+        elif x.dim() == 3:
             x = self._reshape_input_for_labram(x)
-        
+        else:
+            raise ValueError(
+                f"Expected EEG tensor of shape [B, N, T] or [B, N, num_patches, patch_size]; got dim={x.dim()}, shape={tuple(x.shape)}"
+            )
+
         # Use provided input_chans or default
         if input_chans is None:
             input_chans = self.input_chans
-        
+
         # Forward through LaBraM model
         output = self.labram_model(x, input_chans=input_chans)
         
@@ -308,17 +310,20 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
         Returns:
             Feature embeddings of shape [batch_size, projection_dim]
         """
-        # Reshape input to LaBraM format if needed
-        if x.dim() == 4 and x.shape[2] > 1:
-            # Already in LaBraM format
+        # Reshape input to LaBraM format if needed (see forward(): A=1 is valid for 1s segments).
+        if x.dim() == 4:
             pass
-        else:
+        elif x.dim() == 3:
             x = self._reshape_input_for_labram(x)
-        
+        else:
+            raise ValueError(
+                f"Expected EEG tensor of shape [B, N, T] or [B, N, num_patches, patch_size]; got dim={x.dim()}, shape={tuple(x.shape)}"
+            )
+
         # Use provided input_chans or default
         if input_chans is None:
             input_chans = self.input_chans
-        
+
         # Extract features (before classification head)
         features = self.labram_model.forward_features(
             x, 
