@@ -7,6 +7,7 @@ functions from LaBraM's engine_for_finetuning.py while maintaining
 LaBraM-specific optimizations like layer decay learning rate scheduling.
 """
 
+import contextlib
 import math
 import sys
 import warnings
@@ -386,8 +387,13 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         # Handle targets (user identification - single class labels)
         target = target.to(device, non_blocking=True).long()
         
-        # Compute output
-        with torch.amp.autocast(device_type='cuda'):
+        # Compute output (autocast only on CUDA; CPU eval uses full precision)
+        amp_ctx = (
+            torch.amp.autocast(device_type="cuda")
+            if device.type == "cuda"
+            else contextlib.nullcontext()
+        )
+        with amp_ctx:
             if use_arcface:
                 # Extract features and compute logits via ArcFace
                 # Handle DistributedDataParallel wrapper
