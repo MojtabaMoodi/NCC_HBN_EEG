@@ -66,9 +66,9 @@ class EEGDataPreprocessor:
             window_sizes: List of window sizes to process (e.g., ['1s', '2s', '4s']). 
                          If None, defaults to ['1s', '2s', '4s'] for backward compatibility.
         """
-        self.data_root = Path(data_root)
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.data_root = Path(data_root).expanduser()
+        self.output_dir = Path(output_dir).expanduser()
+        self._ensure_output_dir()
         self.num_channels = num_channels
         self.window_sizes = window_sizes if window_sizes is not None else ['1s', '2s', '4s']
         
@@ -77,7 +77,11 @@ class EEGDataPreprocessor:
         for ws in self.window_sizes:
             if ws not in valid_sizes:
                 raise ValueError(f"Invalid window size: {ws}. Must be one of {valid_sizes}")
-        
+
+    def _ensure_output_dir(self) -> None:
+        """Ensure output_dir exists before any HDF5/JSON write (new part files, remounted scratch, etc.)."""
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
     def load_demographics(self, participant_dir: Path) -> Dict[str, Any]:
         """
         Load demographic information for a participant.
@@ -622,6 +626,7 @@ class EEGDataPreprocessor:
             split_name: Name of the split ('train', 'val', 'test')
             segment_length: Length of segments ('1s', '2s', or '4s')
         """
+        self._ensure_output_dir()
         hdf5_path = self._get_hdf5_file_path(split_name, segment_length)
         with h5py.File(hdf5_path, 'w') as f:
             f.create_group('active')
@@ -640,6 +645,7 @@ class EEGDataPreprocessor:
             segment_length: Length of segments ('1s', '2s', or '4s')
             part_idx: Part index for multi-file splits
         """
+        self._ensure_output_dir()
         hdf5_path = self._get_hdf5_file_path(split_name, segment_length, part_idx=part_idx)
         with h5py.File(hdf5_path, 'w') as f:
             f.create_group('active')
@@ -758,6 +764,7 @@ class EEGDataPreprocessor:
             current_global_idx: Current global sample index for this task_type (for local indexing)
             current_total_idx: Current total sample index across all task types (for file rotation)
         """
+        self._ensure_output_dir()
         # Get current file path based on total_idx (for file rotation)
         file_path, part_idx = self._get_current_hdf5_file_and_part(
             split_name, segment_length, current_total_idx
@@ -1177,7 +1184,7 @@ class EEGDataPreprocessor:
         """
         # Sort by class index for consistency
         sorted_mapping = dict(sorted(participant_id_to_class_idx.items(), key=lambda x: x[1]))
-        
+        self._ensure_output_dir()
         mapping_file = self.output_dir / 'participant_id_to_class_idx.json'
         with open(mapping_file, 'w') as f:
             json.dump(sorted_mapping, f, indent=2)
@@ -1193,6 +1200,7 @@ class EEGDataPreprocessor:
         Args:
             unknown_participant_ids: List of participant IDs held out as "unknown"
         """
+        self._ensure_output_dir()
         unknown_file = self.output_dir / 'unknown_participant_ids.json'
         with open(unknown_file, 'w') as f:
             json.dump(sorted(unknown_participant_ids), f, indent=2)
