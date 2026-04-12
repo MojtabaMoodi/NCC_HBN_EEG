@@ -13,10 +13,11 @@ This script processes EEG data for user identification task:
 Optional (--consider_unknown): Hold out a fraction of users as "unknown" for open-set evaluation.
 - Known users: 70/15/15 train/val/test; unknown users: all samples in "unknown" split.
 
-Optional (--n_folds): 5-fold (or N-fold) data preparation with disjoint unknown sets.
-- Participants are partitioned into n_folds disjoint groups (~20%% each for n_folds=5).
-- Each fold k is written to output_dir/fold_k with that fold's group as unknown and the rest as known.
-- No overlap: each participant is unknown in exactly one fold.
+Optional (--n_folds): N-fold data preparation with disjoint unknown sets per fold.
+Optional (--fold_index): Process only one fold (requires --n_folds); same partition as a full run
+when --data_root, --output_dir, --n_folds, --random_seed match. For parallel jobs, each task
+writes only output_dir/fold_k/ (no shared HDF5 between folds). After runs, validate fold_* JSONs:
+python data_processing/verify_user_id_fold_partition.py --output_dir <same_output_dir> [--n_folds N]
 """
 
 import argparse
@@ -50,6 +51,41 @@ def _partition_into_folds(all_dirs, n_folds: int, random_seed: int):
     return [[all_dirs[j] for j in fi] for fi in fold_indices]
 
 
+def _process_one_fold(
+    k: int,
+    output_dir: Path,
+    args,
+    all_participant_dirs: list,
+    fold_unknown_dirs: list,
+) -> None:
+    """
+    Run preprocessing for fold k only. Must use same fold_unknown_dirs and
+    all_participant_dirs as produced by _partition_into_folds(..., n_folds, random_seed)
+    for the full run.
+    """
+    fold_output = output_dir / f"fold_{k}"
+    fold_output.mkdir(parents=True, exist_ok=True)
+    unknown_dirs = fold_unknown_dirs[k]
+    unknown_names = {p.name for p in unknown_dirs}
+    known_dirs = [d for d in all_participant_dirs if d.name not in unknown_names]
+    logger.info("Fold %d: %d known, %d unknown", k, len(known_dirs), len(unknown_dirs))
+    preprocessor = EEGDataPreprocessor(
+        args.data_root,
+        str(fold_output),
+        window_sizes=[args.segment_length]
+    )
+    preprocessor.process_all_participants_user_identification(
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        test_ratio=args.test_ratio,
+        random_seed=args.random_seed,
+        consider_unknown_users=False,
+        unknown_user_ratio=0.2,
+        known_participant_dirs=known_dirs,
+        unknown_participant_dirs=unknown_dirs
+    )
+
+
 def parse_args():
     """Parse command-line arguments (backward compatible: no args = previous behavior)."""
     parser = argparse.ArgumentParser(
@@ -76,6 +112,8 @@ def parse_args():
                         help='Fraction of participants to treat as unknown when --consider_unknown')
     parser.add_argument('--n_folds', type=int, default=None,
                         help='If set (e.g. 5), create n_folds disjoint folds: each fold has 1/n_folds participants as unknown, no overlap')
+    parser.add_argument('--fold_index', type=int, default=None,
+                        help='With --n_folds: process only this fold (0 .. n_folds-1). Same partition as full run; use for parallel jobs.')
     parser.add_argument('--segment_length', type=str, default='4s',
                         choices=['1s', '2s', '4s'],
                         help='Segment length to preprocess (only this length will be generated)')
@@ -94,7 +132,15 @@ def main():
     if args.n_folds is not None:
         if args.n_folds < 2:
             raise ValueError(f"n_folds must be >= 2, got {args.n_folds}")
+        if args.fold_index is not None:
+            if args.fold_index < 0 or args.fold_index >= args.n_folds:
+                raise ValueError(
+                    f"fold_index must satisfy 0 <= fold_index < n_folds, "
+                    f"got fold_index={args.fold_index}, n_folds={args.n_folds}"
+                )
     else:
+        if args.fold_index is not None:
+            raise ValueError("--fold_index requires --n_folds to be set")
         if args.consider_unknown and (args.unknown_ratio <= 0 or args.unknown_ratio >= 1.0):
             raise ValueError(f"unknown_ratio must be in (0, 1), got {args.unknown_ratio}")
     
@@ -116,43 +162,40 @@ def main():
         fold_unknown_dirs = _partition_into_folds(
             all_participant_dirs, args.n_folds, args.random_seed
         )
-        logger.info(
-            "Starting %d-fold user identification preprocessing (disjoint unknown sets)...",
-            args.n_folds
-        )
+        if args.fold_index is not None:
+            logger.info(
+                "Starting user identification preprocessing for fold %d only (of %d folds, disjoint unknown sets)...",
+                args.fold_index,
+                args.n_folds,
+            )
+        else:
+            logger.info(
+                "Starting %d-fold user identification preprocessing (disjoint unknown sets)...",
+                args.n_folds,
+            )
         logger.info(f"Data root: {args.data_root}")
         logger.info(f"Output dir: {args.output_dir} (fold_0 .. fold_%d)", args.n_folds - 1)
         logger.info(f"Segment length: {args.segment_length}, split ratios: %s/%s/%s",
                     args.train_ratio, args.val_ratio, args.test_ratio)
-        for k in range(args.n_folds):
-            fold_output = output_dir / f"fold_{k}"
-            fold_output.mkdir(parents=True, exist_ok=True)
-            unknown_dirs = fold_unknown_dirs[k]
-            unknown_names = {p.name for p in unknown_dirs}
-            known_dirs = [d for d in all_participant_dirs if d.name not in unknown_names]
-            logger.info("Fold %d: %d known, %d unknown", k, len(known_dirs), len(unknown_dirs))
-            preprocessor = EEGDataPreprocessor(
-                args.data_root,
-                str(fold_output),
-                window_sizes=[args.segment_length]
-            )
+        fold_range = (
+            [args.fold_index]
+            if args.fold_index is not None
+            else list(range(args.n_folds))
+        )
+        for k in fold_range:
             try:
-                preprocessor.process_all_participants_user_identification(
-                    train_ratio=args.train_ratio,
-                    val_ratio=args.val_ratio,
-                    test_ratio=args.test_ratio,
-                    random_seed=args.random_seed,
-                    consider_unknown_users=False,
-                    unknown_user_ratio=0.2,
-                    known_participant_dirs=known_dirs,
-                    unknown_participant_dirs=unknown_dirs
+                _process_one_fold(
+                    k, output_dir, args, all_participant_dirs, fold_unknown_dirs
                 )
             except Exception as e:
                 logger.error("Preprocessing failed for fold %d: %s", k, e)
                 import traceback
                 logger.error(traceback.format_exc())
                 raise
-        logger.info("All %d folds written under %s", args.n_folds, args.output_dir)
+        if args.fold_index is not None:
+            logger.info("Fold %d written under %s", args.fold_index, output_dir / f"fold_{args.fold_index}")
+        else:
+            logger.info("All %d folds written under %s", args.n_folds, args.output_dir)
     else:
         # Single run (original behavior)
         preprocessor = EEGDataPreprocessor(
