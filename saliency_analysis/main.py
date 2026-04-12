@@ -277,6 +277,9 @@ class UserIdSaliencyWrapper(torch.nn.Module):
     """
     Wraps LaBraM user-identification model + ArcFace so forward(x) returns logits.
     Used for saliency: gradients flow to input (B, 60, T).
+
+    Must match user_identification/labram_trainer.py: raw HDF5 EEG is divided by 100
+    before rearrange / extract_features during train and eval.
     """
     def __init__(self, model, arcface_criterion):
         super().__init__()
@@ -284,6 +287,7 @@ class UserIdSaliencyWrapper(torch.nn.Module):
         self.arcface_criterion = arcface_criterion
 
     def forward(self, x):
+        x = x.float() / 100.0
         features = self.model.extract_features(x)
         return self.arcface_criterion.compute_logits(features)
 
