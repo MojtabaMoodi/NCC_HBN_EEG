@@ -12,9 +12,40 @@ import math
 import sys
 import warnings
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional, Tuple
+
+import numpy as np
 import torch
+from sklearn.metrics import f1_score
 import torch.nn as nn
+
+
+def multiclass_macro_fpr_fnr(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[float, float]:
+    """
+    Macro-averaged one-vs-rest FPR and FNR over classes that appear in y_true.
+
+    For each class k: FPR_k = FP / (FP + TN), FNR_k = FN / (FN + TP) with the usual
+    OvR confusion counts for that class.
+    """
+    y_true = np.asarray(y_true, dtype=np.int64).ravel()
+    y_pred = np.asarray(y_pred, dtype=np.int64).ravel()
+    if y_true.size == 0:
+        return float("nan"), float("nan")
+    classes = np.unique(y_true)
+    fprs: List[float] = []
+    fnrs: List[float] = []
+    for k in classes:
+        y_t = y_true == k
+        y_p = y_pred == k
+        tp = int(np.sum(y_t & y_p))
+        fp = int(np.sum(~y_t & y_p))
+        fn = int(np.sum(y_t & ~y_p))
+        tn = int(np.sum(~y_t & ~y_p))
+        d_fpr = fp + tn
+        d_fnr = fn + tp
+        fprs.append(float(fp / d_fpr) if d_fpr > 0 else 0.0)
+        fnrs.append(float(fn / d_fnr) if d_fnr > 0 else 0.0)
+    return float(np.mean(fprs)), float(np.mean(fnrs))
 
 # Suppress FutureWarning for autocast deprecation
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*autocast.*")
@@ -339,8 +370,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=['accuracy'], 
-             use_arcface=False, criterion=None):
+def evaluate(
+    data_loader,
+    model,
+    device,
+    header='Test:',
+    ch_names=None,
+    metrics=['accuracy'],
+    use_arcface=False,
+    criterion=None,
+    collect_predictions: bool = False,
+):
     """
     Modified evaluate function that supports ArcFace loss for user identification.
     
@@ -353,6 +393,9 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         metrics: Metrics to compute
         use_arcface: Whether using ArcFace loss
         criterion: Loss function (needed for ArcFace to compute logits)
+        collect_predictions: If True, include ``y_true`` and ``y_pred`` (NumPy int64) in the
+            returned stats for the full loader (for saving per-sample labels). Callers should
+            remove these before JSON serialization.
     """
     input_chans = None
     if ch_names is not None:
@@ -464,5 +507,28 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
     results = labram_utils.get_metrics(pred.numpy(), true.numpy(), metrics, is_binary=False)
     for key, value in results.items():
         stats[key] = value
-    
+
+    # Full-set multiclass F1 (batch-wise F1 is not meaningful); complements accuracy from get_metrics.
+    y_true = true.detach().cpu().numpy().ravel().astype("int64", copy=False)
+    y_pred = torch.argmax(pred.detach().cpu(), dim=-1).numpy().ravel().astype("int64", copy=False)
+    if y_true.size == 0:
+        stats["f1_macro"] = float("nan")
+        stats["f1_weighted"] = float("nan")
+        stats["fpr_macro"] = float("nan")
+        stats["fnr_macro"] = float("nan")
+    else:
+        stats["f1_macro"] = float(
+            f1_score(y_true, y_pred, average="macro", zero_division=0.0)
+        )
+        stats["f1_weighted"] = float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0.0)
+        )
+        fpr_m, fnr_m = multiclass_macro_fpr_fnr(y_true, y_pred)
+        stats["fpr_macro"] = fpr_m
+        stats["fnr_macro"] = fnr_m
+
+    if collect_predictions:
+        stats["y_true"] = y_true.copy()
+        stats["y_pred"] = y_pred.copy()
+
     return stats
