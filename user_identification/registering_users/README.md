@@ -28,7 +28,9 @@ For a given fold and task (`active` or `passive`):
 In open-world mode, prediction is:
 
 - nearest registered prototype gives a candidate ID
-- if min distance to prototypes is larger than a threshold, output `UNKNOWN`
+- if the **reject signal** is worse than a tuned threshold, output `UNKNOWN`
+
+By default the reject signal is **raw min L2 distance** \(d\) to the nearest prototype. For parity with `analyze_confidence.py` open-set analysis, you can instead use **`known_user_score = 1/(1+d)`** on that same \(d\) and sweep thresholds in score space (`--threshold_on known_user_score`). The map \(d \mapsto 1/(1+d)\) is strictly monotone, so accept/reject decisions are equivalent to choosing a distance cutoff; only the reported threshold units and the discrete grid points differ.
 
 ---
 
@@ -42,6 +44,9 @@ In open-world mode, prediction is:
 
 - `run_registration_grid_search.py`  
   Grid search over threshold/objective-related hyperparameters.
+
+- `run_registration_pipeline.py`  
+  Runs **active** and **passive** grid searches, writes a **manifest** with best configs, then (by default) runs **all-fold** evaluation for each task using those best settings.
 
 - `unknown_hdf5_index.py`  
   Utilities to index unknown HDF5 samples and split participants.
@@ -144,6 +149,7 @@ python user_identification/registering_users/run_registration_eval.py \
   --threshold_criterion weighted_recall_balance \
   --unknown_recall_weight 0.5 \
   --threshold_grid_points 501 \
+  --threshold_on known_user_score \
   --device cuda
 ```
 
@@ -160,6 +166,7 @@ python user_identification/registering_users/run_all_folds_registration_eval.py 
   --threshold_criterion weighted_recall_balance \
   --unknown_recall_weight 0.5 \
   --threshold_grid_points 501 \
+  --threshold_on known_user_score \
   --device cuda
 ```
 
@@ -179,8 +186,67 @@ python user_identification/registering_users/run_registration_grid_search.py \
   --grid_threshold_criteria "weighted_recall_balance,harmonic_recall_balance" \
   --objective_unknown_weight 0.5 \
   --threshold_grid_points 501 \
+  --threshold_on known_user_score \
   --device cuda
 ```
+
+#### Ranking tie-breaks
+
+`grid_search_ranked_results.json` lists configs sorted by descending **objective score**
+(`objective_unknown_weight * unknown_recall_mean + (1 - w) * mean_registered_recall_mean`).
+When that score ties, ranking uses **higher `open_world_f1_macro_mean`**, then **higher `open_world_mcc_mean`**.
+
+#### Optional disk cleanup after a grid
+
+To keep only the top few config directories (plus `grid_search_ranked_results.json`):
+
+```bash
+python user_identification/registering_users/run_registration_grid_search.py \
+  ...same args as above... \
+  --prune_configs \
+  --prune_keep_top_k 3
+```
+
+This deletes sibling `enroll_*` directories that are not in the top **K** after ranking. Use with care.
+
+### 4) Full pipeline (active + passive grid, manifest, final all-fold eval)
+
+This automates the recommended workflow:
+
+1. Grid search **active** → `grid_search_active/`
+2. Grid search **passive** → `grid_search_passive/`
+3. Write `registration_pipeline_manifest.json` (best configs, paths, and shell-ready final-eval commands)
+4. Run `run_all_folds_registration_eval.py` for **active** and **passive** using each task’s best hyperparameters
+
+```bash
+python user_identification/registering_users/run_registration_pipeline.py \
+  --cv_dir final_user_identification/4s \
+  --hdf5_root "${HOME}/scratch" \
+  --segment_length 4s \
+  --n_folds 5 \
+  --output_root registering_users_results/pipeline_4s_active_passive \
+  --objective_unknown_weight 0.5 \
+  --threshold_on known_user_score \
+  --device cuda
+```
+
+Useful flags:
+
+- `--prune_after_grid` — forward `--prune_configs` to each grid run (keeps top `--prune_keep_top_k` config dirs per grid).
+- `--skip_grid` — skip a grid if `grid_search_ranked_results.json` already exists under that grid output directory (resume-friendly).
+- `--no_final_eval` — only run grids and write the manifest (skip the two all-fold eval steps).
+
+Outputs under `--output_root`:
+
+| Path | Meaning |
+|------|---------|
+| `grid_search_active/` | Active grid; read `grid_search_ranked_results.json` |
+| `grid_search_passive/` | Passive grid |
+| `registration_pipeline_manifest.json` | Best configs + commands |
+| `eval_all_folds_active_best_from_grid/` | All-fold active eval with best hyperparameters |
+| `eval_all_folds_passive_best_from_grid/` | All-fold passive eval with best hyperparameters |
+
+**After a pipeline run**, archive or delete old exploratory grids if disk is tight; keep at minimum the manifest and the two `eval_all_folds_*` trees you care about for reporting.
 
 ---
 
@@ -210,6 +276,14 @@ Under `--output_root`:
 - one folder per config
 - `grid_search_ranked_results.json` with ranked configs and best config
 
+### `run_registration_pipeline.py`
+
+Under `--output_root`:
+
+- `registration_pipeline_manifest.json`
+- `grid_search_active/`, `grid_search_passive/`
+- optional `eval_all_folds_*` directories if final eval was not disabled
+
 ---
 
 ## Practical Tuning Guidance
@@ -228,6 +302,8 @@ For deployment-quality selection:
 
 - tune on all folds, not only one fold
 - choose threshold criterion based on target trade-off, not plain accuracy alone
+- run **active and passive separately**; do not assume the same hyperparameters transfer
+- use `run_registration_pipeline.py` once you are happy with the search space, so best configs and final evals stay reproducible from one command
 
 ---
 
@@ -238,6 +314,7 @@ For deployment-quality selection:
   - `enrollment_fraction_per_user`: `(0,1)`
   - `unknown_recall_weight`: `[0,1]`
 - `threshold_grid_points` must be `>= 11`
+- `--threshold_on` is `distance` (default) or `known_user_score` (same formula as `analyze_confidence.ood_distance_to_known_user_score` applied to min distance to prototypes)
 - At least 2 unknown participants are required per fold split
 - Each registered participant must have at least 2 segments to split enrollment/probe
 

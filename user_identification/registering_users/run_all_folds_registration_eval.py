@@ -129,6 +129,13 @@ def _parse_args() -> argparse.Namespace:
         help="Weight in [0,1] for unknown recall in weighted_recall_balance criterion.",
     )
     p.add_argument("--threshold_grid_points", type=int, default=501)
+    p.add_argument(
+        "--threshold_on",
+        type=str,
+        default="distance",
+        choices=["distance", "known_user_score"],
+        help="Open-world threshold axis: same as run_registration_eval.py --threshold_on.",
+    )
     args = p.parse_args()
     if args.threshold_grid_points < 11:
         raise SystemExit("--threshold_grid_points must be >= 11")
@@ -167,6 +174,7 @@ def main() -> None:
         threshold_criterion=args.threshold_criterion,
         unknown_recall_weight=args.unknown_recall_weight,
         threshold_grid_points=args.threshold_grid_points,
+        threshold_on=args.threshold_on,
     )
 
     folds: Dict[str, Any] = {}
@@ -217,6 +225,7 @@ def main() -> None:
         "threshold_criterion": args.threshold_criterion,
         "unknown_recall_weight": args.unknown_recall_weight,
         "threshold_grid_points": args.threshold_grid_points,
+        "threshold_on": args.threshold_on,
         "folds": folds,
     }
 

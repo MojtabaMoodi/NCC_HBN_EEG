@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import shutil
 import statistics
 import sys
 from pathlib import Path
@@ -117,6 +118,58 @@ def _objective_score(metrics: Dict[str, float], objective_unknown_weight: float)
     return float(objective_unknown_weight * u + (1.0 - objective_unknown_weight) * r)
 
 
+def format_config_tag(
+    enrollment_fraction_per_user: float,
+    unknown_recall_weight: float,
+    register_fraction_of_unknown: float,
+    threshold_criterion: str,
+) -> str:
+    """Subdirectory name for one grid cell (must match main() loop)."""
+    return (
+        f"enroll_{enrollment_fraction_per_user:.3f}"
+        f"__unkw_{unknown_recall_weight:.3f}"
+        f"__regfrac_{register_fraction_of_unknown:.3f}"
+        f"__crit_{threshold_criterion}"
+    )
+
+
+def format_config_tag_from_row(row: Dict[str, Any]) -> str:
+    c = row["config"]
+    return format_config_tag(
+        float(c["enrollment_fraction_per_user"]),
+        float(c["unknown_recall_weight"]),
+        float(c["register_fraction_of_unknown"]),
+        str(c["threshold_criterion"]),
+    )
+
+
+def _rank_sort_key(row: Dict[str, Any]) -> Tuple[float, float, float]:
+    """Primary: objective_score; tie-break: macro-F1 then MCC (higher is better)."""
+    agg = row["aggregate"]
+    return (
+        float(row["objective_score"]),
+        float(agg["open_world_f1_macro_mean"]),
+        float(agg["open_world_mcc_mean"]),
+    )
+
+
+def _prune_config_dirs(out_root: Path, ranked_rows: List[Dict[str, Any]], keep_top_k: int) -> None:
+    if keep_top_k < 1:
+        raise ValueError("keep_top_k must be >= 1")
+    keep_names = {format_config_tag_from_row(r) for r in ranked_rows[:keep_top_k]}
+    removed = 0
+    for child in sorted(out_root.iterdir()):
+        if not child.is_dir():
+            continue
+        if not child.name.startswith("enroll_"):
+            continue
+        if child.name in keep_names:
+            continue
+        shutil.rmtree(child)
+        removed += 1
+    print(f"Pruned {removed} config director(y/ies); kept top {keep_top_k}: {sorted(keep_names)}")
+
+
 def _iter_grid(
     enrollment_fractions: Iterable[float],
     unknown_weights: Iterable[float],
@@ -145,6 +198,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--arcface_scale", type=float, default=256.0)
     p.add_argument("--arcface_easy_margin", action="store_true")
     p.add_argument("--threshold_grid_points", type=int, default=501)
+    p.add_argument(
+        "--threshold_on",
+        type=str,
+        default="distance",
+        choices=["distance", "known_user_score"],
+        help="Open-world threshold axis: same as run_registration_eval.py --threshold_on.",
+    )
 
     p.add_argument(
         "--grid_enrollment_fractions",
@@ -176,12 +236,25 @@ def _parse_args() -> argparse.Namespace:
         default=0.5,
         help="Weight for ranking configs: w*unknown_recall + (1-w)*mean_registered_recall.",
     )
+    p.add_argument(
+        "--prune_configs",
+        action="store_true",
+        help="After ranking, delete config subdirectories except the top --prune_keep_top_k.",
+    )
+    p.add_argument(
+        "--prune_keep_top_k",
+        type=int,
+        default=3,
+        help="Number of top-ranked config directories to keep when --prune_configs is set.",
+    )
     args = p.parse_args()
 
     if args.threshold_grid_points < 11:
         raise SystemExit("--threshold_grid_points must be >= 11")
     if not (0.0 <= args.objective_unknown_weight <= 1.0):
         raise SystemExit("--objective_unknown_weight must be in [0,1]")
+    if int(args.prune_keep_top_k) < 1:
+        raise SystemExit("--prune_keep_top_k must be >= 1")
     return args
 
 
@@ -222,12 +295,7 @@ def main() -> None:
     print(f"Running {total} configuration(s)")
 
     for idx, (enr_frac, unk_w, reg_frac, criterion) in enumerate(grid, start=1):
-        config_tag = (
-            f"enroll_{enr_frac:.3f}"
-            f"__unkw_{unk_w:.3f}"
-            f"__regfrac_{reg_frac:.3f}"
-            f"__crit_{criterion}"
-        )
+        config_tag = format_config_tag(enr_frac, unk_w, reg_frac, criterion)
         config_out = out_root / config_tag
         config_out.mkdir(parents=True, exist_ok=True)
         print(f"\n[{idx}/{total}] {config_tag}")
@@ -246,6 +314,7 @@ def main() -> None:
             threshold_criterion=criterion,
             unknown_recall_weight=unk_w,
             threshold_grid_points=args.threshold_grid_points,
+            threshold_on=args.threshold_on,
         )
 
         fold_payloads: List[Dict[str, Any]] = []
@@ -279,6 +348,7 @@ def main() -> None:
                 "unknown_recall_weight": unk_w,
                 "register_fraction_of_unknown": reg_frac,
                 "threshold_criterion": criterion,
+                "threshold_on": args.threshold_on,
             },
             "objective_unknown_weight": args.objective_unknown_weight,
             "objective_score": score,
@@ -291,7 +361,7 @@ def main() -> None:
         with open(config_out / "grid_search_summary.json", "w") as f:
             json.dump(row, f, indent=2)
 
-    results.sort(key=lambda x: float(x["objective_score"]), reverse=True)
+    results.sort(key=_rank_sort_key, reverse=True)
     out_payload = {
         "search_space": {
             "grid_enrollment_fractions": enrollment_fractions,
@@ -299,13 +369,21 @@ def main() -> None:
             "grid_register_fractions": register_fractions,
             "grid_threshold_criteria": criteria,
             "objective_unknown_weight": args.objective_unknown_weight,
+            "threshold_on": args.threshold_on,
         },
+        "ranking_note": (
+            "Sorted by descending objective_score; ties broken by open_world_f1_macro_mean "
+            "then open_world_mcc_mean."
+        ),
         "best_config": results[0] if results else None,
         "ranked_results": results,
     }
     with open(out_root / "grid_search_ranked_results.json", "w") as f:
         json.dump(out_payload, f, indent=2)
     print(f"\nWrote ranked grid search results: {out_root / 'grid_search_ranked_results.json'}")
+
+    if args.prune_configs:
+        _prune_config_dirs(out_root, results, int(args.prune_keep_top_k))
 
 
 if __name__ == "__main__":

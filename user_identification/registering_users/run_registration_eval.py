@@ -58,7 +58,10 @@ from data_processing.target_transforms import (  # noqa: E402
     UserIdentificationTransform,
     create_user_identification_transform_from_hdf5,
 )
-from user_identification.analyze_confidence import run_inference  # noqa: E402
+from user_identification.analyze_confidence import (  # noqa: E402
+    ood_distance_to_known_user_score,
+    run_inference,
+)
 from user_identification.labram_model import LaBraMUserIdentificationWrapper  # noqa: E402
 from user_identification.registering_users.registration_map_dataset import (  # noqa: E402
     UnknownRegistrationMapDataset,
@@ -78,8 +81,7 @@ _THRESH_CRITERIA = (
     "weighted_recall_balance",
     "harmonic_recall_balance",
 )
-_THRESH_SWEEP_NAMES = (
-    "distance_threshold",
+_THRESH_SWEEP_NAMES_TAIL = (
     "accuracy",
     "balanced_accuracy",
     "f1_macro",
@@ -89,6 +91,15 @@ _THRESH_SWEEP_NAMES = (
     "weighted_recall_balance",
     "harmonic_recall_balance",
 )
+
+
+def _threshold_sweep_column_names(threshold_on: str) -> Tuple[str, ...]:
+    first = (
+        "known_user_score_threshold"
+        if threshold_on == "known_user_score"
+        else "distance_threshold"
+    )
+    return (first,) + _THRESH_SWEEP_NAMES_TAIL
 
 
 def _load_checkpoint(path: Path, device: torch.device) -> Dict[str, Any]:
@@ -234,6 +245,25 @@ def _predict_open_world(
     return pred
 
 
+def _predict_open_world_known_user_score(
+    nearest_reg_idx: np.ndarray,
+    min_dist: np.ndarray,
+    score_threshold: float,
+    unknown_class_idx: int,
+) -> np.ndarray:
+    """
+    Same rejection semantics as analyze_confidence.open_set_predict on known_user_score:
+    accept (assign nearest registered ID) when score >= threshold; else UNKNOWN.
+
+    Here score = 1/(1+d) with d = min L2 distance to any registered prototype.
+    """
+    min_dist = np.asarray(min_dist, dtype=np.float64)
+    scores = ood_distance_to_known_user_score(min_dist)
+    pred = np.asarray(nearest_reg_idx, dtype=np.int64).copy()
+    pred[scores < float(score_threshold)] = int(unknown_class_idx)
+    return pred
+
+
 def _multiclass_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -303,14 +333,22 @@ def _threshold_sweep_open_world(
     n_registered: int,
     unknown_class_idx: int,
     unknown_recall_weight: float,
+    threshold_on: str,
 ) -> np.ndarray:
+    if threshold_on not in ("distance", "known_user_score"):
+        raise ValueError(f"threshold_on must be 'distance' or 'known_user_score', got {threshold_on!r}")
     if not (0.0 <= float(unknown_recall_weight) <= 1.0):
         raise ValueError(
             f"unknown_recall_weight must be in [0, 1], got {unknown_recall_weight!r}"
         )
     rows: List[Tuple[float, ...]] = []
     for t in thresholds:
-        pred = _predict_open_world(nearest_reg_idx, min_dist, float(t), unknown_class_idx)
+        if threshold_on == "known_user_score":
+            pred = _predict_open_world_known_user_score(
+                nearest_reg_idx, min_dist, float(t), unknown_class_idx
+            )
+        else:
+            pred = _predict_open_world(nearest_reg_idx, min_dist, float(t), unknown_class_idx)
         m = _multiclass_metrics(
             y_true,
             pred,
@@ -370,9 +408,22 @@ def _argmax_threshold_row(sweep: np.ndarray, criterion: str) -> int:
     return int(candidates[order[-1]])
 
 
-def _row_at_index(sweep: np.ndarray, idx: int) -> Dict[str, float]:
+def _row_at_index(sweep: np.ndarray, idx: int, names: Tuple[str, ...]) -> Dict[str, float]:
     r = sweep[idx]
-    return {name: float(r[j]) for j, name in enumerate(_THRESH_SWEEP_NAMES)}
+    return {name: float(r[j]) for j, name in enumerate(names)}
+
+
+def _equiv_known_user_score_from_distance(d: float) -> float:
+    """Boundary score when min distance equals d: same as analyze_confidence."""
+    return float(1.0 / (1.0 + float(d)))
+
+
+def _equiv_distance_cap_from_score_threshold(t_s: float) -> float:
+    """Accept when min_dist <= this value iff accept when score >= t_s (score = 1/(1+d))."""
+    ts = float(t_s)
+    if ts <= 0.0:
+        raise ValueError("known_user_score threshold must be > 0")
+    return float(1.0 / ts - 1.0)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -410,7 +461,19 @@ def _parse_args() -> argparse.Namespace:
         "--threshold_grid_points",
         type=int,
         default=501,
-        help="Number of distance thresholds between min/max nearest-prototype distances.",
+        help="Number of candidate thresholds between min/max of the chosen signal (distance or score).",
+    )
+    p.add_argument(
+        "--threshold_on",
+        type=str,
+        default="distance",
+        choices=["distance", "known_user_score"],
+        help=(
+            "Open-world reject signal: raw min L2 distance to nearest prototype ('distance'), or "
+            "known_user_score=1/(1+d) as in analyze_confidence ('known_user_score'). "
+            "Decisions are equivalent up to the monotone map d↔1/(1+d); grids may pick slightly "
+            "different neighbors with finite samples."
+        ),
     )
     args = p.parse_args()
     if args.threshold_grid_points < 11:
@@ -509,14 +572,26 @@ def run_single_task(
     y_true_all = np.concatenate([probe_true_idx_arr, unreg_true_idx_arr], axis=0)
     nearest_all = np.concatenate([probe_nearest_idx, unreg_nearest_idx], axis=0)
     min_dist_all = np.concatenate([probe_min_dist, unreg_min_dist], axis=0)
+    min_score_all = ood_distance_to_known_user_score(min_dist_all)
+
+    threshold_on = str(getattr(args, "threshold_on", "distance"))
+    sweep_names = _threshold_sweep_column_names(threshold_on)
 
     n_grid = int(getattr(args, "threshold_grid_points", 501))
-    d_min = float(np.min(min_dist_all))
-    d_max = float(np.max(min_dist_all))
-    if d_max <= d_min:
-        thresholds = np.array([d_min], dtype=np.float64)
+    if threshold_on == "known_user_score":
+        s_min = float(np.min(min_score_all))
+        s_max = float(np.max(min_score_all))
+        if s_max <= s_min:
+            thresholds = np.array([s_min], dtype=np.float64)
+        else:
+            thresholds = np.linspace(s_min, s_max, n_grid, dtype=np.float64)
     else:
-        thresholds = np.linspace(d_min, d_max, n_grid, dtype=np.float64)
+        d_min = float(np.min(min_dist_all))
+        d_max = float(np.max(min_dist_all))
+        if d_max <= d_min:
+            thresholds = np.array([d_min], dtype=np.float64)
+        else:
+            thresholds = np.linspace(d_min, d_max, n_grid, dtype=np.float64)
 
     sweep = _threshold_sweep_open_world(
         nearest_all,
@@ -526,12 +601,18 @@ def run_single_task(
         n_registered=n_registered,
         unknown_class_idx=unknown_class_idx,
         unknown_recall_weight=float(getattr(args, "unknown_recall_weight", 0.5)),
+        threshold_on=threshold_on,
     )
 
     crit = str(getattr(args, "threshold_criterion", "f1_macro"))
     sel_idx = _argmax_threshold_row(sweep, crit)
     sel_t = float(sweep[sel_idx, 0])
-    pred_selected = _predict_open_world(nearest_all, min_dist_all, sel_t, unknown_class_idx)
+    if threshold_on == "known_user_score":
+        pred_selected = _predict_open_world_known_user_score(
+            nearest_all, min_dist_all, sel_t, unknown_class_idx
+        )
+    else:
+        pred_selected = _predict_open_world(nearest_all, min_dist_all, sel_t, unknown_class_idx)
     metrics_selected = _multiclass_metrics(
         y_true_all,
         pred_selected,
@@ -547,7 +628,12 @@ def run_single_task(
 
     acc_idx = _argmax_threshold_row(sweep, "accuracy")
     acc_t = float(sweep[acc_idx, 0])
-    pred_acc = _predict_open_world(nearest_all, min_dist_all, acc_t, unknown_class_idx)
+    if threshold_on == "known_user_score":
+        pred_acc = _predict_open_world_known_user_score(
+            nearest_all, min_dist_all, acc_t, unknown_class_idx
+        )
+    else:
+        pred_acc = _predict_open_world(nearest_all, min_dist_all, acc_t, unknown_class_idx)
     metrics_acc = _multiclass_metrics(
         y_true_all,
         pred_acc,
@@ -576,6 +662,30 @@ def run_single_task(
     unknown_true_idx = unknown_class_idx
     unknown_pred_rate = float(cm_sel[unknown_true_idx, unknown_true_idx] / max(1, int(np.sum(cm_sel[unknown_true_idx]))))
 
+    selected_threshold_report: Dict[str, Any] = {
+        "sweep_row": _row_at_index(sweep, sel_idx, sweep_names),
+        "metrics": metrics_selected,
+        "assignment_summary": breakdown_selected,
+        "unknown_rejection_rate": unknown_pred_rate,
+    }
+    ref_threshold_report: Dict[str, Any] = {
+        "sweep_row": _row_at_index(sweep, acc_idx, sweep_names),
+        "metrics": metrics_acc,
+        "assignment_summary": breakdown_acc,
+    }
+    if threshold_on == "known_user_score":
+        selected_threshold_report["known_user_score_threshold"] = sel_t
+        selected_threshold_report["equivalent_distance_cap_for_accept"] = _equiv_distance_cap_from_score_threshold(
+            sel_t
+        )
+        ref_threshold_report["known_user_score_threshold"] = acc_t
+        ref_threshold_report["equivalent_distance_cap_for_accept"] = _equiv_distance_cap_from_score_threshold(acc_t)
+    else:
+        selected_threshold_report["distance_threshold"] = sel_t
+        selected_threshold_report["equivalent_known_user_score_threshold"] = _equiv_known_user_score_from_distance(sel_t)
+        ref_threshold_report["distance_threshold"] = acc_t
+        ref_threshold_report["equivalent_known_user_score_threshold"] = _equiv_known_user_score_from_distance(acc_t)
+
     report: Dict[str, Any] = {
         "checkpoint": str(ckpt_path),
         "hdf5_dir": str(hdf5_dir),
@@ -600,23 +710,17 @@ def run_single_task(
         },
         "open_world_user_classification": {
             "definition": "K+1 classes: K registered IDs + 1 UNKNOWN class for all unregistered users.",
-            "threshold_signal": "min_l2_distance_to_any_registered_prototype",
+            "threshold_on": threshold_on,
+            "underlying_distance": "min_l2_distance_to_any_registered_prototype",
+            "known_user_score": (
+                "1/(1 + min_l2_distance_to_nearest_registered_prototype); "
+                "same map as user_identification.analyze_confidence.ood_distance_to_known_user_score"
+            ),
             "selection_criterion": crit,
             "unknown_recall_weight": float(getattr(args, "unknown_recall_weight", 0.5)),
-            "selected_threshold": {
-                "distance_threshold": sel_t,
-                "sweep_row": _row_at_index(sweep, sel_idx),
-                "metrics": metrics_selected,
-                "assignment_summary": breakdown_selected,
-                "unknown_rejection_rate": unknown_pred_rate,
-            },
-            "reference_max_plain_accuracy": {
-                "distance_threshold": acc_t,
-                "sweep_row": _row_at_index(sweep, acc_idx),
-                "metrics": metrics_acc,
-                "assignment_summary": breakdown_acc,
-            },
-            "threshold_sweep_column_names": list(_THRESH_SWEEP_NAMES),
+            "selected_threshold": selected_threshold_report,
+            "reference_max_plain_accuracy": ref_threshold_report,
+            "threshold_sweep_column_names": list(sweep_names),
         },
     }
 
@@ -634,6 +738,7 @@ def run_single_task(
         y_pred_max_plain_accuracy=pred_acc.astype(np.int32),
         nearest_registered_prediction=nearest_all.astype(np.int32),
         min_distance=min_dist_all.astype(np.float32),
+        min_known_user_score=min_score_all.astype(np.float32),
         emb_probe=emb_probe.astype(np.float32),
         emb_unregistered=emb_unreg.astype(np.float32),
     )
