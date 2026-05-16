@@ -24,8 +24,7 @@ utils/__pycache__/*
 utils/*.png
 utils/*.txt
 utils/*.csv
-user_identification/__pycache__/*
-user_identification/registering_users/__pycache__/*
+user_identification/**/__pycache__/
 user_identification/jobs/logs/*
 user_identification/*.log
 user_identification/*.log.old
