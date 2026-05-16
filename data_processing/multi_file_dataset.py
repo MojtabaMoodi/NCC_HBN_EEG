@@ -11,6 +11,7 @@ we can significantly improve data loading performance.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Iterator
 from torch.utils.data import IterableDataset, get_worker_info
@@ -101,23 +102,29 @@ class MultiFileEEGDataset(IterableDataset):
         
         logger.info(f"✅ Initialized MultiFileEEGDataset with {len(hdf5_files)} files")
         logger.info(f"📁 Files: {[Path(f).name for f in hdf5_files]}")
-        
-        # DIAGNOSTIC: Count total samples across all files
-        total_samples = 0
-        for hdf5_file in hdf5_files:
-            try:
-                import h5py
-                with h5py.File(hdf5_file, 'r') as f:
-                    file_samples = 0
-                    for task_type in ['active', 'passive']:
-                        if task_type in f:
-                            samples = len([k for k in f[task_type].keys() if k.startswith('sample_')])
-                            file_samples += samples
-                    total_samples += file_samples
-                    logger.info(f"   {Path(hdf5_file).name}: {file_samples:,} samples")
-            except Exception as e:
-                logger.warning(f"   Could not count samples in {Path(hdf5_file).name}: {e}")
-        logger.info(f"📊 Total samples across all {len(hdf5_files)} files: {total_samples:,}")
+        # Do not enumerate every sample_* key at init: for 1s multipart HDF5 that is O(millions)
+        # of keys, builds huge lists, and can stall for many minutes with no user-visible output.
+        # Enable optional counting only when debugging: EEG_COUNT_MULTI_FILE_SAMPLES=1
+        if os.environ.get("EEG_COUNT_MULTI_FILE_SAMPLES", "").strip().lower() in ("1", "true", "yes"):
+            total_samples = 0
+            for hdf5_file in hdf5_files:
+                try:
+                    import h5py
+                    with h5py.File(hdf5_file, "r") as f:
+                        file_samples = 0
+                        for _task in ("active", "passive"):
+                            if _task in f:
+                                grp = f[_task]
+                                file_samples += sum(
+                                    1 for k in grp.keys() if str(k).startswith("sample_")
+                                )
+                        total_samples += file_samples
+                        logger.info(f"   {Path(hdf5_file).name}: {file_samples:,} samples")
+                except Exception as e:
+                    logger.warning(f"   Could not count samples in {Path(hdf5_file).name}: {e}")
+            logger.info(
+                f"📊 Total samples across all {len(hdf5_files)} files: {total_samples:,}"
+            )
     
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         """
