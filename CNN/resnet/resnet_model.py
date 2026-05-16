@@ -285,6 +285,8 @@ class EEGResNet(BaseEEGCNN):
         self.fc1 = nn.Linear(final_channels, 128)
         self.dropout = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(128, num_classes)
+        # ArcFace (user identification): embedding dim matches fc1 output (see extract_features)
+        self.arcface_embedding_dim = int(self.fc1.out_features)
     
     def _build_conv_layers(self) -> nn.ModuleList:
         """
@@ -378,6 +380,19 @@ class EEGResNet(BaseEEGCNN):
         
         return x
     
+    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Embedding vector before the final classification layer (for ArcFace).
+        Same pathway as forward() up to and including dropout after fc1.
+        """
+        x = self._preprocess_input(x)
+        x = self._apply_conv_layers(x)
+        x = F.adaptive_avg_pool2d(x, (1, 1))
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        return x
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through ResNet.
@@ -388,18 +403,8 @@ class EEGResNet(BaseEEGCNN):
         Returns:
             Output tensor of shape (batch, num_classes)
         """
-        x = self._preprocess_input(x)
-        x = self._apply_conv_layers(x)
-        
-        # Global average pooling across spatial dimensions
-        x = F.adaptive_avg_pool2d(x, (1, 1))
-        x = x.view(x.size(0), -1)
-        
-        # Fully connected layers
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
+        x = self.extract_features(x)
         x = self.fc2(x)
-        
         return x
     
     def get_model_info(self) -> Dict[str, Any]:
@@ -701,6 +706,21 @@ class MultiOutputResNet(EEGResNet18):
         }
 
 
+def forward_age_regression_resnet(model: EEGResNet, x: torch.Tensor) -> torch.Tensor:
+    """
+    Shared forward for age regression heads: same fc1 (128-d) + fc2 (1) + sigmoid pathway
+    for all ResNet depths (18/34/50).
+    """
+    x = model._preprocess_input(x)
+    x = model._apply_conv_layers(x)
+    x = F.adaptive_avg_pool2d(x, (1, 1))
+    x = x.view(x.size(0), -1)
+    x = F.relu(model.fc1(x))
+    x = model.dropout(x)
+    x = model.fc2(x)
+    return torch.sigmoid(x)
+
+
 class EEGAgeRegressionResNet(EEGResNet18):
     """
     ResNet model for EEG age regression.
@@ -732,25 +752,64 @@ class EEGAgeRegressionResNet(EEGResNet18):
         Returns:
             Normalized age predictions in [0, 1] range, shape (batch_size, 1)
         """
-        x = self._preprocess_input(x)
-        x = self._apply_conv_layers(x)
-        
-        # Global average pooling across spatial dimensions
-        x = F.adaptive_avg_pool2d(x, (1, 1))
-        x = x.view(x.size(0), -1)
-        
-        # Apply fully connected layers
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        
-        # Apply sigmoid to ensure output is in [0, 1] range
-        x = torch.sigmoid(x)
-        
-        return x
+        return forward_age_regression_resnet(self, x)
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get model information for reporting."""
+        info = super().get_model_info()
+        info['prediction_type'] = 'regression'
+        info['output_dim'] = 1
+        return info
+
+
+class EEGAgeRegressionResNet34(EEGResNet34):
+    """
+    ResNet34 for EEG age regression (normalized age in [0, 1]).
+    """
+
+    def __init__(self, num_channels: int = 60, num_classes: int = 1,
+                 dropout_rate: float = 0.5, use_layer_norm: bool = False,
+                 use_batch_norm: bool = True):
+        super(EEGAgeRegressionResNet34, self).__init__(
+            num_channels=num_channels,
+            num_classes=1,
+            dropout_rate=dropout_rate,
+            use_layer_norm=use_layer_norm,
+            use_batch_norm=use_batch_norm,
+        )
+        self.fc2 = nn.Linear(128, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return forward_age_regression_resnet(self, x)
+
+    def get_model_info(self) -> Dict[str, Any]:
+        info = super().get_model_info()
+        info['prediction_type'] = 'regression'
+        info['output_dim'] = 1
+        return info
+
+
+class EEGAgeRegressionResNet50(EEGResNet50):
+    """
+    ResNet50 for EEG age regression (normalized age in [0, 1]).
+    """
+
+    def __init__(self, num_channels: int = 60, num_classes: int = 1,
+                 dropout_rate: float = 0.5, use_layer_norm: bool = False,
+                 use_batch_norm: bool = True):
+        super(EEGAgeRegressionResNet50, self).__init__(
+            num_channels=num_channels,
+            num_classes=1,
+            dropout_rate=dropout_rate,
+            use_layer_norm=use_layer_norm,
+            use_batch_norm=use_batch_norm,
+        )
+        self.fc2 = nn.Linear(128, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return forward_age_regression_resnet(self, x)
+
+    def get_model_info(self) -> Dict[str, Any]:
         info = super().get_model_info()
         info['prediction_type'] = 'regression'
         info['output_dim'] = 1

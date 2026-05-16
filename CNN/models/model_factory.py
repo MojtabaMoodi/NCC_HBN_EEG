@@ -47,7 +47,8 @@ from resnet.resnet_model import (
     EEGResNet, EEGResNet18, EEGResNet34, EEGResNet50,
     EEGGenderResNet, EEGGenderResNet34, EEGGenderResNet50,
     EEGAgeResNet, EEGAgeResNet34, EEGAgeResNet50,
-    CombinedResNet, MultiOutputResNet, EEGAgeRegressionResNet
+    CombinedResNet, MultiOutputResNet,
+    EEGAgeRegressionResNet, EEGAgeRegressionResNet34, EEGAgeRegressionResNet50,
 )
 
 class ModelFactory:
@@ -90,6 +91,8 @@ class ModelFactory:
             'age_resnet34': EEGAgeResNet34,  # ResNet34 for age classification (3 classes)
             'age_resnet50': EEGAgeResNet50,  # ResNet50 for age classification (3 classes)
             'age_regression_resnet': EEGAgeRegressionResNet,  # ResNet18 for age regression (1 output)
+            'age_regression_resnet34': EEGAgeRegressionResNet34,
+            'age_regression_resnet50': EEGAgeRegressionResNet50,
             'combined_resnet': CombinedResNet,  # ResNet18 for combined classification (6 classes)
             'multi_output_resnet': MultiOutputResNet,  # ResNet18 multi-output (2 heads: gender + age)
         })
@@ -105,7 +108,8 @@ class ModelFactory:
             model_type: Type of model to create 
                        Standard CNN: 'eeg_cnn', 'gender_cnn', 'age_cnn', 'age_regression_cnn', 'combined_cnn', 'multi_output_cnn'
                        ResNet: 'resnet', 'resnet18', 'resnet34', 'resnet50', 'gender_resnet', 'age_resnet', 
-                               'age_regression_resnet', 'combined_resnet', 'multi_output_resnet'
+                               'age_regression_resnet', 'age_regression_resnet34', 'age_regression_resnet50',
+                               'combined_resnet', 'multi_output_resnet'
             **kwargs: Additional arguments for model initialization
             
         Returns:

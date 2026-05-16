@@ -83,6 +83,7 @@ def get_resnet_model_type(resnet_type: int, task: str = "age") -> tuple:
         
     Raises:
         ValueError: If resnet_type or task is invalid
+        RuntimeError: If mapping logic fails (internal inconsistency)
     """
     valid_resnet_types = [18, 34, 50]
     if resnet_type not in valid_resnet_types:
@@ -112,10 +113,17 @@ def get_resnet_model_type(resnet_type: int, task: str = "age") -> tuple:
     elif task == 'multi_output':
         return ('multi_output_resnet', {'num_classes': 2})  # Uses ResNet18
     elif task == 'age_regression':
-        return ('age_regression_resnet', {'num_classes': 1})  # Uses ResNet18
+        if resnet_type == 18:
+            return ('age_regression_resnet', {'num_classes': 1})
+        if resnet_type == 34:
+            return ('age_regression_resnet34', {'num_classes': 1})
+        if resnet_type == 50:
+            return ('age_regression_resnet50', {'num_classes': 1})
     
     # Fallback (should not reach here)
-    return ('age_resnet', {'num_classes': 3})
+    raise RuntimeError(
+        f"get_resnet_model_type: unreachable branch for resnet_type={resnet_type}, task={task!r}"
+    )
 
 
 def convert_numpy_types(obj: Any) -> Any:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to run ResNet age classification experiment.
+Script to run ResNet age prediction experiments (classification or regression).
 Supports ResNet18, ResNet34, and ResNet50 architectures.
 Trains on both active and passive tasks, evaluates separately on active and passive.
 Uses the same multipart train/val/test HDF5 data pipeline as the CNN (EEGDataLoader.create_train_val_test_loaders).
@@ -21,15 +21,35 @@ from CNN.utils import create_data_config_for_segment_length, get_resnet_model_ty
 from CNN.gpu_utils import detect_available_gpus
 
 
+def _try_line_buffer_stdio() -> None:
+    """Use line-buffered stdout/stderr when supported (e.g. piped to tee) so output appears promptly."""
+    for stream in (sys.stdout, sys.stderr):
+        reconf = getattr(stream, "reconfigure", None)
+        if callable(reconf):
+            try:
+                reconf(line_buffering=True)
+            except (OSError, ValueError, AttributeError, TypeError):
+                pass
+
+
 def main():
-    """Main function for running ResNet age classification experiment (age prediction)."""
+    """Run ResNet age classification (3-class) or age regression (normalized continuous age)."""
+    _try_line_buffer_stdio()
     parser = argparse.ArgumentParser(
-        description='ResNet age prediction: train or evaluate (--eval_only) a ResNet on EEG for age classification (3 classes).'
+        description='ResNet age prediction: train or evaluate (--eval_only) for age classification (3 classes) '
+        'or age regression (continuous), with separate metrics for active vs passive tasks.'
     )
     parser.add_argument('--mode', choices=['1s', '2s', '4s'], default='1s',
                        help='EEG segment length: 1s (1-second segments), 2s (2-second segments), or 4s (4-second segments)')
     parser.add_argument('--resnet_type', type=int, choices=[18, 34, 50], default=18,
                        help='ResNet architecture type: 18, 34, or 50 (default: 18)')
+    parser.add_argument(
+        '--prediction-type',
+        dest='prediction_type',
+        choices=['classification', 'regression'],
+        default='classification',
+        help="Learning target: 'classification' (3 age bins) or 'regression' (normalized age in [0,1], same as CNN).",
+    )
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=None, 
@@ -50,7 +70,7 @@ def main():
     parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
                        help="Participant-level aggregation: 'majority_vote' for confidence-weighted majority. Use with --eval_only to evaluate with majority vote.")
     parser.add_argument('--checkpoint', type=str, default=None, metavar='PATH',
-                       help='Path to the saved best model (e.g. .../age_resnet34_2s_best.pth). Use with --eval_only. If not set, uses results_dir/checkpoints/<experiment_name>_best.pth.')
+                       help='Path to the saved best model. Use with --eval_only. If not set, uses results_dir/checkpoints/<experiment_name>_best.pth.')
     
     args = parser.parse_args()
     
@@ -79,14 +99,17 @@ def main():
         else:  # 4s
             actual_batch_size = 128
     
-    # Get ResNet model type and configuration
-    model_type, model_config_dict = get_resnet_model_type(args.resnet_type, task='age')
+    resnet_task = 'age_regression' if args.prediction_type == 'regression' else 'age'
+    model_type, model_config_dict = get_resnet_model_type(args.resnet_type, task=resnet_task)
     
     print("="*80)
-    print(f"RESNET{args.resnet_type} AGE CLASSIFICATION EXPERIMENT")
+    if args.prediction_type == 'classification':
+        print(f"RESNET{args.resnet_type} AGE CLASSIFICATION EXPERIMENT")
+    else:
+        print(f"RESNET{args.resnet_type} AGE REGRESSION EXPERIMENT")
     print("="*80)
-    print(f"Model: ResNet{args.resnet_type}")
-    print(f"Task: Age Classification (3 classes)")
+    print(f"Model: ResNet{args.resnet_type} ({model_type})")
+    print(f"Task: {'Age classification (3 classes)' if args.prediction_type == 'classification' else 'Age regression (normalized age)'}")
     print(f"Mode: {args.mode} (EEG segment length)")
     print(f"Results directory: {args.results_dir}")
     print(f"Reports directory: {args.reports_dir}")
@@ -111,7 +134,7 @@ def main():
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         target_key="age",
-        prediction_type="classification",
+        prediction_type=args.prediction_type,
     )
     if args.no_stratified:
         training_config_kw["use_stratified_train_batches"] = False
@@ -121,9 +144,22 @@ def main():
     print(f"Number of workers: {num_workers}")
     print("="*80)
     
-    # Create ResNet age classification experiment
-    # Merge model_config_dict with ModelConfig
+    if args.prediction_type == 'classification':
+        experiment_name = f"age_resnet{args.resnet_type}_{args.mode}"
+        description = (
+            f"ResNet{args.resnet_type} age classification with {args.mode} segments "
+            "(train on both, evaluate separately on active and passive)"
+        )
+    else:
+        experiment_name = f"age_regression_resnet{args.resnet_type}_{args.mode}"
+        description = (
+            f"ResNet{args.resnet_type} age regression with {args.mode} segments "
+            "(train on both, evaluate separately on active and passive)"
+        )
+    
     model_config = ModelConfig(num_channels=60, **model_config_dict)
+    if args.prediction_type == 'regression':
+        model_config.num_classes = 1
     
     training_config = TrainingConfig(**training_config_kw)
     if args.aggregate_by_participant:
@@ -131,21 +167,21 @@ def main():
         print(f"Evaluation will use participant-level aggregation: {args.aggregate_by_participant}")
     
     experiment = ExperimentConfig(
-        name=f"age_resnet{args.resnet_type}_{args.mode}",
+        name=experiment_name,
         model_type=model_type,
         target_type="age",
-        description=f"ResNet{args.resnet_type} age classification with {args.mode} segments (train on both, evaluate separately on active and passive)",
+        description=description,
         data_config=base_data_config,
         model_config=model_config,
         training_config=training_config,
         checkpoint_path=args.checkpoint,
     )
     
-    print(f"\nStarting ResNet{args.resnet_type} age classification experiment...")
+    print(f"\nStarting ResNet{args.resnet_type} age {args.prediction_type} experiment...")
     print(f"Experiment name: {experiment.name}")
     print(f"Model type: {model_type}")
     print(f"Training: Both active and passive tasks")
-    print(f"Evaluation: Separate accuracy reports for active and passive tasks")
+    print(f"Evaluation: Separate metrics for active and passive tasks")
     print("-" * 80)
     
     # Run the experiment
@@ -163,24 +199,43 @@ def main():
         
         # Print key metrics
         if results[0].metrics:
-            print("\nOverall Test Set Metrics:")
-            if 'accuracy' in results[0].metrics:
-                print(f"  Accuracy: {results[0].metrics['accuracy']:.4f}")
-            if 'f1_weighted' in results[0].metrics:
-                print(f"  F1-Score (weighted): {results[0].metrics['f1_weighted']:.4f}")
+            print("\nOverall test set metrics:")
+            m = results[0].metrics
+            if args.prediction_type == 'regression':
+                if 'mae' in m:
+                    print(f"  MAE: {m['mae']:.4f} years")
+                if 'rmse' in m:
+                    print(f"  RMSE: {m['rmse']:.4f} years")
+                if 'r2' in m:
+                    print(f"  R²: {m['r2']:.4f}")
+            else:
+                if 'accuracy' in m:
+                    print(f"  Accuracy: {m['accuracy']:.4f}")
+                if 'f1_weighted' in m:
+                    print(f"  F1-Score (weighted): {m['f1_weighted']:.4f}")
             
-            # Print task-specific metrics if available
-            if 'task_type_metrics' in results[0].metrics:
-                print("\nTask-Specific Metrics:")
-                task_metrics = results[0].metrics['task_type_metrics']
-                if 'active' in task_metrics:
-                    print(f"  Active Tasks:")
-                    print(f"    Accuracy: {task_metrics['active'].get('accuracy', 'N/A'):.4f}")
-                    print(f"    F1-Score: {task_metrics['active'].get('f1_weighted', 'N/A'):.4f}")
-                if 'passive' in task_metrics:
-                    print(f"  Passive Tasks:")
-                    print(f"    Accuracy: {task_metrics['passive'].get('accuracy', 'N/A'):.4f}")
-                    print(f"    F1-Score: {task_metrics['passive'].get('f1_weighted', 'N/A'):.4f}")
+            if 'task_type_metrics' in m:
+                print("\nMetrics by task type (active vs passive):")
+                task_metrics = m['task_type_metrics']
+                for split_name in ('active', 'passive'):
+                    if split_name not in task_metrics:
+                        continue
+                    tm = task_metrics[split_name]
+                    label = split_name.upper()
+                    if args.prediction_type == 'regression':
+                        mae_v = tm.get('mae')
+                        rmse_v = tm.get('rmse')
+                        r2_v = tm.get('r2')
+                        mae_s = f"{mae_v:.4f} years" if isinstance(mae_v, (int, float)) else "N/A"
+                        rmse_s = f"{rmse_v:.4f} years" if isinstance(rmse_v, (int, float)) else "N/A"
+                        r2_s = f"{r2_v:.4f}" if isinstance(r2_v, (int, float)) else "N/A"
+                        print(f"  {label}: MAE = {mae_s}, RMSE = {rmse_s}, R² = {r2_s}")
+                    else:
+                        acc = tm.get('accuracy')
+                        f1w = tm.get('f1_weighted')
+                        acc_s = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                        f1_s = f"{f1w:.4f}" if isinstance(f1w, (int, float)) else "N/A"
+                        print(f"  {label}: Accuracy = {acc_s}, F1 (weighted) = {f1_s}")
     else:
         print("\n" + "="*80)
         print("EXPERIMENT FAILED!")
@@ -192,4 +247,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

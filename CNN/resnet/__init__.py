@@ -18,7 +18,9 @@ from .resnet_model import (
     EEGAgeResNet50,
     CombinedResNet,
     MultiOutputResNet,
-    EEGAgeRegressionResNet
+    EEGAgeRegressionResNet,
+    EEGAgeRegressionResNet34,
+    EEGAgeRegressionResNet50,
 )
 
 __all__ = [
@@ -36,7 +38,9 @@ __all__ = [
     'EEGAgeResNet50',
     'CombinedResNet',
     'MultiOutputResNet',
-    'EEGAgeRegressionResNet'
+    'EEGAgeRegressionResNet',
+    'EEGAgeRegressionResNet34',
+    'EEGAgeRegressionResNet50',
 ]
 
 # Backward compatibility alias
