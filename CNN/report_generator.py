@@ -11,6 +11,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
+
+def _format_float_metric(value: Any) -> str:
+    """Format a scalar metric for HTML/CSV; non-numeric values become 'N/A'."""
+    return f"{value:.4f}" if isinstance(value, (int, float)) else "N/A"
+
+
 class ReportGenerator:
     """
     Generates comprehensive reports from experiment results.
@@ -203,15 +209,42 @@ class ReportGenerator:
         </div>
 """
                 elif 'mae' in metrics:
-                    # Regression task
-                    html_content += f"""
-        <div class="metrics">
-            <div class="metric"><strong>MAE:</strong> {metrics['mae']:.4f} years</div>
-            <div class="metric"><strong>RMSE:</strong> {metrics['rmse']:.4f} years</div>
-            <div class="metric"><strong>R²:</strong> {metrics['r2']:.4f}</div>
-            <div class="metric"><strong>Training Time:</strong> {result.total_time:.2f}s</div>
-        </div>
-"""
+                    # Regression task (overall + optional active/passive splits)
+                    reg_parts = [
+                        f"<div class=\"metric\"><strong>MAE:</strong> {metrics['mae']:.4f} years</div>",
+                        f"<div class=\"metric\"><strong>RMSE:</strong> {metrics['rmse']:.4f} years</div>",
+                        f"<div class=\"metric\"><strong>R²:</strong> {metrics['r2']:.4f}</div>",
+                    ]
+                    if 'task_type_metrics' in metrics:
+                        tm = metrics['task_type_metrics']
+                        active = tm.get('active') or {}
+                        passive = tm.get('passive') or {}
+                        if active or passive:
+                            reg_parts.append(
+                                f"<div class=\"metric\"><strong>Active MAE:</strong> "
+                                f"{_format_float_metric(active.get('mae'))} years "
+                                f"(n={active.get('num_samples', 'N/A')})</div>"
+                            )
+                            reg_parts.append(
+                                f"<div class=\"metric\"><strong>Passive MAE:</strong> "
+                                f"{_format_float_metric(passive.get('mae'))} years "
+                                f"(n={passive.get('num_samples', 'N/A')})</div>"
+                            )
+                            reg_parts.append(
+                                f"<div class=\"metric\"><strong>Active R²:</strong> "
+                                f"{_format_float_metric(active.get('r2'))}</div>"
+                            )
+                            reg_parts.append(
+                                f"<div class=\"metric\"><strong>Passive R²:</strong> "
+                                f"{_format_float_metric(passive.get('r2'))}</div>"
+                            )
+                    reg_parts.append(
+                        f"<div class=\"metric\"><strong>Training Time:</strong> {result.total_time:.2f}s</div>"
+                    )
+                    html_content += "        <div class=\"metrics\">\n"
+                    for part in reg_parts:
+                        html_content += f"            {part}\n"
+                    html_content += "        </div>\n"
                 else:
                     # Classification task
                     acc = metrics.get('accuracy')
@@ -334,10 +367,43 @@ class ReportGenerator:
         </tr>
 """
             else:
-                # Check if any experiments have task-specific metrics to determine table headers
-                has_task_metrics = any('task_type_metrics' in r.metrics for r in successful if r.success)
-                
-                if has_task_metrics:
+                has_task_metrics = any('task_type_metrics' in r.metrics for r in successful)
+                all_regression = bool(successful) and all('mae' in r.metrics for r in successful)
+                regression_with_task_split = all_regression and has_task_metrics
+
+                if regression_with_task_split:
+                    html_content += """
+    <h2>Model Comparison</h2>
+    <table>
+        <tr>
+            <th>Experiment</th>
+            <th>Model</th>
+            <th>Target</th>
+            <th>MAE (combined)</th>
+            <th>Active MAE</th>
+            <th>Passive MAE</th>
+            <th>R² (combined)</th>
+            <th>Training Time (s)</th>
+        </tr>
+"""
+                    for result in successful:
+                        m = result.metrics
+                        tm = m.get('task_type_metrics', {})
+                        active = tm.get('active') or {}
+                        passive = tm.get('passive') or {}
+                        html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{m['mae']:.4f} years</td>
+            <td>{_format_float_metric(active.get('mae'))} years</td>
+            <td>{_format_float_metric(passive.get('mae'))} years</td>
+            <td>{m['r2']:.4f}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                elif has_task_metrics and not regression_with_task_split:
                     html_content += """
     <h2>Model Comparison</h2>
     <table>
@@ -350,6 +416,60 @@ class ReportGenerator:
             <th>Passive Accuracy</th>
             <th>F1-Score</th>
             <th>Training Time (s)</th>
+        </tr>
+"""
+                    for result in successful:
+                        metrics = result.metrics
+                        if 'mae' in metrics:
+                            tm = metrics.get('task_type_metrics', {})
+                            active = tm.get('active') or {}
+                            passive = tm.get('passive') or {}
+                            html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{metrics['mae']:.4f} years</td>
+            <td>{_format_float_metric(active.get('mae'))} years</td>
+            <td>{_format_float_metric(passive.get('mae'))} years</td>
+            <td>{metrics['r2']:.4f}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                        else:
+                            acc = metrics.get('accuracy')
+                            f1 = metrics.get('f1_weighted')
+                            acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                            f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
+                            if 'task_type_metrics' in metrics:
+                                task_metrics = metrics['task_type_metrics']
+                                active_acc = task_metrics.get('active', {}).get('accuracy')
+                                passive_acc = task_metrics.get('passive', {}).get('accuracy')
+                                active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
+                                passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
+                                html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{acc_str}</td>
+            <td>{active_acc_str}</td>
+            <td>{passive_acc_str}</td>
+            <td>{f1_str}</td>
+            <td>{result.total_time:.2f}</td>
+        </tr>
+"""
+                            else:
+                                html_content += f"""
+        <tr>
+            <td>{result.experiment_name}</td>
+            <td>{result.model_type}</td>
+            <td>{result.target_type}</td>
+            <td>{acc_str}</td>
+            <td>N/A</td>
+            <td>N/A</td>
+            <td>{f1_str}</td>
+            <td>{result.total_time:.2f}</td>
         </tr>
 """
                 else:
@@ -365,12 +485,10 @@ class ReportGenerator:
             <th>Training Time (s)</th>
         </tr>
 """
-                
-                for result in successful:
-                    metrics = result.metrics
-                    # Check if this is a regression task
-                    if 'mae' in metrics:
-                        html_content += f"""
+                    for result in successful:
+                        metrics = result.metrics
+                        if 'mae' in metrics:
+                            html_content += f"""
         <tr>
             <td>{result.experiment_name}</td>
             <td>{result.model_type}</td>
@@ -380,31 +498,11 @@ class ReportGenerator:
             <td>{result.total_time:.2f}</td>
         </tr>
 """
-                    else:
-                        acc = metrics.get('accuracy')
-                        f1 = metrics.get('f1_weighted')
-                        acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
-                        f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
-                        
-                        if has_task_metrics and 'task_type_metrics' in metrics:
-                            task_metrics = metrics['task_type_metrics']
-                            active_acc = task_metrics.get('active', {}).get('accuracy')
-                            passive_acc = task_metrics.get('passive', {}).get('accuracy')
-                            active_acc_str = f"{active_acc:.4f}" if isinstance(active_acc, (int, float)) else "N/A"
-                            passive_acc_str = f"{passive_acc:.4f}" if isinstance(passive_acc, (int, float)) else "N/A"
-                            html_content += f"""
-        <tr>
-            <td>{result.experiment_name}</td>
-            <td>{result.model_type}</td>
-            <td>{result.target_type}</td>
-            <td>{acc_str}</td>
-            <td>{active_acc_str}</td>
-            <td>{passive_acc_str}</td>
-            <td>{f1_str}</td>
-            <td>{result.total_time:.2f}</td>
-        </tr>
-"""
                         else:
+                            acc = metrics.get('accuracy')
+                            f1 = metrics.get('f1_weighted')
+                            acc_str = f"{acc:.4f}" if isinstance(acc, (int, float)) else "N/A"
+                            f1_str = f"{f1:.4f}" if isinstance(f1, (int, float)) else "N/A"
                             html_content += f"""
         <tr>
             <td>{result.experiment_name}</td>
@@ -696,7 +794,7 @@ class ReportGenerator:
                 })
             elif 'mae' in metrics:
                 # Regression task
-                data.append({
+                row = {
                     'experiment_name': result.experiment_name,
                     'model_type': result.model_type,
                     'target_type': result.target_type,
@@ -705,8 +803,17 @@ class ReportGenerator:
                     'r2': metrics.get('r2', None),
                     'mae_normalized': metrics.get('mae_normalized', None),
                     'training_time': result.total_time,
-                    'evaluation_time': result.evaluation_time
-                })
+                    'evaluation_time': result.evaluation_time,
+                }
+                if 'task_type_metrics' in metrics:
+                    tm = metrics['task_type_metrics']
+                    for split in ('active', 'passive'):
+                        sub = tm.get(split) or {}
+                        row[f'{split}_mae'] = sub.get('mae', None)
+                        row[f'{split}_rmse'] = sub.get('rmse', None)
+                        row[f'{split}_r2'] = sub.get('r2', None)
+                        row[f'{split}_num_samples'] = sub.get('num_samples', None)
+                data.append(row)
             else:
                 # Classification task
                 row = {
