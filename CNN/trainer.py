@@ -73,16 +73,20 @@ class EEGTrainer:
         
         # Setup model for GPUs (explicit, raises errors if invalid)
         self.model = setup_model_for_gpus(self.model, self.num_gpus_used, self.device)
-        
-        # Compile model for faster execution (PyTorch 2.0+)
-        # This can provide 10-30% speedup on modern GPUs
-        try:
-            if hasattr(torch, 'compile'):
-                print("Compiling model with torch.compile() for faster execution...")
-                self.model = torch.compile(self.model, mode='reduce-overhead')
-                print("✅ Model compiled successfully")
-        except Exception as e:
-            print(f"⚠️  Model compilation not available or failed: {e}")
+
+        # User identification + ArcFace + thousands of classes: skip compile (can interact badly
+        # with dynamic training and margin losses). Other tasks keep compile for speed.
+        _skip_compile = getattr(config, "target_key", None) == "user_identification"
+        if not _skip_compile:
+            try:
+                if hasattr(torch, "compile"):
+                    print("Compiling model with torch.compile() for faster execution...")
+                    self.model = torch.compile(self.model, mode="reduce-overhead")
+                    print("✅ Model compiled successfully")
+            except Exception as e:
+                print(f"⚠️  Model compilation not available or failed: {e}")
+        else:
+            print("Skipping torch.compile() for user_identification (ArcFace stability).")
         
         # Setup training components
         # Use MSE loss for regression, CrossEntropyLoss or ArcFace for classification
@@ -96,71 +100,44 @@ class EEGTrainer:
             # ArcFace loss is more suitable than standard softmax + CrossEntropyLoss
             # ArcFace uses angular margin to improve discrimination for many classes
             if hasattr(config, 'target_key') and config.target_key == 'user_identification':
-                # Get number of classes from model
+                # Same strategy as LaBraM user identification: always ArcFace when the backbone
+                # exposes embeddings (requires extract_features + embedding size metadata).
                 num_classes = self._get_underlying_model().num_classes
-                
-                # Use ArcFace for very large classification (2000+ classes)
-                # ArcFace is designed for large-scale face recognition (10K+ classes)
-                # and is highly suitable for user identification with many classes
-                if num_classes > 2000:
-                    # Check if model supports feature extraction (required for ArcFace)
-                    model = self._get_underlying_model()
-                    if hasattr(model, 'extract_features'):
-                        # Dynamically determine embedding dimension from model architecture
-                        # For EEGUserIdentificationCNN, this is fc2_intermediate.out_features
-                        if hasattr(model, 'fc2_intermediate'):
-                            # Direct access to embedding dimension from model architecture
-                            # This is the preferred method - no dummy input needed
-                            embedding_dim = model.fc2_intermediate.out_features
-                        else:
-                            # Model has extract_features but not fc2_intermediate
-                            # This should not happen for EEGUserIdentificationCNN, but handle gracefully
-                            raise AttributeError(
-                                f"Model {model.__class__.__name__} has extract_features method "
-                                f"but missing 'fc2_intermediate' attribute. "
-                                f"For ArcFace to work, the model must have an intermediate FC layer "
-                                f"that can be accessed via 'fc2_intermediate.out_features'. "
-                                f"Please ensure the model architecture supports feature extraction."
-                            )
-                        
-                        # Validate embedding dimension
-                        if embedding_dim <= 0:
-                            raise ValueError(
-                                f"Invalid embedding dimension: {embedding_dim}. "
-                                f"Must be > 0."
-                            )
-                        
-                        # ArcFace hyperparameters from config (no hardcoding)
-                        margin = config.arcface_margin
-                        scale = config.arcface_scale
-                        easy_margin = config.arcface_easy_margin
-                        
-                        self.criterion = ArcFaceLoss(
-                            num_classes=num_classes,
-                            embedding_dim=embedding_dim,
-                            margin=margin,
-                            scale=scale,
-                            easy_margin=easy_margin
-                        )
-                        self.use_arcface = True
-                        # Move ArcFace to device
-                        self.criterion = self.criterion.to(self.device)
-                        print(f"✅ Using ArcFace loss for very large classification ({num_classes} classes)")
-                        print(f"   Embedding dimension: {embedding_dim} (determined from model architecture)")
-                        print(f"   ArcFace hyperparameters: margin={margin}, scale={scale}, easy_margin={easy_margin}")
-                        print(f"   ArcFace advantages: angular margin, feature normalization, better discrimination")
-                    else:
-                        # Fallback to CrossEntropyLoss if model doesn't support feature extraction
-                        label_smoothing = config.label_smoothing_very_large
-                        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-                        print(f"⚠️  Model doesn't support feature extraction, using CrossEntropyLoss with label_smoothing={label_smoothing}")
-                elif num_classes > 100:
-                    # For moderately large classification, use label smoothing from config
-                    label_smoothing = config.label_smoothing_large
-                    self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-                    print(f"✅ Using CrossEntropyLoss with label_smoothing={label_smoothing} for large classification ({num_classes} classes)")
+                model = self._get_underlying_model()
+                if not hasattr(model, 'extract_features'):
+                    raise ValueError(
+                        f"User identification with target_key='user_identification' requires ArcFace and "
+                        f"a model with extract_features() (same contract as the LaBraM user-ID path). "
+                        f"{model.__class__.__name__} does not implement extract_features."
+                    )
+                if hasattr(model, 'fc2_intermediate'):
+                    embedding_dim = model.fc2_intermediate.out_features
+                elif getattr(model, 'arcface_embedding_dim', None) is not None:
+                    embedding_dim = int(model.arcface_embedding_dim)
                 else:
-                    self.criterion = nn.CrossEntropyLoss()
+                    raise AttributeError(
+                        f"Model {model.__class__.__name__} has extract_features() but neither "
+                        f"'fc2_intermediate' nor 'arcface_embedding_dim'; cannot determine ArcFace embedding size."
+                    )
+                if embedding_dim <= 0:
+                    raise ValueError(
+                        f"Invalid embedding dimension: {embedding_dim}. Must be > 0."
+                    )
+                margin = config.arcface_margin
+                scale = config.arcface_scale
+                easy_margin = config.arcface_easy_margin
+                self.criterion = ArcFaceLoss(
+                    num_classes=num_classes,
+                    embedding_dim=embedding_dim,
+                    margin=margin,
+                    scale=scale,
+                    easy_margin=easy_margin
+                )
+                self.use_arcface = True
+                self.criterion = self.criterion.to(self.device)
+                print(f"✅ Using ArcFace loss for user identification ({num_classes} classes)")
+                print(f"   Embedding dimension: {embedding_dim} (from model architecture)")
+                print(f"   ArcFace hyperparameters: margin={margin}, scale={scale}, easy_margin={easy_margin}")
             else:
                 # Binary/small classification (e.g. gender): optional class weights for imbalanced data
                 class_weight = getattr(config, 'class_weight', None)
@@ -177,34 +154,54 @@ class EEGTrainer:
         if weight_decay > 0.0:
             print(f"✅ Using weight decay={weight_decay} for regularization (L2)")
         
-        # CRITICAL: Adjust learning rate for ArcFace BEFORE creating optimizer
-        # ArcFace is more sensitive to learning rate than CrossEntropyLoss
-        # High learning rate can cause immediate model collapse (all predictions to one class)
-        # Use configurable multiplier (no hardcoding)
-        actual_learning_rate = config.learning_rate
+        # ArcFace: use two Adam param groups — backbone at config.learning_rate, head at
+        # config.learning_rate * arcface_lr_multiplier. Applying the multiplier to the entire
+        # optimizer under-trains the CNN and can freeze embeddings near init while logits still
+        # argmax to one prototype (validation collapse).
+        backbone_lr = float(config.learning_rate)
         if self.use_arcface:
-            arcface_lr_multiplier = config.arcface_lr_multiplier
-            actual_learning_rate = config.learning_rate * arcface_lr_multiplier
-            print(f"✅ Learning rate adjusted for ArcFace: {config.learning_rate} -> {actual_learning_rate} (multiplier: {arcface_lr_multiplier})")
+            arc_m = float(config.arcface_lr_multiplier)
+            arcface_lr = backbone_lr * arc_m
+            print(
+                f"✅ ArcFace optimizer param groups: backbone lr={backbone_lr}, "
+                f"ArcFace head lr={arcface_lr} (base × multiplier={arc_m})"
+            )
+            adam_param_groups = [
+                {"params": list(self.model.parameters()), "lr": backbone_lr, "weight_decay": weight_decay},
+                {"params": list(self.criterion.parameters()), "lr": arcface_lr, "weight_decay": weight_decay},
+            ]
+            self._warmup_base_lrs = [backbone_lr, arcface_lr]
+            try:
+                self.optimizer = optim.Adam(adam_param_groups, fused=True)
+                print("✅ Using fused Adam optimizer (per-group LRs)")
+            except TypeError:
+                self.optimizer = optim.Adam(adam_param_groups)
+                print("✅ Using Adam optimizer (per-group LRs)")
+        else:
+            params_to_optimize = list(self.model.parameters())
+            self._warmup_base_lrs = [backbone_lr]
+            try:
+                self.optimizer = optim.Adam(
+                    params_to_optimize, lr=backbone_lr, weight_decay=weight_decay, fused=True
+                )
+                print("✅ Using fused Adam optimizer")
+            except TypeError:
+                self.optimizer = optim.Adam(params_to_optimize, lr=backbone_lr, weight_decay=weight_decay)
         
-        # Collect all parameters (model + ArcFace if using)
-        params_to_optimize = list(self.model.parameters())
-        if self.use_arcface:
-            # ArcFace has its own weight matrix that needs to be optimized
-            params_to_optimize.extend(list(self.criterion.parameters()))
-        
-        try:
-            self.optimizer = optim.Adam(params_to_optimize, lr=actual_learning_rate, weight_decay=weight_decay, fused=True)
-            print("✅ Using fused Adam optimizer")
-        except TypeError:
-            # Fused optimizer not available, fall back to regular Adam
-            self.optimizer = optim.Adam(params_to_optimize, lr=actual_learning_rate, weight_decay=weight_decay)
-        
-        # Enable mixed precision training (AMP) for 1.5-2x speedup
-        self.use_amp = True
-        # Use new torch.amp API (PyTorch 2.0+)
-        self.scaler = torch.amp.GradScaler('cuda')
-        print("✅ Mixed precision training (AMP) enabled")
+        # AMP in fp16 can destabilize very-wide softmax / ArcFace logits; train user-ID in fp32.
+        # For regression, especially with deeper backbones (e.g., ResNet50), full fp32 is more stable.
+        if getattr(config, "target_key", None) == "user_identification":
+            self.use_amp = False
+            self.scaler = None
+            print("Mixed precision disabled for user_identification (full fp32 for ArcFace stability).")
+        elif self.is_regression:
+            self.use_amp = False
+            self.scaler = None
+            print("Mixed precision disabled for regression (full fp32 for numerical stability).")
+        else:
+            self.use_amp = True
+            self.scaler = torch.amp.GradScaler("cuda")
+            print("✅ Mixed precision training (AMP) enabled")
         
         # Gradient clipping configuration
         # Prevents exploding gradients, especially important for large-scale classification
@@ -230,7 +227,8 @@ class EEGTrainer:
         # Gradually increases LR from 0 to target over warmup_epochs
         # This prevents large gradient updates in early epochs that can cause collapse
         self.warmup_epochs = config.warmup_epochs if hasattr(config, 'warmup_epochs') else 0
-        self.base_learning_rate = actual_learning_rate  # Store base LR for warmup calculation
+        # Backbone nominal LR (logging); warmup uses _warmup_base_lrs in sync with param_groups
+        self.base_learning_rate = backbone_lr
         if self.warmup_epochs > 0:
             print(f"✅ Learning rate warmup enabled: {self.warmup_epochs} epochs")
             # Initialize LR to 0 for warmup
@@ -246,6 +244,14 @@ class EEGTrainer:
         self.best_val_loss = float('inf')
         self.patience_counter = 0
         self.best_epoch = 0
+        # Collapse monitor thresholds.
+        # ArcFace with many identities may show transient single-class predictions early on,
+        # so use a stricter persistence threshold before aborting.
+        self._collapse_threshold_default = 10
+        self._collapse_threshold_binary = 20
+        self._collapse_threshold_arcface = 30
+        # Set by Experiment.setup() for self-describing checkpoints (ModelFactory type string)
+        self.factory_model_type: Optional[str] = None
     
     def _get_best_checkpoint_path(self, experiment_results_dir: str = None) -> str:
         """Get the path to the best checkpoint file."""
@@ -262,6 +268,137 @@ class EEGTrainer:
         """Get the underlying model, unwrapping DataParallel and torch.compile wrappers if needed."""
         return gpu_get_underlying_model(self.model)
 
+    def _check_prediction_collapse(
+        self,
+        predicted: torch.Tensor,
+        labels: torch.Tensor,
+        counter_attr: str,
+        phase: str,
+        use_balanced_training: bool,
+    ) -> Optional[RuntimeError]:
+        """
+        Detect persistent single-class prediction collapse.
+
+        Task scoping:
+        - user_identification: use stricter logic (require label diversity + higher ArcFace threshold).
+        - all other tasks (gender/age/combined): preserve legacy behavior.
+        """
+        is_user_identification = getattr(self.config, "target_key", None) == "user_identification"
+        unique_predictions = len(torch.unique(predicted))
+        unique_labels = len(torch.unique(labels))
+        phase_label = "validation" if phase == "validation" else "training"
+
+        if is_user_identification:
+            # For user identification, a collapse signal is valid only when labels are diverse.
+            # If labels are single-class in a batch, single-class predictions are expected.
+            if unique_labels <= 1:
+                setattr(self, counter_attr, 0)
+                return None
+
+            if unique_predictions == 1:
+                current_count = int(getattr(self, counter_attr, 0)) + 1
+                setattr(self, counter_attr, current_count)
+                collapsed_class = predicted[0].item()
+
+                if use_balanced_training:
+                    if current_count >= 50:
+                        print(
+                            f"⚠️  Model collapse in {phase_label} ({current_count} consecutive batches, "
+                            f"all class {collapsed_class}, label diversity={unique_labels}). "
+                            "Balanced training: continuing (no abort)."
+                        )
+                        sys.stdout.flush()
+                        setattr(self, counter_attr, 0)
+                    elif current_count == 2:
+                        print(
+                            f"⚠️  WARNING: Model collapse in {phase_label} ({current_count} consecutive batches, "
+                            f"all class {collapsed_class}, label diversity={unique_labels}). Monitoring..."
+                        )
+                    return None
+
+                collapse_threshold = self._collapse_threshold_arcface
+                if current_count >= collapse_threshold:
+                    # Validation-only: ArcFace + many classes often shows a single argmax class while
+                    # loss is still finite (train/eval dropout mismatch, sharp early logits). Aborting
+                    # here prevented long ResNet runs that later recover. Training collapse still aborts.
+                    if phase == "validation" and self.use_arcface:
+                        print(
+                            f"⚠️  Validation collapse monitor: {current_count} consecutive batches predicted "
+                            f"only class {collapsed_class} (labels had {unique_labels} unique classes). "
+                            "Not aborting (ArcFace user_identification validation policy); reset counter. "
+                            "If this repeats every epoch, lower LR / --arcface_scale or check embeddings."
+                        )
+                        sys.stdout.flush()
+                        setattr(self, counter_attr, 0)
+                        return None
+                    return RuntimeError(
+                        f"Model collapse detected in {phase_label}: {current_count} consecutive batches "
+                        f"with all samples predicted as class {collapsed_class} while labels had "
+                        f"{unique_labels} unique classes. "
+                        f"Possible causes: 1) ArcFace/head initialization issue, "
+                        f"2) Learning rate too high, 3) low-diversity embeddings, "
+                        f"4) numerical instability. "
+                        f"Check initialization, LR, feature diversity, and data shuffling."
+                    )
+
+                if current_count == 2:
+                    print(
+                        f"⚠️  WARNING: Model collapse in {phase_label} ({current_count} consecutive batches, "
+                        f"all class {collapsed_class}, label diversity={unique_labels}). Monitoring..."
+                    )
+                return None
+
+            previous_count = int(getattr(self, counter_attr, 0))
+            if previous_count >= 2:
+                print(
+                    f"✅ Model recovered in {phase_label}: predictions are diverse again "
+                    f"(unique predictions={unique_predictions}, unique labels={unique_labels})"
+                )
+            setattr(self, counter_attr, 0)
+            return None
+
+        # Legacy behavior for age/gender/combined/multi_output tasks.
+        if unique_predictions == 1:
+            current_count = int(getattr(self, counter_attr, 0)) + 1
+            setattr(self, counter_attr, current_count)
+            collapsed_class = predicted[0].item()
+            num_classes = self._get_underlying_model().num_classes
+
+            if use_balanced_training:
+                if current_count >= 50:
+                    print(
+                        f"⚠️  Model collapse in {phase_label} ({current_count} consecutive batches, all class {collapsed_class}). "
+                        "Balanced training: continuing (no abort)."
+                    )
+                    sys.stdout.flush()
+                    setattr(self, counter_attr, 0)
+                elif current_count == 2:
+                    print(
+                        f"⚠️  WARNING: Model collapse in {phase_label} ({current_count} consecutive batches, all class {collapsed_class}). Monitoring..."
+                    )
+                return None
+
+            collapse_threshold = self._collapse_threshold_binary if (not self.use_arcface and num_classes <= 10) else self._collapse_threshold_default
+            if current_count >= collapse_threshold:
+                return RuntimeError(
+                    f"Model collapse detected in {phase_label}: {current_count} consecutive batches "
+                    f"with all samples predicted as class {collapsed_class}. "
+                    f"This indicates a serious training issue. Possible causes: "
+                    f"1) learning-rate instability, 2) feature collapse, 3) numerical instability."
+                )
+
+            if current_count == 2:
+                print(
+                    f"⚠️  WARNING: Model collapse in {phase_label} ({current_count} consecutive batches, all class {collapsed_class}). Monitoring..."
+                )
+            return None
+
+        previous_count = int(getattr(self, counter_attr, 0))
+        if previous_count >= 2:
+            print(f"✅ Model recovered in {phase_label}: predictions are diverse again (unique: {unique_predictions})")
+        setattr(self, counter_attr, 0)
+        return None
+
     def _balanced_classification_loss(self, outputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """
         Per-batch balanced loss: each class contributes equally to the gradient regardless of
@@ -274,6 +411,31 @@ class EEGTrainer:
         batch_class_counts = torch.bincount(labels, minlength=num_classes).float().clamp(min=1)
         per_sample_weight = 1.0 / (num_classes * batch_class_counts[labels])
         return (per_sample_weight * loss_per_sample).sum() / per_sample_weight.sum()
+
+    @staticmethod
+    def _raise_non_finite_outputs(
+        outputs: torch.Tensor,
+        labels: torch.Tensor,
+        where: str,
+        batch_idx: int,
+    ) -> None:
+        """Raise a detailed error when model outputs become NaN/Inf."""
+        nan_count = int(torch.isnan(outputs).sum().item())
+        inf_count = int(torch.isinf(outputs).sum().item())
+        label_nan_count = int(torch.isnan(labels).sum().item()) if torch.is_floating_point(labels) else 0
+        label_inf_count = int(torch.isinf(labels).sum().item()) if torch.is_floating_point(labels) else 0
+        finite_mask = torch.isfinite(outputs)
+        finite_vals = outputs[finite_mask]
+        out_min = finite_vals.min().item() if finite_vals.numel() > 0 else None
+        out_max = finite_vals.max().item() if finite_vals.numel() > 0 else None
+        out_mean = finite_vals.mean().item() if finite_vals.numel() > 0 else None
+        raise ValueError(
+            f"NaN/Inf detected in model outputs during {where} at batch {batch_idx}: "
+            f"output_nan={nan_count}, output_inf={inf_count}, "
+            f"label_nan={label_nan_count}, label_inf={label_inf_count}, "
+            f"finite_output_stats(min={out_min}, max={out_max}, mean={out_mean}). "
+            f"This indicates numerical instability; check checkpoint health, LR, and model precision."
+        )
 
     def train_epoch(self, train_loader: DataLoader) -> Tuple[float, float]:
         """Train for one epoch."""
@@ -362,11 +524,18 @@ class EEGTrainer:
                             f"Check that the transform is correctly mapping participant IDs to class indices."
                         )
                     
-                    # Diagnostic: log first-batch label distribution (verifies stratified batching)
-                    if batch_idx == 0:
+                    # Diagnostic: first-batch label spread (skip huge print for thousands of classes)
+                    if batch_idx == 0 and num_classes <= 64:
                         counts = labels.cpu().bincount(minlength=num_classes)
                         dist_str = ", ".join(f"class {c}: {counts[c].item()}" for c in range(num_classes))
                         print(f"  First batch label distribution: {dist_str}")
+                        sys.stdout.flush()
+                    elif batch_idx == 0:
+                        u = torch.unique(labels)
+                        print(
+                            f"  First batch labels: {labels.size(0)} samples, "
+                            f"{u.numel()} unique classes in batch, range [{labels.min().item()}, {labels.max().item()}]"
+                        )
                         sys.stdout.flush()
             
             self.optimizer.zero_grad()
@@ -388,6 +557,11 @@ class EEGTrainer:
                     else:
                         # Standard forward pass
                         outputs = self.model(inputs)
+                
+                # Validate outputs early before loss computation
+                if not self.use_arcface and not isinstance(outputs, dict):
+                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                        self._raise_non_finite_outputs(outputs, labels, where="training", batch_idx=batch_idx)
                 
                 # Convert outputs to float32 for loss computation to ensure numerical stability
                 # Mixed precision outputs may be in float16, which can cause numerical issues
@@ -439,48 +613,13 @@ class EEGTrainer:
                         batch_correct = (predicted == labels).sum().item()
                         correct += batch_correct
                         
-                        # CRITICAL: Detect model collapse (all predictions to same class)
-                        unique_predictions = len(torch.unique(predicted))
-                        if unique_predictions == 1:
-                            if not hasattr(self, '_collapse_batch_count'):
-                                self._collapse_batch_count = 0
-                            self._collapse_batch_count += 1
-                            num_classes = self._get_underlying_model().num_classes
-                            if use_stratified_batches:
-                                # With stratified batching, classes are balanced per batch; do not fail on collapse.
-                                # Participant counts per class are unequal, so early collapse can occur; allow recovery.
-                                if self._collapse_batch_count >= 50:
-                                    collapsed_class = predicted[0].item()
-                                    print(
-                                        f"⚠️  Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). "
-                                        "Balanced training (stratified/oversample): continuing (no abort)."
-                                    )
-                                    sys.stdout.flush()
-                                    self._collapse_batch_count = 0
-                            else:
-                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
-                                if self._collapse_batch_count >= collapse_threshold:
-                                    collapsed_class = predicted[0].item()
-                                    collapse_error = RuntimeError(
-                                        f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
-                                        f"with all samples predicted as class {collapsed_class}. "
-                                        f"This indicates a serious training issue. Possible causes: "
-                                        f"1) ArcFace weight initialization problem, "
-                                        f"2) Learning rate too high causing early collapse, "
-                                        f"3) Feature extraction producing identical features, "
-                                        f"4) Numerical instability, "
-                                        f"5) Batch correlation (samples from same participant in batch). "
-                                        f"Check model initialization, learning rate, feature diversity, and data shuffling."
-                                    )
-                                    break
-                            if self._collapse_batch_count == 2 and not use_stratified_batches:
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). Monitoring...")
-                        else:
-                            if hasattr(self, '_collapse_batch_count') and self._collapse_batch_count >= 2:
-                                print(f"✅ Model recovered: Predictions diverse again (unique: {unique_predictions})")
-                            if hasattr(self, '_collapse_batch_count'):
-                                self._collapse_batch_count = 0
+                        collapse_error = self._check_prediction_collapse(
+                            predicted=predicted,
+                            labels=labels,
+                            counter_attr="_collapse_batch_count",
+                            phase="training",
+                            use_balanced_training=use_stratified_batches,
+                        )
                 
                 if collapse_error is not None:
                     break
@@ -519,6 +658,11 @@ class EEGTrainer:
                     # Standard forward pass
                     outputs = self.model(inputs)
                 
+                # Validate outputs early before loss computation
+                if not self.use_arcface and not isinstance(outputs, dict):
+                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                        self._raise_non_finite_outputs(outputs, labels, where="training", batch_idx=batch_idx)
+                
                 # Handle multi-output models
                 if isinstance(outputs, dict):
                     # Multi-output model (e.g., MultiOutputCNN)
@@ -552,48 +696,13 @@ class EEGTrainer:
                         batch_correct = (predicted == labels).sum().item()
                         correct += batch_correct
                         
-                        # CRITICAL: Detect model collapse (all predictions to same class)
-                        # Track collapse across batches to avoid false positives from temporary collapses
-                        unique_predictions = len(torch.unique(predicted))
-                        if unique_predictions == 1:
-                            # Track collapse occurrences
-                            if not hasattr(self, '_collapse_batch_count'):
-                                self._collapse_batch_count = 0
-                            self._collapse_batch_count += 1
-                            num_classes = self._get_underlying_model().num_classes
-                            if use_stratified_batches:
-                                if self._collapse_batch_count >= 50:
-                                    collapsed_class = predicted[0].item()
-                                    print(
-                                        f"⚠️  Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). "
-                                        "Balanced training (stratified/oversample): continuing (no abort)."
-                                    )
-                                    sys.stdout.flush()
-                                    self._collapse_batch_count = 0
-                            else:
-                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
-                                if self._collapse_batch_count >= collapse_threshold:
-                                    collapsed_class = predicted[0].item()
-                                    collapse_error = RuntimeError(
-                                        f"Model collapse detected in training: {self._collapse_batch_count} consecutive batches "
-                                        f"with all samples predicted as class {collapsed_class}. "
-                                        f"This indicates a serious training issue. Possible causes: "
-                                        f"1) ArcFace weight initialization problem, "
-                                        f"2) Learning rate too high causing early collapse, "
-                                        f"3) Feature extraction producing identical features, "
-                                        f"4) Numerical instability, "
-                                        f"5) Batch correlation (samples from same participant in batch). "
-                                        f"Check model initialization, learning rate, feature diversity, and data shuffling."
-                                    )
-                                    break
-                            if self._collapse_batch_count == 2 and not use_stratified_batches:
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse in {self._collapse_batch_count} consecutive batches (all class {collapsed_class}). Monitoring...")
-                        else:
-                            if hasattr(self, '_collapse_batch_count') and self._collapse_batch_count >= 2:
-                                print(f"✅ Model recovered: Predictions diverse again (unique: {unique_predictions})")
-                            if hasattr(self, '_collapse_batch_count'):
-                                self._collapse_batch_count = 0
+                        collapse_error = self._check_prediction_collapse(
+                            predicted=predicted,
+                            labels=labels,
+                            counter_attr="_collapse_batch_count",
+                            phase="training",
+                            use_balanced_training=use_stratified_batches,
+                        )
                 
                 if collapse_error is not None:
                     break
@@ -756,13 +865,7 @@ class EEGTrainer:
                     if not self.use_arcface:  # ArcFace already computed loss
                         # Validate outputs don't contain NaN/Inf
                         if torch.isnan(outputs).any() or torch.isinf(outputs).any():
-                            nan_count = torch.isnan(outputs).sum().item()
-                            inf_count = torch.isinf(outputs).any().item()
-                            raise ValueError(
-                                f"NaN/Inf detected in model outputs: NaN count={nan_count}, Inf detected={inf_count}. "
-                                f"This indicates a numerical instability issue. "
-                                f"Check model architecture, learning rate, and input data."
-                            )
+                            self._raise_non_finite_outputs(outputs, labels, where="validation", batch_idx=batch_idx)
                         
                         # Clamp outputs to prevent extreme values that cause numerical overflow
                         # This is especially important with mixed precision and large number of classes
@@ -814,51 +917,15 @@ class EEGTrainer:
                         batch_correct = (predicted == labels).sum().item()
                         correct += batch_correct
                         
-                        # CRITICAL: Detect model collapse (all predictions to same class)
-                        # Track collapse across batches to avoid false positives from temporary collapses
-                        # Use same threshold mechanism as training for consistency
+                        use_balanced = getattr(self, '_use_balanced_training', False)
+                        val_collapse_error = self._check_prediction_collapse(
+                            predicted=predicted,
+                            labels=labels,
+                            counter_attr="_val_collapse_batch_count",
+                            phase="validation",
+                            use_balanced_training=use_balanced,
+                        )
                         unique_predictions = len(torch.unique(predicted))
-                        if unique_predictions == 1:
-                            # Track collapse occurrences
-                            if not hasattr(self, '_val_collapse_batch_count'):
-                                self._val_collapse_batch_count = 0
-                            self._val_collapse_batch_count += 1
-                            
-                            # When using balanced training (stratified/oversample), allow recovery: warn and reset, do not abort
-                            use_balanced = getattr(self, '_use_balanced_training', False)
-                            num_classes = self._get_underlying_model().num_classes
-                            if use_balanced:
-                                if self._val_collapse_batch_count >= 50:
-                                    collapsed_class = predicted[0].item()
-                                    print(
-                                        f"⚠️  Model collapse in validation ({self._val_collapse_batch_count} consecutive batches, all class {collapsed_class}). "
-                                        "Balanced training: continuing (no abort)."
-                                    )
-                                    sys.stdout.flush()
-                                    self._val_collapse_batch_count = 0
-                            else:
-                                collapse_threshold = 20 if (not self.use_arcface and num_classes <= 10) else 10
-                                if self._val_collapse_batch_count >= collapse_threshold:
-                                    collapsed_class = predicted[0].item()
-                                    val_collapse_error = RuntimeError(
-                                        f"Model collapse detected in validation: {self._val_collapse_batch_count} consecutive batches "
-                                        f"with all samples predicted as class {collapsed_class}. "
-                                        f"This indicates a serious training issue. Possible causes: "
-                                        f"1) ArcFace weight initialization problem, "
-                                        f"2) Learning rate too high causing early collapse, "
-                                        f"3) Feature extraction producing identical features, "
-                                        f"4) Numerical instability. "
-                                        f"Check model initialization, learning rate, and feature diversity."
-                                    )
-                                    break
-                            if self._val_collapse_batch_count == 2:
-                                collapsed_class = predicted[0].item()
-                                print(f"⚠️  WARNING: Model collapse in validation ({self._val_collapse_batch_count} consecutive batches, all class {collapsed_class}). Monitoring...")
-                        else:
-                            if hasattr(self, '_val_collapse_batch_count') and self._val_collapse_batch_count >= 2:
-                                print(f"✅ Model recovered in validation: Predictions diverse again (unique: {unique_predictions})")
-                            if hasattr(self, '_val_collapse_batch_count'):
-                                self._val_collapse_batch_count = 0
                         
                         # Diagnostic logging for debugging validation accuracy issue
                         # Only log first batch of first validation epoch to avoid spam
@@ -931,10 +998,29 @@ class EEGTrainer:
             'model_info': self._get_underlying_model().get_model_info(),
             'use_arcface': self.use_arcface  # Save ArcFace flag for checkpoint loading
         }
+        um = self._get_underlying_model()
+        # User-identification checkpoints should be loadable without guessing (eval / resume).
+        if getattr(self.config, 'target_key', None) == 'user_identification':
+            checkpoint['num_classes'] = int(um.num_classes)
+            fmt = getattr(self, 'factory_model_type', None)
+            if fmt is not None:
+                checkpoint['factory_model_type'] = fmt
         
-        # Save ArcFace state if using ArcFace
+        # Save ArcFace state and hyperparameters if using ArcFace
         if self.use_arcface:
             checkpoint['arcface_state_dict'] = self.criterion.state_dict()
+            if hasattr(um, 'fc2_intermediate'):
+                checkpoint['embedding_dim'] = int(um.fc2_intermediate.out_features)
+            elif getattr(um, 'arcface_embedding_dim', None) is not None:
+                checkpoint['embedding_dim'] = int(um.arcface_embedding_dim)
+            else:
+                raise RuntimeError(
+                    f"ArcFace checkpoint: model {um.__class__.__name__} has no embedding_dim source "
+                    f"(expected fc2_intermediate or arcface_embedding_dim)."
+                )
+            checkpoint['arcface_margin'] = float(self.criterion.margin)
+            checkpoint['arcface_scale'] = float(self.criterion.scale)
+            checkpoint['arcface_easy_margin'] = bool(self.criterion.easy_margin)
         
         # Add optional fields if they exist (for backward compatibility with old checkpoints)
         # These fields help with resume functionality but aren't strictly required
@@ -1070,6 +1156,20 @@ class EEGTrainer:
                         self.patience_counter = checkpoint['patience_counter']
                     else:
                         self.patience_counter = 0
+
+                    # Validate checkpoint parameter health before continuing.
+                    # If a prior run saved corrupted weights, fail early with a clear message.
+                    bad_params = []
+                    for name, param in self._get_underlying_model().named_parameters():
+                        if torch.isnan(param).any() or torch.isinf(param).any():
+                            bad_params.append(name)
+                            if len(bad_params) >= 5:
+                                break
+                    if bad_params:
+                        raise RuntimeError(
+                            "Loaded checkpoint contains NaN/Inf parameters "
+                            f"(examples: {bad_params}). Start from a fresh checkpoint."
+                        )
                     
                     resumed_from_checkpoint = True
                     print(f"   Resuming from epoch {start_epoch + 1}/{self.config.epochs}")
@@ -1104,12 +1204,22 @@ class EEGTrainer:
             # Learning rate warmup: gradually increase LR from 0 to base_learning_rate
             # This prevents large gradient updates in early epochs that can cause collapse
             if hasattr(self, 'warmup_epochs') and self.warmup_epochs > 0 and epoch < self.warmup_epochs:
-                # Linear warmup: LR = base_lr * (epoch + 1) / warmup_epochs
-                warmup_lr = self.base_learning_rate * (epoch + 1) / self.warmup_epochs
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = warmup_lr
+                # Linear warmup per param group toward each group's base LR
+                frac = (epoch + 1) / self.warmup_epochs
+                base_lrs = getattr(self, "_warmup_base_lrs", [self.base_learning_rate])
+                for param_group, base_lr in zip(self.optimizer.param_groups, base_lrs):
+                    param_group["lr"] = base_lr * frac
                 if epoch == 0 or (epoch + 1) % max(1, self.warmup_epochs // 3) == 0:
-                    print(f"   🔥 Warmup: LR = {warmup_lr:.6f} (target: {self.base_learning_rate:.6f})")
+                    if len(self.optimizer.param_groups) > 1:
+                        w0 = self.optimizer.param_groups[0]["lr"]
+                        w1 = self.optimizer.param_groups[1]["lr"]
+                        print(
+                            f"   🔥 Warmup: backbone LR = {w0:.6f}, ArcFace LR = {w1:.6f} "
+                            f"(targets: {base_lrs[0]:.6f}, {base_lrs[1]:.6f})"
+                        )
+                    else:
+                        w = self.optimizer.param_groups[0]["lr"]
+                        print(f"   🔥 Warmup: LR = {w:.6f} (target: {base_lrs[0]:.6f})")
             
             # Train
             train_loss, train_acc = self.train_epoch(train_loader)
