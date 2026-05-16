@@ -196,7 +196,8 @@ export PYTHONUNBUFFERED=1
     --auto_resume \
     --seed 42 \
     --pin_mem \
-    --num_workers 10
+    --num_workers 10 \
+    "$@"
 
 echo "=========================================="
 echo "Fine-tuning completed for gender_baseline"

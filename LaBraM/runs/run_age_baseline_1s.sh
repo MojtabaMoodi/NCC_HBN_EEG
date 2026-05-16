@@ -199,7 +199,8 @@ export PYTHONUNBUFFERED=1
     --seed 42 \
     --pin_mem \
     --num_workers 10 \
-    --aggregate_by_participant majority_vote
+    --aggregate_by_participant majority_vote \
+    "$@"
 
 echo "=========================================="
 echo "Fine-tuning completed for age_baseline"
