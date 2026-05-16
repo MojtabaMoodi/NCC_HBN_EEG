@@ -301,6 +301,11 @@ class EEGUserIdentificationCNN(EEGCNN):
         # These will be normalized and used with ArcFace
         return x
 
+    @property
+    def arcface_embedding_dim(self) -> int:
+        """Dimension of vectors returned by extract_features() (ArcFace head)."""
+        return int(self.fc2_intermediate.out_features)
+
 class EEGAgeRegressionCNN(BaseEEGCNN):
     """
     CNN model for EEG age regression.

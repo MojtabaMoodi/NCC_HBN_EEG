@@ -85,13 +85,9 @@ class TrainingConfig:
     # None = segment-level evaluation (default)
     aggregate_by_participant: Optional[str] = None  # None or 'majority_vote'
 
-    # ArcFace-specific learning rate multiplier
-    # ArcFace is more sensitive to learning rate than CrossEntropyLoss
-    # DIAGNOSIS: LR of 0.00005 (0.5 multiplier) caused model collapse in epoch 18
-    # Reduced to 0.3 to prevent collapse while still allowing learning
-    # This results in effective LR of 0.00003 after warmup (0.0001 * 0.3)
-    # Lower LR helps prevent collapse but may slow convergence
-    arcface_lr_multiplier: float = 0.3  # Multiply base LR by this for ArcFace (default: 0.3 for very large-scale classification)
+    # ArcFace head LR = learning_rate * arcface_lr_multiplier (backbone uses learning_rate).
+    # Applied only to the ArcFace weight parameter group in EEGTrainer, not the full model.
+    arcface_lr_multiplier: float = 0.3  # Head LR factor vs backbone (default 0.3 for large-scale ArcFace)
     
     # Gradient clipping for training stability
     # Prevents exploding gradients, especially important for large-scale classification
@@ -117,7 +113,7 @@ class TrainingConfig:
     # Loss function hyperparameters
     # Label smoothing for CrossEntropyLoss (used for large classification tasks)
     label_smoothing_large: float = 0.1  # For num_classes > 100
-    label_smoothing_very_large: float = 0.05  # For num_classes > 2000
+    label_smoothing_very_large: float = 0.05  # For very large CrossEntropy tasks (not user_identification; that uses ArcFace)
 
     # Whether to use stratified train batches (each batch has balanced class counts). Only for gender/age classification.
     # None = use default (True for gender/age). Set False to disable when building the sample list is slow (e.g. large 4s HDF5).
@@ -135,7 +131,7 @@ class TrainingConfig:
     # When class_weight is computed from data: exponent applied to inverse-frequency weights (>1 upweights minorities more).
     class_weight_power: Optional[float] = None  # None = 1.0 (standard balanced); set e.g. 1.5 for stronger minority weighting.
 
-    # ArcFace hyperparameters (for very large classification: num_classes > 2000)
+    # ArcFace hyperparameters (used for user_identification in EEGTrainer; also available for custom setups)
     arcface_margin: float = 0.5  # Angular margin in radians (~28.6 degrees)
     # DIAGNOSIS: Scale of 128.0 was insufficient for 3145 classes
     # With loss decreasing but accuracy near zero, logits were too small, softmax too flat

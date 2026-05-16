@@ -49,6 +49,7 @@ CNN/
 - **Multiple Metrics**: Accuracy, Precision, Recall, F1-Score, ROC-AUC
 - **Confusion Matrices**: Visual and numerical confusion matrices
 - **Per-Class Analysis**: Detailed performance breakdown by class
+- **User identification** (`target_type=user_identification`): metrics JSON stays **small** — accuracy, macro/weighted F1, and macro FPR/FNR only; **`_predictions.json` is not written** (full per-sample softmax over thousands of classes would be gigabytes). Serialized metrics omit the full `class_names` list. User-ID training/eval from the project root is documented in `user_identification/README.md` (CNN/ResNet ArcFace scripts).
 - **Model Comparison**: Side-by-side comparison of different models
 
 ### 4. **Rich Reporting**

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from CNN.models import ModelFactory
+from CNN.models.arcface_loss import ArcFaceLoss
 from CNN.trainer import EEGTrainer
 from CNN.evaluator import EEGEvaluator, EvaluationResults
 from CNN.config import ExperimentConfig, TrainingConfig, DataConfig, ModelConfig, SystemConfig
@@ -177,35 +178,42 @@ class ExperimentLogger:
         # Save metrics as JSON
         metrics_file = os.path.join(eval_dir, f'{results.model_name}_{results.target_type}_metrics.json')
         safe_json_dump(convert_numpy_types(results.to_dict()), metrics_file)
-        
-        # Save predictions
-        predictions_file = os.path.join(eval_dir, f'{results.model_name}_{results.target_type}_predictions.json')
-        
-        # For multi-output models, save gender and age predictions separately
-        if results.target_type == 'multi_output' and results.gender_predictions is not None:
-            predictions_data = convert_numpy_types({
-                'gender': {
-                    'predictions': results.gender_predictions.tolist() if isinstance(results.gender_predictions, np.ndarray) else results.gender_predictions,
-                    'true_labels': results.gender_true_labels.tolist() if isinstance(results.gender_true_labels, np.ndarray) else results.gender_true_labels,
-                    'probabilities': results.gender_probabilities.tolist() if isinstance(results.gender_probabilities, np.ndarray) else results.gender_probabilities,
-                    'class_names': ['Female', 'Male']
-                },
-                'age': {
-                    'predictions': results.age_predictions.tolist() if isinstance(results.age_predictions, np.ndarray) else results.age_predictions,
-                    'true_labels': results.age_true_labels.tolist() if isinstance(results.age_true_labels, np.ndarray) else results.age_true_labels,
-                    'probabilities': results.age_probabilities.tolist() if isinstance(results.age_probabilities, np.ndarray) else results.age_probabilities,
-                    'class_names': ['<8.5 years', '8.5-12.5 years', '>12.5 years']
-                }
-            })
-        else:
-            # Single-output model
-            predictions_data = convert_numpy_types({
-                'predictions': results.predictions,
-                'true_labels': results.true_labels,
-                'probabilities': results.probabilities,
-                'class_names': results.class_names
-            })
-        safe_json_dump(predictions_data, predictions_file)
+        # Save predictions.
+        #
+        # IMPORTANT: user identification can have thousands of classes, and `probabilities`
+        # becomes extremely large: [n_samples, n_classes]. Serializing it into a JSON file can
+        # explode to multi-GB sizes. We skip predictions JSON for user_identification entirely;
+        # callers should use compact metrics JSON instead.
+        if results.target_type != "user_identification":
+            predictions_file = os.path.join(
+                eval_dir, f'{results.model_name}_{results.target_type}_predictions.json'
+            )
+
+            # For multi-output models, save gender and age predictions separately
+            if results.target_type == 'multi_output' and results.gender_predictions is not None:
+                predictions_data = convert_numpy_types({
+                    'gender': {
+                        'predictions': results.gender_predictions.tolist() if isinstance(results.gender_predictions, np.ndarray) else results.gender_predictions,
+                        'true_labels': results.gender_true_labels.tolist() if isinstance(results.gender_true_labels, np.ndarray) else results.gender_true_labels,
+                        'probabilities': results.gender_probabilities.tolist() if isinstance(results.gender_probabilities, np.ndarray) else results.gender_probabilities,
+                        'class_names': ['Female', 'Male']
+                    },
+                    'age': {
+                        'predictions': results.age_predictions.tolist() if isinstance(results.age_predictions, np.ndarray) else results.age_predictions,
+                        'true_labels': results.age_true_labels.tolist() if isinstance(results.age_true_labels, np.ndarray) else results.age_true_labels,
+                        'probabilities': results.age_probabilities.tolist() if isinstance(results.age_probabilities, np.ndarray) else results.age_probabilities,
+                        'class_names': ['<8.5 years', '8.5-12.5 years', '>12.5 years']
+                    }
+                })
+            else:
+                # Single-output model
+                predictions_data = convert_numpy_types({
+                    'predictions': results.predictions,
+                    'true_labels': results.true_labels,
+                    'probabilities': results.probabilities,
+                    'class_names': results.class_names
+                })
+            safe_json_dump(predictions_data, predictions_file)
         
         # Save confusion matrix plot (only for classification tasks)
         # Regression tasks don't have confusion matrices
@@ -348,7 +356,7 @@ class Experiment:
         """
         Setup the experiment components (data loaders, model, trainer, evaluator).
         """
-        print(f"Setting up experiment: {self.config.name}")
+        print(f"Setting up experiment: {self.config.name}", flush=True)
         
         # Create data loaders using the DataConfig
         self._create_data_loaders()
@@ -411,6 +419,7 @@ class Experiment:
             age_max=age_max,
             device_preference=device_preference
         )
+        self.trainer.factory_model_type = self.config.model_type
         
         # Create evaluator
         # Determine prediction_type from training config
@@ -426,6 +435,11 @@ class Experiment:
         aggregate_by_participant = getattr(
             self.config.training_config, 'aggregate_by_participant', None
         )
+        arcface_criterion = None
+        if self.config.target_type == 'user_identification' and isinstance(
+            getattr(self.trainer, 'criterion', None), ArcFaceLoss
+        ):
+            arcface_criterion = self.trainer.criterion
         self.evaluator = EEGEvaluator(
             self.model,
             self.config.target_type,
@@ -434,9 +448,10 @@ class Experiment:
             age_max=age_max,
             device_preference=device_preference,
             aggregate_by_participant=aggregate_by_participant,
+            arcface_criterion=arcface_criterion,
         )
         
-        print(f"✅ Experiment setup complete")
+        print("✅ Experiment setup complete", flush=True)
     
     def _create_data_loaders(self):
         """
@@ -479,8 +494,14 @@ class Experiment:
                 self._age_max = age_max
                 num_files = len(train_file_or_files)
                 file_str = f"{num_files} file(s)" if num_files > 1 else "file"
-                print(f"📊 Using training data age range for regression normalization: min={age_min:.2f}, max={age_max:.2f} years")
-                print(f"   (Computed from {file_str}, used for all splits to avoid data leakage)")
+                print(
+                    f"📊 Using training data age range for regression normalization: min={age_min:.2f}, max={age_max:.2f} years",
+                    flush=True,
+                )
+                print(
+                    f"   (Computed from {file_str}, used for all splits to avoid data leakage)",
+                    flush=True,
+                )
             else:
                 age_transform = age_classification_transform
         elif target_type == 'combined':
@@ -573,12 +594,21 @@ class Experiment:
             prediction_type = getattr(self.config.training_config, "prediction_type", "classification")
             task_label = "classification" if prediction_type == "classification" else "regression"
             if self.eval_only:
-                print("Creating loaders for evaluation only (skipping stratified train-batch scan).")
+                print(
+                    "Creating loaders for evaluation only (skipping stratified train-batch scan).",
+                    flush=True,
+                )
             else:
                 print(
-                    f"Creating standard loaders for {target_type} {task_label} (train on both task types)"
+                    f"Creating standard loaders for {target_type} {task_label} (train on both task types)",
+                    flush=True,
                 )
             segment_length_str = f"{data_config.segment_length // 200}s"  # Convert 200->1s, 800->4s
+            print(
+                f"Building HDF5 DataLoaders (segment_length={segment_length_str}, "
+                f"{data_config.num_workers} workers). Multi-part 1s data can take 1-2 minutes before the first epoch.",
+                flush=True,
+            )
             self.data_loaders = EEGDataLoader.create_train_val_test_loaders(
                 hdf5_dir=data_config.hdf5_dir,
                 segment_length=segment_length_str,
@@ -604,6 +634,7 @@ class Experiment:
             self.is_cross_validation = False
             # Store segment_length for later use in task-type-specific evaluation
             self.segment_length_str = segment_length_str
+            print("DataLoaders built successfully.", flush=True)
 
     def run(self) -> ExperimentResult:
         """
@@ -1057,21 +1088,21 @@ def run_experiments(experiments: List[ExperimentConfig],
     # Use default system config if not provided
     system_config = system_config or SystemConfig()
 
-    print(f"\n{'='*80}")
-    print(f"STARTING EXPERIMENTS")
-    print(f"Number of experiments: {len(experiments)}")
-    print(f"Random seed: {random_seed}")
-    print(f"Results directory: {system_config.results_dir}")
-    print(f"Generate reports: {generate_reports}")
+    print(f"\n{'='*80}", flush=True)
+    print(f"STARTING EXPERIMENTS", flush=True)
+    print(f"Number of experiments: {len(experiments)}", flush=True)
+    print(f"Random seed: {random_seed}", flush=True)
+    print(f"Results directory: {system_config.results_dir}", flush=True)
+    print(f"Generate reports: {generate_reports}", flush=True)
     if eval_only:
-        print(f"Mode: EVAL ONLY (load checkpoint, no training)")
-    print(f"{'='*80}")
+        print(f"Mode: EVAL ONLY (load checkpoint, no training)", flush=True)
+    print(f"{'='*80}", flush=True)
 
     results = []
 
     for i, config in enumerate(experiments):
-        print(f"\nProgress: {i+1}/{len(experiments)}")
-        print(f"Experiment: {config.name}")
+        print(f"\nProgress: {i+1}/{len(experiments)}", flush=True)
+        print(f"Experiment: {config.name}", flush=True)
 
         experiment = None
         try:

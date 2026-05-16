@@ -18,6 +18,7 @@ from sklearn.metrics import (
 )
 
 from CNN.models import BaseEEGCNN
+from CNN.models.arcface_loss import ArcFaceLoss
 import sys
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
@@ -87,14 +88,17 @@ class EvaluationResults:
         num_samples = len(self.predictions) if len(self.predictions) > 0 else (
             len(self.gender_predictions) if self.gender_predictions is not None else 0
         )
-        out = convert_numpy_types({
+        out: Dict[str, Any] = convert_numpy_types({
             'model_name': self.model_name,
             'target_type': self.target_type,
             'metrics': self.metrics,
             'evaluation_time': self.evaluation_time,
             'num_samples': num_samples,
-            'class_names': self.class_names
         })
+        # For user identification, class_names can have thousands of entries (participant IDs)
+        # and bloat JSON artifacts. We keep metrics compact for this target.
+        if self.target_type != "user_identification":
+            out["class_names"] = self.class_names
         if self.segment_metrics is not None:
             out['segment_metrics'] = self.segment_metrics
         if self.participant_mean_prob_metrics is not None:
@@ -111,7 +115,8 @@ class EEGEvaluator:
                  class_names: Optional[List[str]] = None, prediction_type: str = 'classification',
                  age_min: Optional[float] = None, age_max: Optional[float] = None,
                  device_preference: str = 'auto',
-                 aggregate_by_participant: Optional[str] = None):
+                 aggregate_by_participant: Optional[str] = None,
+                 arcface_criterion: Optional[ArcFaceLoss] = None):
         """
         Initialize evaluator.
 
@@ -128,6 +133,8 @@ class EEGEvaluator:
                 majority vote (or mode with tie-break); regression = median. Requires
                 batch to contain 'participant_ids'.
                 None = segment-level evaluation (default).
+            arcface_criterion: When training used ArcFace for user_identification, pass the
+                same ArcFaceLoss module used in training so evaluation uses compute_logits(features).
 
         Raises:
             ValueError: If age_min/age_max are missing for regression tasks
@@ -138,6 +145,11 @@ class EEGEvaluator:
         self.prediction_type = prediction_type  # 'classification' or 'regression'
         self.class_names = class_names or self._get_default_class_names()
         self.aggregate_by_participant = aggregate_by_participant
+        self.arcface_criterion = arcface_criterion
+        if self.arcface_criterion is not None and self.target_type != 'user_identification':
+            raise ValueError(
+                "arcface_criterion is only supported when target_type is 'user_identification'."
+            )
         
         # Setup device (explicit, no fallbacks)
         self.device = get_device(device_preference)
@@ -145,6 +157,9 @@ class EEGEvaluator:
         # Move model to device (handles DataParallel models correctly)
         self.model.to(self.device)
         self.model.eval()
+        if self.arcface_criterion is not None:
+            self.arcface_criterion.to(self.device)
+            self.arcface_criterion.eval()
         
         # Age normalization parameters for denormalization (required for regression)
         # These should be computed from TRAINING data only and passed during initialization
@@ -193,6 +208,15 @@ class EEGEvaluator:
             # Use the existing load_checkpoint function from trainer.py
             checkpoint = trainer_load_checkpoint(checkpoint_path, self.model, self.device)
             self.model.eval()  # Set to evaluation mode
+            if checkpoint.get('use_arcface') and 'arcface_state_dict' in checkpoint:
+                if self.arcface_criterion is None:
+                    raise ValueError(
+                        "Checkpoint was trained with ArcFace (use_arcface=True) but this evaluator "
+                        "was constructed without arcface_criterion. Re-create the evaluator with the "
+                        "trainer's ArcFaceLoss instance, or load a non-ArcFace checkpoint."
+                    )
+                self.arcface_criterion.load_state_dict(checkpoint['arcface_state_dict'], strict=True)
+                self.arcface_criterion.eval()
             print(f"? Loaded checkpoint from {checkpoint_path}")
         else:
             print(f"??  Checkpoint not found: {checkpoint_path}")
@@ -266,7 +290,18 @@ class EEGEvaluator:
                                 f"Check that the transform is correctly mapping participant IDs to class indices."
                             )
                 
-                outputs = self.model(inputs)
+                if self.arcface_criterion is not None:
+                    underlying = self._get_underlying_model()
+                    if not hasattr(underlying, 'extract_features'):
+                        raise AttributeError(
+                            f"ArcFace evaluation requires extract_features on the model; "
+                            f"{underlying.__class__.__name__} has no such method."
+                        )
+                    features = underlying.extract_features(inputs)
+                    outputs = self.arcface_criterion.compute_logits(features)
+                    outputs = outputs.float() if outputs.dtype == torch.float16 else outputs
+                else:
+                    outputs = self.model(inputs)
                 
                 # Handle multi-output models
                 if isinstance(outputs, dict):
@@ -696,42 +731,92 @@ class EEGEvaluator:
         predictions = np.array(predictions)
         true_labels = np.array(true_labels)
         probabilities = np.array(probabilities)
+
+        # User identification: we intentionally compute a compact set of metrics.
+        #
+        # The generic classification metrics (confusion matrix, per-class precision/recall,
+        # classification_report, etc.) become prohibitively large for user-ID where the number
+        # of classes can be in the thousands. Keeping metrics compact also makes the JSON
+        # artifacts usable for fold-wise comparisons.
+        if self.target_type == "user_identification":
+            # Accuracy
+            accuracy = accuracy_score(true_labels, predictions)
+
+            # Macro F1 and weighted F1 (match sklearn defaults used in LaBraM evaluation)
+            _, _, f1_macro, _ = precision_recall_fscore_support(
+                true_labels, predictions, average="macro", zero_division=0.0
+            )
+            _, _, f1_weighted, _ = precision_recall_fscore_support(
+                true_labels, predictions, average="weighted", zero_division=0.0
+            )
+
+            # Macro OvR FPR/FNR over classes that appear in y_true (same definition as LaBraM).
+            # Import locally to avoid pulling LaBraM trainer dependencies at import time.
+            from user_identification.labram_trainer import multiclass_macro_fpr_fnr
+
+            fpr_macro, fnr_macro = multiclass_macro_fpr_fnr(true_labels, predictions)
+
+            return {
+                "accuracy": float(accuracy),
+                "f1_macro": float(f1_macro),
+                "f1_weighted": float(f1_weighted),
+                "fpr_macro": float(fpr_macro),
+                "fnr_macro": float(fnr_macro),
+            }
         
         # Use provided class_names or fall back to default
         metric_class_names = class_names if class_names is not None else self.class_names
+        n_classes = len(metric_class_names)
+        if probabilities.size > 0 and probabilities.ndim == 2 and probabilities.shape[1] != n_classes:
+            raise ValueError(
+                f"Shape mismatch: probabilities have {probabilities.shape[1]} columns but "
+                f"len(class_names)={n_classes}. Class names must match model output size "
+                f"(one name per class index 0..num_classes-1)."
+            )
+        # Full label index range for all classification tasks: sklearn otherwise infers the
+        # class count only from y_true/y_pred, which breaks target_names when a split omits
+        # entire classes (e.g. many user IDs absent from test, or a rare age bin missing).
+        labels_full = np.arange(n_classes, dtype=int)
         
         # Basic metrics
         accuracy = accuracy_score(true_labels, predictions)
         
         # Precision, recall, F1-score
         precision, recall, f1, support = precision_recall_fscore_support(
-            true_labels, predictions, average='weighted', zero_division=0
+            true_labels, predictions, average='weighted', zero_division=0, labels=labels_full
         )
         
         # Per-class metrics
         precision_per_class, recall_per_class, f1_per_class, support_per_class = precision_recall_fscore_support(
-            true_labels, predictions, average=None, zero_division=0
+            true_labels, predictions, average=None, zero_division=0, labels=labels_full
         )
         
         # Confusion matrix
-        cm = confusion_matrix(true_labels, predictions)
+        cm = confusion_matrix(true_labels, predictions, labels=labels_full)
         
         # ROC AUC (for binary classification or multi-class)
         try:
-            if len(metric_class_names) == 2:
+            if n_classes == 2:
                 # Binary classification
                 roc_auc = roc_auc_score(true_labels, probabilities[:, 1])
             else:
                 # Multi-class classification
-                roc_auc = roc_auc_score(true_labels, probabilities, multi_class='ovr', average='weighted')
+                roc_auc = roc_auc_score(
+                    true_labels,
+                    probabilities,
+                    multi_class='ovr',
+                    average='weighted',
+                    labels=labels_full,
+                )
         except ValueError:
             roc_auc = None
         
         # Classification report
         class_report = classification_report(
-            true_labels, predictions, 
-            target_names=metric_class_names, 
-            output_dict=True, 
+            true_labels, predictions,
+            labels=labels_full,
+            target_names=metric_class_names,
+            output_dict=True,
             zero_division=0
         )
         
@@ -771,13 +856,13 @@ class EEGEvaluator:
         rmse_norm = np.sqrt(mse_norm)
         
         return {
-            'mae': float(mae),  # Mean Absolute Error in years
-            'mse': float(mse),  # Mean Squared Error in years�
-            'rmse': float(rmse),  # Root Mean Squared Error in years
-            'r2': float(r2),  # R� score
-            'mae_normalized': float(mae_norm),  # MAE on normalized [0, 1] values
-            'mse_normalized': float(mse_norm),  # MSE on normalized [0, 1] values
-            'rmse_normalized': float(rmse_norm),  # RMSE on normalized [0, 1] values
+            'mae': float(mae),
+            'mse': float(mse),
+            'rmse': float(rmse),
+            'r2': float(r2),
+            'mae_normalized': float(mae_norm),
+            'mse_normalized': float(mse_norm),
+            'rmse_normalized': float(rmse_norm),
             'age_min': float(self.age_min),
             'age_max': float(self.age_max)
         }
