@@ -151,6 +151,8 @@ _MODEL_NAME_TO_TYPE = {
     'EEGAgeResNet50': 'age_resnet50',
     # ResNet other
     'EEGAgeRegressionResNet': 'age_regression_resnet',
+    'EEGAgeRegressionResNet34': 'age_regression_resnet34',
+    'EEGAgeRegressionResNet50': 'age_regression_resnet50',
     'CombinedResNet': 'combined_resnet',
     'MultiOutputResNet': 'multi_output_resnet',
 }
@@ -187,6 +189,10 @@ def get_model_type_from_checkpoint(checkpoint_path: str) -> str:
                     return 'gender_resnet'
                 if 'Age' in model_name:
                     if 'Regression' in model_name:
+                        if 'ResNet50' in model_name:
+                            return 'age_regression_resnet50'
+                        if 'ResNet34' in model_name:
+                            return 'age_regression_resnet34'
                         return 'age_regression_resnet'
                     if 'ResNet34' in model_name:
                         return 'age_resnet34'
@@ -361,7 +367,7 @@ def create_model(model_type: str, num_channels: int, num_classes: int = None,
             num_classes = 2
         elif model_type in ('age_resnet', 'age_resnet34', 'age_resnet50'):
             num_classes = 3
-        elif model_type == 'age_regression_resnet':
+        elif model_type in ('age_regression_resnet', 'age_regression_resnet34', 'age_regression_resnet50'):
             num_classes = 1
         elif model_type == 'combined_resnet':
             num_classes = 6
