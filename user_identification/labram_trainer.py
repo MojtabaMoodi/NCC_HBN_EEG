@@ -8,6 +8,7 @@ LaBraM-specific optimizations like layer decay learning rate scheduling.
 """
 
 import contextlib
+import inspect
 import math
 import sys
 import warnings
@@ -46,6 +47,22 @@ def multiclass_macro_fpr_fnr(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[fl
         fprs.append(float(fp / d_fpr) if d_fpr > 0 else 0.0)
         fnrs.append(float(fn / d_fnr) if d_fnr > 0 else 0.0)
     return float(np.mean(fprs)), float(np.mean(fnrs))
+
+
+def _call_optional_input_chans(module: nn.Module, method_name: str, EEG: torch.Tensor, input_chans) -> torch.Tensor:
+    """Call ``module.method_name(EEG, input_chans=...)`` only if the method accepts ``input_chans`` (LaBraM); else ``(EEG)`` (CNN/ResNet)."""
+    fn = getattr(module, method_name)
+    if "input_chans" in inspect.signature(fn).parameters:
+        return fn(EEG, input_chans=input_chans)
+    return fn(EEG)
+
+
+def _forward_logits_optional_input_chans(module: nn.Module, EEG: torch.Tensor, input_chans) -> torch.Tensor:
+    fn = module.forward
+    if "input_chans" in inspect.signature(fn).parameters:
+        return fn(EEG, input_chans=input_chans)
+    return fn(EEG)
+
 
 # Suppress FutureWarning for autocast deprecation
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*autocast.*")
@@ -380,6 +397,7 @@ def evaluate(
     use_arcface=False,
     criterion=None,
     collect_predictions: bool = False,
+    eeg_input_mode: str = "labram",
 ):
     """
     Modified evaluate function that supports ArcFace loss for user identification.
@@ -396,7 +414,11 @@ def evaluate(
         collect_predictions: If True, include ``y_true`` and ``y_pred`` (NumPy int64) in the
             returned stats for the full loader (for saving per-sample labels). Callers should
             remove these before JSON serialization.
+        eeg_input_mode: ``"labram"`` (default) scales by ``/100`` and rearranges to patch layout;
+            ``"cnn"`` uses raw ``(B, C, T)`` tensors from ``EEGDataLoader`` (no LaBraM preprocessing).
     """
+    if eeg_input_mode not in ("labram", "cnn"):
+        raise ValueError(f"eeg_input_mode must be 'labram' or 'cnn', got {eeg_input_mode!r}")
     input_chans = None
     if ch_names is not None:
         input_chans = labram_utils.get_input_chans(ch_names)
@@ -424,8 +446,10 @@ def evaluate(
             EEG = batch[0]
             target = batch[1]
         
-        EEG = EEG.float().to(device, non_blocking=True) / 100
-        EEG = rearrange(EEG, 'B N (A T) -> B N A T', T=200)
+        EEG = EEG.float().to(device, non_blocking=True)
+        if eeg_input_mode == "labram":
+            EEG = EEG / 100
+            EEG = rearrange(EEG, 'B N (A T) -> B N A T', T=200)
         
         # Handle targets (user identification - single class labels)
         target = target.to(device, non_blocking=True).long()
@@ -437,24 +461,27 @@ def evaluate(
             else contextlib.nullcontext()
         )
         with amp_ctx:
+            model_to_use = model.module if hasattr(model, 'module') else model
             if use_arcface:
                 # Extract features and compute logits via ArcFace
-                # Handle DistributedDataParallel wrapper
-                model_to_use = model.module if hasattr(model, 'module') else model
-                
                 if hasattr(model_to_use, 'extract_features'):
-                    features = model_to_use.extract_features(EEG, input_chans=input_chans)
+                    features = _call_optional_input_chans(
+                        model_to_use, 'extract_features', EEG, input_chans
+                    )
+                elif hasattr(model_to_use, 'forward_features'):
+                    features = _call_optional_input_chans(
+                        model_to_use, 'forward_features', EEG, input_chans
+                    )
                 else:
-                    if hasattr(model_to_use, 'forward_features'):
-                        features = model_to_use.forward_features(EEG, input_chans=input_chans)
-                    else:
-                        raise AttributeError("Model must have extract_features or forward_features for ArcFace")
-                
+                    raise AttributeError(
+                        "Model must have extract_features or forward_features for ArcFace"
+                    )
+
                 output = criterion.compute_logits(features)
                 output = output.float() if output.dtype == torch.float16 else output
                 loss = criterion(features, target)
             else:
-                output = model(EEG, input_chans=input_chans)
+                output = _forward_logits_optional_input_chans(model_to_use, EEG, input_chans)
                 loss = criterion_eval(output, target)
         
         # Process outputs for metrics (user identification - multi-class)
@@ -484,8 +511,9 @@ def evaluate(
             if class_ratio > 0.5:
                 print(f"   ✅ High class diversity (ratio > 50%) - this is EXPECTED and CORRECT")
                 print(f"   ✅ Indicates proper shuffling: samples from different users are mixed")
-                print(f"   ✅ With 3145 classes and batch_size={batch_size}, high diversity is normal")
-                print(f"   ⚠️  sklearn warning is harmless - metrics are computed correctly")
+                if eeg_input_mode == "labram":
+                    print(f"   ✅ With 3145 classes and batch_size={batch_size}, high diversity is normal")
+                    print(f"   ⚠️  sklearn warning is harmless - metrics are computed correctly")
             else:
                 print(f"   ⚠️  Low class diversity (ratio <= 50%) - may indicate clustering issue")
                 print(f"   ⚠️  If this persists, check preprocessing shuffling")

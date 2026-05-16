@@ -35,7 +35,7 @@ from user_identification.labram_trainer import train_one_epoch, evaluate
 from CNN.models.arcface_loss import ArcFaceLoss
 
 # Import model and data
-from user_identification.labram_model import LaBraMUserIdentificationWrapper
+from user_identification.labram_model import LaBraMUserIdentificationWrapper, iter_trainable_parameter_names
 from data_processing.eeg_dataset import EEGDataLoader
 from data_processing.target_transforms import create_user_identification_transform_from_hdf5
 
@@ -60,6 +60,9 @@ def get_args():
                        help='LaBraM model name')
     parser.add_argument('--pretrained_path', type=str, default=None,
                        help='Path to pre-trained LaBraM checkpoint')
+    parser.add_argument('--freeze_backbone', action='store_true',
+                       help='Freeze LaBraM (labram_model) and train only feature_projection '
+                            '(embedding MLP before ArcFace). Recommended with --pretrained_path.')
     parser.add_argument('--dropout_rate', type=float, default=0.1,
                        help='Dropout rate')
     
@@ -238,7 +241,8 @@ def main():
         num_classes=num_classes,
         dropout_rate=args.dropout_rate,
         pretrained_path=args.pretrained_path,
-        model_name=args.model_name
+        model_name=args.model_name,
+        freeze_backbone=args.freeze_backbone,
     )
     model.to(device)
     
@@ -265,6 +269,21 @@ def main():
     if not args.distributed or labram_utils.is_main_process():
         print(f"✅ Model created with {num_classes} classes")
         print(f"   Embedding dimension: {embedding_dim}")
+        if args.freeze_backbone:
+            n_trainable = sum(p.numel() for p in model_without_ddp.parameters() if p.requires_grad)
+            n_total = sum(p.numel() for p in model_without_ddp.parameters())
+            print(f"   freeze_backbone=True: trainable params {n_trainable:,} / {n_total:,}")
+            if args.pretrained_path is None:
+                print(
+                    "   Warning: --freeze_backbone without --pretrained_path: "
+                    "the backbone stays at random init while only the projection trains."
+                )
+            trainable_names = list(iter_trainable_parameter_names(model_without_ddp))
+            if len(trainable_names) <= 20:
+                for n in trainable_names:
+                    print(f"      trainable: {n}")
+            else:
+                print(f"      ({len(trainable_names)} trainable tensors; names omitted)")
     
     # Create ArcFace loss
     criterion = ArcFaceLoss(
@@ -373,6 +392,8 @@ def main():
         
         # Load model state
         model_without_ddp.load_state_dict(checkpoint['model_state_dict'])
+        if args.freeze_backbone:
+            model_without_ddp._freeze_labram_backbone()
         
         # Load optimizer state
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -501,7 +522,8 @@ def main():
                     'val_accuracy': val_acc,
                     'test_accuracy': test_acc,
                     'num_classes': num_classes,
-                    'embedding_dim': embedding_dim
+                    'embedding_dim': embedding_dim,
+                    'freeze_backbone': bool(args.freeze_backbone),
                 }
                 checkpoint_path = output_dir / 'best_model.pth'
                 torch.save(checkpoint, checkpoint_path)
@@ -530,6 +552,7 @@ def main():
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss_scaler_state_dict': loss_scaler.state_dict(),
                     'arcface_state_dict': criterion.state_dict(),
+                    'freeze_backbone': bool(args.freeze_backbone),
                 }
                 torch.save(checkpoint, checkpoint_path)
     
@@ -538,6 +561,7 @@ def main():
         results = {
             'val_accuracy': float(max_accuracy),
             'test_accuracy': float(best_test_accuracy),
+            'freeze_backbone': bool(args.freeze_backbone),
         }
         results_path = output_dir / 'results.json'
         with open(results_path, 'w') as f:

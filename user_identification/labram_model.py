@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterable
 
 # Add project root to path for absolute imports
 _project_root = Path(__file__).parent.parent
@@ -48,6 +48,13 @@ except ImportError as e:
     )
 
 
+def iter_trainable_parameter_names(model: nn.Module) -> Iterable[str]:
+    """Yield names of parameters with requires_grad=True (for logging / checks)."""
+    for name, p in model.named_parameters():
+        if p.requires_grad:
+            yield name
+
+
 class LaBraMUserIdentificationWrapper(BaseEEGCNN):
     """
     LaBraM wrapper for user identification tasks.
@@ -80,7 +87,8 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
                  embed_dim: int = 200,
                  depth: int = 12,
                  num_heads: int = 10,
-                 mlp_ratio: float = 4.0):
+                 mlp_ratio: float = 4.0,
+                 freeze_backbone: bool = False):
         """
         Initialize LaBraM wrapper for user identification.
         
@@ -96,6 +104,10 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
             depth: Number of transformer layers (default: 12)
             num_heads: Number of attention heads (default: 10)
             mlp_ratio: MLP ratio (default: 4.0)
+            freeze_backbone: If True, freeze all parameters of ``labram_model`` (LaBraM
+                transformer and its built-in classification head). Only ``feature_projection``
+                remains trainable; this matches the ArcFace path, which uses pooled
+                backbone features then the projection MLP before ArcFace logits.
         """
         if num_classes is None:
             raise ValueError(
@@ -183,6 +195,22 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
                 self.out_features = dim
         
         self.fc2_intermediate = EmbeddingDimension(projection_dim)
+
+        self.freeze_backbone = bool(freeze_backbone)
+        if self.freeze_backbone:
+            self._freeze_labram_backbone()
+
+    def _freeze_labram_backbone(self) -> None:
+        """Set requires_grad on LaBraM core vs. embedding head used with ArcFace."""
+        for p in self.labram_model.parameters():
+            p.requires_grad = False
+        for p in self.feature_projection.parameters():
+            p.requires_grad = True
+        if not any(p.requires_grad for p in self.parameters()):
+            raise RuntimeError(
+                "freeze_backbone=True left no trainable model parameters; "
+                "feature_projection should stay trainable."
+            )
     
     def _compute_input_chans(self) -> List[int]:
         """
@@ -378,5 +406,6 @@ class LaBraMUserIdentificationWrapper(BaseEEGCNN):
             'total_parameters': total_params,
             'trainable_parameters': trainable_params,
             'patch_size': self.patch_size,
-            'architecture': 'Transformer (LaBraM)'
+            'architecture': 'Transformer (LaBraM)',
+            'freeze_backbone': self.freeze_backbone,
         }
