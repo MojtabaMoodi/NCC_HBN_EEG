@@ -1,6 +1,6 @@
 # User Identification Module
 
-This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (training, evaluation, open-set analysis with known vs unknown participants) and an alternative **CNN experiment pipeline** via `main.py`.
+This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (training, evaluation, open-set analysis with known vs unknown participants), **CNN or ResNet with ArcFace** (`cnn_resnet_arcface/train_user_identification_backbone.py`), and an alternative **CNN experiment pipeline** via `main.py` (gender/age and related tasks).
 
 **Run from project root:** All scripts and wrappers assume the EEG project root as the current working directory (e.g. `cd /path/to/EEG` before running). The shell wrappers set this explicitly; when calling Python scripts directly, run them from the project root so imports and paths resolve correctly. **Usage steps:** [Prepare data → Validate → Train → (optional) Analyze](#usage-steps).
 
@@ -13,7 +13,8 @@ This module provides tools for **user identification**: the model learns which *
 | What | Where |
 |------|--------|
 | Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
-| **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`); use `--aggregate_only` to aggregate results from folds trained on separate machines |
+| **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`); optional `--train_script` for CNN/ResNet ArcFace; per-fold `fold_k/train_fold_k.log`; use `--aggregate_only` to aggregate results from folds trained on separate machines |
+| **CNN / ResNet + ArcFace (user identification)** | `cnn_resnet_arcface/train_user_identification_backbone.py`; active/passive eval: `cnn_resnet_arcface/eval_active_passive_cnn_resnet.py` |
 | Test active/passive accuracy (per fold or all folds) | `eval_active_passive_test.py` |
 | Full eval runner (test active/passive + unknown/open-set, folds/segments, logs) | `run_all_folds_active_passive_test_unknown_eval.py` |
 | Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
@@ -93,7 +94,9 @@ python user_identification/run_5fold_cv.py \
   --n_folds 5 \
   --segment_length 4s --epochs 200 --batch_size 192 --seed 42
 ```
-Summary is written to `output_root/cv_summary.json`.
+Summary is written to `output_root/cv_summary.json`. Each fold’s training subprocess stdout/stderr is saved under `output_root/fold_k/train_fold_k.log`.
+
+**Optional `train_script`:** by default `run_5fold_cv.py` invokes `train_labram_arcface.py`. For CNN or ResNet + ArcFace user identification, pass e.g. `--train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py` plus that script’s flags (`--backbone`, etc.); unknown CLI tokens are forwarded to the training script, and `--hdf5_dir` / `--output_dir` are set per fold automatically. See [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification).
 
 ### 4. Optional: open-set analysis
 
@@ -107,6 +110,34 @@ CHECKPOINT=/path/to/best_model.pth \
 ```
 
 See [Confidence and Open-Set Analysis](#confidence-and-open-set-analysis) for outputs and metrics.
+
+### CNN and ResNet ArcFace user identification
+
+Train from scratch with the **CNN experiment pipeline** (`CNN.experiment`) and ArcFace (`train_user_identification_backbone.py`). This is separate from `train_labram_arcface.py`; checkpoints are **not** interchangeable (raw EEG vs LaBraM scaling).
+
+**5-fold orchestration** (same layout as LaBraM: `hdf5_root/fold_0` …, `output_root/fold_k`):
+
+```bash
+python user_identification/run_5fold_cv.py \
+  --hdf5_root /path/to/user_id_5fold \
+  --output_root /path/to/cnn_or_resnet_results \
+  --n_folds 5 \
+  --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py \
+  --segment_length 4s --epochs 200 --seed 42 --backbone resnet34
+```
+
+**Artifacts per fold** (`output_dir` = e.g. `.../fold_k/`):
+
+| File / directory | Purpose |
+|------------------|--------|
+| `results.json` | `val_accuracy` / `test_accuracy` (percent) for `run_5fold_cv.py` aggregation |
+| `best_model.pth` | Best checkpoint |
+| `{experiment}_task_active/`, `{experiment}_task_passive/` | Compact `*_user_identification_metrics.json` per task (no giant `*_predictions.json`; those are skipped for this target to avoid multi‑GB JSON) |
+| `val_active_passive_metrics.json` | Validation active/passive metrics from `eval_active_passive_cnn_resnet.py --split val` (run automatically after training) |
+| `user_identification_active_passive_fold_metrics.json` | Structured summary: val/test active & passive metrics, paths to task metric files |
+| `user_identification_fold_metrics.log` | Same metrics in plain text |
+
+**Standalone eval** on val or test: `python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --checkpoint ... --hdf5_dir ... --segment_length ... --split test` (or `--split val`). Multi-fold: use `--cv_dir`, `--hdf5_root`, `--n_folds` as in `--help`.
 
 ### 5. Evaluate active vs passive tasks (test + unknown, fold-wise + summary)
 
@@ -258,7 +289,7 @@ python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
 | File | Description |
 |------|-------------|
 | `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
-| `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. Use `--aggregate_only` to only aggregate existing fold results (e.g. after training each fold on a separate machine). |
+| `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. Optional `--train_script` (default: `train_labram_arcface.py`). Writes `fold_k/train_fold_k.log` per fold. Use `--aggregate_only` to only aggregate existing fold results (e.g. after training each fold on a separate machine). |
 | `eval_active_passive_test.py` | Evaluate saved checkpoint(s) on **test** split with `task_type=active` and `task_type=passive` separately; writes per-fold metrics and mean ± std summary. |
 | `run_all_folds_active_passive_test_unknown_eval.py` | Orchestrates fold/segment evaluation: per-fold test active/passive accuracy + per-fold `analyze_confidence.py --split both` for active/passive; writes aggregate summary JSON and optional split logs. |
 | `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
@@ -267,6 +298,8 @@ python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
 | `labram_trainer.py` | Training loop and ArcFace integration |
 | `analyze_confidence.py` | Confidence and OOD analysis: test/unknown splits, open-set threshold tuning |
 | `run_analysis_test_unknown.sh` | Wrapper to run analysis on test + unknown (`--split both`). Requires `CHECKPOINT`; optional: `OUTPUT_DIR`, `HDF5_DIR`, `SEGMENT_LENGTH`. |
+| `cnn_resnet_arcface/train_user_identification_backbone.py` | CNN or ResNet18/34/50 + ArcFace for user identification (compact metrics JSON; see [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification)). |
+| `cnn_resnet_arcface/eval_active_passive_cnn_resnet.py` | Evaluate saved CNN/ResNet user-ID checkpoints on val or test, active and passive. |
 | `main.py` | Alternative: run CNN and/or LaBraM experiments via the CNN experiment pipeline (not ArcFace). |
 | `validate.py` | Validation script: checks mapping, class coverage, and label consistency. Uses `--hdf5_dir` (script has a default path; override as needed). |
 
@@ -348,7 +381,7 @@ To report mean ± std across 5 folds with **no overlap** in unknown participants
      --n_folds 5 \
      --segment_length 4s --epochs 200 --batch_size 192 --seed 42
    ```
-   Each fold is trained with `train_labram_arcface.py`; then val/test accuracy are read from each fold's `results.json` and summarized as mean ± std. Summary is written to `output_root/cv_summary.json`.
+   Each fold is trained with `train_labram_arcface.py` unless you pass `--train_script`; val/test accuracy are read from each fold's `results.json` and summarized as mean ± std. Summary is written to `output_root/cv_summary.json`. Training logs: `output_root/fold_k/train_fold_k.log`.
 
 3. **Distributed: train each fold on a separate machine**, then aggregate once:
    - Prepare data once (step 1 above); copy or share `user_id_5fold/fold_0` … `fold_4` as needed.
