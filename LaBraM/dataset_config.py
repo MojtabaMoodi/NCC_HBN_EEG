@@ -17,6 +17,9 @@ VALID_DATASET_NAMES = [
     'age_cross_task_passive_to_active',
     'age_cross_task_cv_active_to_passive_age_stratified',
     'age_cross_task_cv_passive_to_active_age_stratified',
+
+    # === AGE REGRESSION (normalized age in [0, 1], same min/max from train HDF5 as CNN) ===
+    'age_regression_baseline',
     
     # === GENDER CLASSIFICATION EXPERIMENTS ===
     'gender_baseline',
@@ -46,6 +49,7 @@ VALID_DATASET_NAMES = [
 # Base dataset type configurations
 DATASET_TYPE_CONFIGS = {
     'age': {'nb_classes': 3, 'metrics': ["accuracy", "balanced_accuracy", "f1_weighted"]},
+    'age_regression': {'nb_classes': 1, 'metrics': ["mae", "mse", "rmse", "r2"]},
     'gender': {'nb_classes': 1, 'metrics': ["accuracy", "balanced_accuracy", "pr_auc", "roc_auc"]},  # Binary classification metrics
     'combined': {'nb_classes': 6, 'metrics': ["accuracy", "balanced_accuracy", "f1_weighted"]},
     'multi_output': {'nb_classes': 2, 'metrics': ["accuracy", "balanced_accuracy", "f1_weighted"]},
@@ -73,8 +77,10 @@ def get_dataset_type_and_params(dataset_name):
     # Convert to lowercase for easier parsing
     name_lower = dataset_name.lower()
     
-    # Extract base dataset type (first part before first underscore)
-    if name_lower.startswith('age_'):
+    # Extract base dataset type (age_regression_* must be checked before age_*)
+    if name_lower.startswith('age_regression'):
+        dataset_type = 'age_regression'
+    elif name_lower.startswith('age_'):
         dataset_type = 'age'
     elif name_lower.startswith('gender_'):
         dataset_type = 'gender'

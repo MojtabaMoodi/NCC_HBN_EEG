@@ -34,7 +34,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 # Import LaBraM-specific modules
-from labram_dataset import prepare_labram_dataset
+from labram_dataset import prepare_labram_dataset, collate_labram_with_participant_ids
 
 # Reuse participant-level aggregation from data_processing (same as CNN)
 try:
@@ -43,12 +43,16 @@ try:
         aggregate_predictions_by_group,
         AGGREGATION_MAJORITY_VOTE,
         AGGREGATION_MEAN_PROB,
+        AGGREGATION_MEDIAN,
+        AGGREGATION_MEAN,
     )
 except ImportError:
     aggregate_participant_level_classification = None
     aggregate_predictions_by_group = None
     AGGREGATION_MAJORITY_VOTE = None
     AGGREGATION_MEAN_PROB = None
+    AGGREGATION_MEDIAN = None
+    AGGREGATION_MEAN = None
 
 def train_class_batch(model, samples, target, criterion, ch_names):
     outputs = model(samples, ch_names)
@@ -77,7 +81,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, log_writer=None,
                     start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
-                    num_training_steps_per_epoch=None, update_freq=None, ch_names=None, is_binary=True):
+                    num_training_steps_per_epoch=None, update_freq=None, ch_names=None, is_binary=True,
+                    is_regression=False):
     skipped_batches = 0  # Track batches skipped due to NaN/Inf
     input_chans = None
     if ch_names is not None:
@@ -182,7 +187,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             targets = (gender_targets, age_targets)
         else:
             targets = targets.to(device, non_blocking=True)
-            if is_binary:
+            if is_regression:
+                targets = targets.float()
+                if targets.dim() == 1:
+                    targets = targets.unsqueeze(-1)
+            elif is_binary:
                 targets = targets.float().unsqueeze(-1)
         
         if loss_scaler is None:
@@ -190,9 +199,14 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             loss, output = train_class_batch(
                 model, samples, targets, criterion, input_chans)
         else:
-            with torch.amp.autocast(device_type='cuda'):
-                loss, output = train_class_batch(
-                    model, samples, targets, criterion, input_chans)
+            if is_regression:
+                with torch.amp.autocast(device_type='cuda', enabled=False):
+                    loss, output = train_class_batch(
+                        model, samples, targets, criterion, input_chans)
+            else:
+                with torch.amp.autocast(device_type='cuda'):
+                    loss, output = train_class_batch(
+                        model, samples, targets, criterion, input_chans)
 
         # Check for NaN/Inf in model output before computing loss
         output_has_nan = False
@@ -296,6 +310,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             gender_acc = (gender_pred == gender_labels.cpu()).float().mean()
             age_acc = (age_pred == age_labels.cpu()).float().mean()
             class_acc = (gender_acc + age_acc) / 2.0
+        elif is_regression:
+            mae_b = (output.detach() - targets.detach()).abs().mean()
+            class_acc = 1.0 / (1.0 + mae_b)
         elif is_binary:
             class_acc = utils.get_metrics(torch.sigmoid(output).detach().cpu().numpy(), targets.detach().cpu().numpy(), ["accuracy"], is_binary)["accuracy"]
         else:
@@ -392,7 +409,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=['acc'], is_binary=True,
-             aggregate_by_participant=None):
+             aggregate_by_participant=None, is_regression=False, age_min=None, age_max=None):
     input_chans = None
     if ch_names is not None:
         input_chans = utils.get_input_chans(ch_names)
@@ -400,10 +417,14 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
     # Check if model is multi-output (handle DDP wrapping)
     model_to_check = model.module if hasattr(model, 'module') else model
     is_multi_output = hasattr(model_to_check, 'multi_output') and model_to_check.multi_output
-    
+
+    if is_regression and is_binary:
+        raise ValueError("evaluate: use is_binary=False for regression (is_regression=True).")
     if is_multi_output:
         criterion_gender = torch.nn.CrossEntropyLoss()
         criterion_age = torch.nn.CrossEntropyLoss()
+    elif is_regression:
+        criterion = torch.nn.MSELoss()
     elif is_binary:
         criterion = torch.nn.BCEWithLogitsLoss()
     else:
@@ -482,7 +503,20 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         else:
             target = target.to(device, non_blocking=True)
             B = EEG.shape[0]
-            if is_binary:
+            if is_regression:
+                target = target.float()
+                if target.dim() == 1:
+                    target = target.unsqueeze(1)
+                if target.shape[0] != B:
+                    raise ValueError(
+                        f"Regression target batch size {target.shape[0]} does not match EEG batch size {B}."
+                    )
+                if target.shape != (B, 1):
+                    raise ValueError(
+                        f"Regression target must have shape ({B}, 1); got {tuple(target.shape)}. "
+                        "Use collate_labram_with_participant_ids(..., label_mode='regression')."
+                    )
+            elif is_binary:
                 target = target.float().unsqueeze(-1)
                 # BCE and metrics expect target (B, 1) with binary 0/1. If target has wrong shape, normalize.
                 if target.dim() > 2 or target.shape != (B, 1):
@@ -507,17 +541,24 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
                     )
                     target = target.reshape(-1)[:B].long()
         
-        # compute output
-        with torch.amp.autocast(device_type='cuda'):
-            output = model(EEG, input_chans=input_chans)
-            
-            # Compute loss
+        # compute output (fp32 for regression — matches CNN stability practice for MSE on bounded targets)
+        if is_regression:
             if is_multi_output:
-                gender_loss = criterion_gender(output['gender'], gender_target)
-                age_loss = criterion_age(output['age'], age_target)
-                loss = gender_loss + age_loss
-            else:
+                raise ValueError("evaluate(is_regression=True) does not support multi_output models.")
+            with torch.amp.autocast(device_type='cuda', enabled=False):
+                output = model(EEG, input_chans=input_chans)
                 loss = criterion(output, target)
+        else:
+            with torch.amp.autocast(device_type='cuda'):
+                output = model(EEG, input_chans=input_chans)
+                
+                # Compute loss
+                if is_multi_output:
+                    gender_loss = criterion_gender(output['gender'], gender_target)
+                    age_loss = criterion_age(output['age'], age_target)
+                    loss = gender_loss + age_loss
+                else:
+                    loss = criterion(output, target)
         
         # Process outputs and targets for metrics
         if is_multi_output:
@@ -539,6 +580,8 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
         else:
             if is_binary:
                 output = torch.sigmoid(output).cpu()
+            elif is_regression:
+                output = output.detach().cpu()
             else:
                 output = output.cpu()
             target = target.cpu()
@@ -588,6 +631,8 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
                     for key, value in results.items():
                         if key != 'accuracy':  # Already updated above
                             metric_logger.meters[key].update(value, n=batch_size)
+            elif is_regression:
+                pass  # Final MAE/MSE/RMSE/R² computed on full val/test set (denormalized when age bounds are set).
             else:
                 # Multi-class: compute all metrics per-batch
                 results = utils.get_metrics(output.numpy(), target.numpy(), metrics, is_binary)
@@ -637,7 +682,10 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
     else:
         pred = torch.cat(pred, dim=0).numpy()
         true = torch.cat(true, dim=0).numpy()
-        ret = utils.get_metrics(pred, true, metrics, is_binary, 0.5)
+        ret = utils.get_metrics(
+            pred, true, metrics, is_binary, 0.5,
+            is_regression=is_regression, age_min=age_min, age_max=age_max,
+        )
         ret['loss'] = metric_logger.loss.global_avg
 
     # Participant-level aggregation (segment-level vs majority vote / mean prob), reusing data_processing.aggregation (same as CNN)
@@ -709,7 +757,39 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
             'accuracy': (g_mp['accuracy'] + a_mp['accuracy']) / 2.0}
         ret['participant_metrics'] = {'gender_head': g_mv, 'age_head': a_mv,
             'accuracy': (g_mv['accuracy'] + a_mv['accuracy']) / 2.0}
-    elif do_agg and not is_multi_output:
+    elif do_agg and not is_multi_output and is_regression:
+        if aggregate_predictions_by_group is None or AGGREGATION_MEDIAN is None or AGGREGATION_MEAN is None:
+            raise RuntimeError(
+                "Participant-level regression aggregation requires data_processing.aggregation "
+                "(aggregate_predictions_by_group, AGGREGATION_MEDIAN, AGGREGATION_MEAN)."
+            )
+        pred_all = np.asarray(pred).reshape(-1)
+        true_all = np.asarray(true).reshape(-1)
+        if len(all_participant_ids) != len(pred_all):
+            raise ValueError(
+                f"Participant-level aggregation requires one participant_id per segment. "
+                f"Got {len(all_participant_ids)} participant_ids for {len(pred_all)} segments."
+            )
+        _, true_med, pred_med, _ = aggregate_predictions_by_group(
+            pred_all, true_all, all_participant_ids,
+            prediction_type='regression', aggregation=AGGREGATION_MEAN_PROB,
+            regression_aggregation=AGGREGATION_MEDIAN,
+        )
+        _, true_mean, pred_mean, _ = aggregate_predictions_by_group(
+            pred_all, true_all, all_participant_ids,
+            prediction_type='regression', aggregation=AGGREGATION_MEAN_PROB,
+            regression_aggregation=AGGREGATION_MEAN,
+        )
+        ret['segment_metrics'] = {k: v for k, v in ret.items() if k != 'loss'}
+        ret['participant_median_metrics'] = utils.get_metrics(
+            pred_med, true_med, metrics, is_binary=False, threshold=0.5,
+            is_regression=True, age_min=age_min, age_max=age_max,
+        )
+        ret['participant_mean_metrics'] = utils.get_metrics(
+            pred_mean, true_mean, metrics, is_binary=False, threshold=0.5,
+            is_regression=True, age_min=age_min, age_max=age_max,
+        )
+    elif do_agg and not is_multi_output and not is_regression:
         # pred/true are already numpy after the single-output branch above
         pred_all = pred
         true_all = true
@@ -780,26 +860,30 @@ def count_task_type_samples(data_loader):
 
 
 def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length, 
-                          ch_names=None, metrics=['acc'], is_binary=True, random_seed=42):
+                          ch_names=None, metrics=['acc'], is_binary=True, random_seed=42,
+                          is_regression=False, age_min=None, age_max=None):
     """
     Evaluate model separately on active and passive tasks.
     
     Args:
         model: Model to evaluate
         device: Device to run evaluation on
-        dataset_type: Type of dataset ("gender", "age", "combined", "multi_output")
+        dataset_type: Type of dataset ("gender", "age", "age_regression", "combined", "multi_output")
         hdf5_dir: Directory containing HDF5 files
         segment_length: Length of segments ('1s', '2s', or '4s')
         ch_names: Channel names
         metrics: List of metrics to compute
         is_binary: Whether this is binary classification
         random_seed: Random seed for shuffling
-        
+        is_regression: Age regression (continuous targets)
+        age_min, age_max: Denormalization bounds from training data (years)
     Returns:
         Dictionary mapping task type to evaluation results with sample counts
         {'active': {...}, 'passive': {...}}
     """
     # Create datasets and loaders for each task type
+    from functools import partial
+
     def _create_task_type_loader(task_type: str):
         """Helper to create dataset and loader for a specific task type."""
         test_dataset = prepare_labram_dataset(
@@ -809,6 +893,11 @@ def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length,
             task_type=task_type,
             random_seed=random_seed
         )[2]  # Get test dataset (index 2)
+        collate_fn = (
+            partial(collate_labram_with_participant_ids, label_mode='regression')
+            if is_regression
+            else collate_labram_with_participant_ids
+        )
         
         # drop_last=True so every batch has full size; avoids DataParallel scatter
         # giving empty chunks when batch size < num GPUs (TypeError: forward() missing 1 required positional argument: 'x')
@@ -818,6 +907,7 @@ def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length,
             num_workers=4,
             pin_memory=True,
             drop_last=True,
+            collate_fn=collate_fn,
         )
     
     active_loader = _create_task_type_loader("active")
@@ -835,14 +925,16 @@ def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length,
     print(f"Evaluating on active tasks ({active_counts['active']:,} samples)...")
     print(f"{'='*60}")
     active_results = evaluate(active_loader, model, device, header='Active Test:', 
-                              ch_names=ch_names, metrics=metrics, is_binary=is_binary)
+                              ch_names=ch_names, metrics=metrics, is_binary=is_binary,
+                              is_regression=is_regression, age_min=age_min, age_max=age_max)
     active_results['num_samples'] = active_counts['active']
     
     print(f"\n{'='*60}")
     print(f"Evaluating on passive tasks ({passive_counts['passive']:,} samples)...")
     print(f"{'='*60}")
     passive_results = evaluate(passive_loader, model, device, header='Passive Test:', 
-                               ch_names=ch_names, metrics=metrics, is_binary=is_binary)
+                               ch_names=ch_names, metrics=metrics, is_binary=is_binary,
+                               is_regression=is_regression, age_min=age_min, age_max=age_max)
     passive_results['num_samples'] = passive_counts['passive']
     
     return {'active': active_results, 'passive': passive_results}

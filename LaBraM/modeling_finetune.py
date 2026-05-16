@@ -265,11 +265,12 @@ class NeuralTransformer(nn.Module):
                  num_heads=10, mlp_ratio=4., qkv_bias=False, qk_norm=None, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False,
-                 use_mean_pooling=True, init_scale=0.001, multi_output=False, **kwargs):
+                 use_mean_pooling=True, init_scale=0.001, multi_output=False, prediction_type='classification', **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.multi_output = multi_output
+        self.prediction_type = prediction_type
 
         # To identify whether it is neural tokenizer or neural decoder. 
         # For the neural decoder, use linear projection (PatchEmbed) to project codebook dimension to hidden dimension.
@@ -420,7 +421,14 @@ class NeuralTransformer(nn.Module):
         if self.multi_output:
             return {'gender': self.gender_head(x), 'age': self.age_head(x)}
         else:
-            return self.head(x)
+            logits = self.head(x)
+            if (
+                self.prediction_type == 'regression'
+                and isinstance(self.head, nn.Linear)
+                and self.num_classes == 1
+            ):
+                return torch.sigmoid(logits)
+            return logits
 
     def forward_intermediate(self, x, layer_id=12, norm_output=False):
         x = self.patch_embed(x)

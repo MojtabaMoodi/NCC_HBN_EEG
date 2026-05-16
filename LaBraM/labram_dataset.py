@@ -39,7 +39,8 @@ except ImportError:
 from data_processing.target_transforms import (
     age_classification_transform,
     combined_gender_age_classification_transform,
-    gender_classification_transform
+    create_age_regression_transform_from_hdf5,
+    gender_classification_transform,
 )
 from data_processing.constants import (
     get_stratify_label,
@@ -184,11 +185,14 @@ class LaBraMEEGDataset(IterableDataset):
             yield eeg_data, label, participant_id
 
 
-def collate_labram_with_participant_ids(batch):
+def collate_labram_with_participant_ids(batch, label_mode='classification'):
     """
     Collate batch of (eeg, label, participant_id) into (eeg_stacked, label_stacked, participant_ids).
     Use with DataLoader when participant-level aggregation (e.g. majority vote) is needed.
     Expects eeg to be (n_channels, n_timepoints) per sample; labels scalar. Does not change dimensions.
+
+    Args:
+        label_mode: 'classification' (long class indices) or 'regression' (float tensor targets, stacked as (B, 1)).
     """
     if not batch:
         raise ValueError("collate_labram_with_participant_ids received an empty batch. Check DataLoader and dataset.")
@@ -209,32 +213,48 @@ def collate_labram_with_participant_ids(batch):
             torch.stack([l[1] for l in labels]),
         )
     else:
-        # Single task: ensure each label is scalar so stacking gives (B,)
-        scalar_labels = []
-        for i, L in enumerate(labels):
-            if torch.is_tensor(L):
-                if L.numel() > 1:
-                    warnings.warn(
-                        f"Label at index {i} had {L.numel()} elements (shape {L.shape}); expected scalar. "
-                        "Using first element as class index. Check dataset _extract_label and sample.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    val = int(round(L.flatten()[0].item()))
-                    scalar_labels.append(torch.tensor(val, dtype=torch.long))
+        if label_mode == 'regression':
+            float_labels = []
+            for i, L in enumerate(labels):
+                if torch.is_tensor(L):
+                    v = L.flatten()[0].float() if L.numel() > 0 else torch.tensor(0.0, dtype=torch.float32)
+                    float_labels.append(v)
+                elif isinstance(L, (float, int)):
+                    float_labels.append(torch.tensor(float(L), dtype=torch.float32))
                 else:
-                    scalar_labels.append(L.flatten()[0].long() if L.numel() > 0 else torch.tensor(0, dtype=torch.long))
-            elif isinstance(L, (list, tuple)):
-                if len(L) > 1:
-                    warnings.warn(
-                        f"Label at index {i} had len {len(L)}; expected scalar. Using first element. Check dataset.",
-                        UserWarning,
-                        stacklevel=2,
+                    raise TypeError(
+                        f"Regression label at index {i} must be a tensor or numeric; got {type(L).__name__}."
                     )
-                scalar_labels.append(torch.tensor(L[0] if len(L) > 0 else 0, dtype=torch.long))
-            else:
-                scalar_labels.append(torch.tensor(L, dtype=torch.long))
-        label = torch.stack(scalar_labels)
+            label = torch.stack(float_labels, dim=0).unsqueeze(1)
+        elif label_mode != 'classification':
+            raise ValueError(f"label_mode must be 'classification' or 'regression'; got {label_mode!r}.")
+        else:
+            # Single task: ensure each label is scalar so stacking gives (B,)
+            scalar_labels = []
+            for i, L in enumerate(labels):
+                if torch.is_tensor(L):
+                    if L.numel() > 1:
+                        warnings.warn(
+                            f"Label at index {i} had {L.numel()} elements (shape {L.shape}); expected scalar. "
+                            "Using first element as class index. Check dataset _extract_label and sample.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        val = int(round(L.flatten()[0].item()))
+                        scalar_labels.append(torch.tensor(val, dtype=torch.long))
+                    else:
+                        scalar_labels.append(L.flatten()[0].long() if L.numel() > 0 else torch.tensor(0, dtype=torch.long))
+                elif isinstance(L, (list, tuple)):
+                    if len(L) > 1:
+                        warnings.warn(
+                            f"Label at index {i} had len {len(L)}; expected scalar. Using first element. Check dataset.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                    scalar_labels.append(torch.tensor(L[0] if len(L) > 0 else 0, dtype=torch.long))
+                else:
+                    scalar_labels.append(torch.tensor(L, dtype=torch.long))
+            label = torch.stack(scalar_labels)
     participant_ids = [b[2] for b in batch]
     return (eeg, label, participant_ids)
 
@@ -257,6 +277,11 @@ def _get_dataset_config(dataset_type: str) -> Tuple[str, Optional[callable], Opt
         return "combined", None, None, combined_gender_age_classification_transform
     elif dataset_type == "multi_output":
         return "both", gender_classification_transform, age_classification_transform, None
+    elif dataset_type == "age_regression":
+        raise ValueError(
+            "dataset_type 'age_regression' is configured in prepare_labram_dataset via "
+            "create_age_regression_transform_from_hdf5(train_files); do not call _get_dataset_config for it."
+        )
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}")
 
@@ -319,25 +344,30 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
         Tuple of (train_dataset, val_dataset, test_dataset)
     """
     
+    # Get HDF5 file paths first (age regression needs train files for leakage-safe min/max).
+    hdf5_dir_path = Path(hdf5_dir)
+    train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
+        hdf5_dir_path, segment_length
+    )
+    EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
+
     # Get dataset configuration
+    age_min: Optional[float] = None
+    age_max: Optional[float] = None
     if dataset_type == "user_identification":
-        # Special case for user identification
         target_type = "user_identification"
         gender_transform = None
         age_transform = None
         combined_transform = None
         if user_identification_transform is None:
             raise ValueError("user_identification_transform is required for user_identification dataset_type")
+    elif dataset_type == "age_regression":
+        age_transform, age_min, age_max = create_age_regression_transform_from_hdf5(train_files)
+        target_type = "age"
+        gender_transform = None
+        combined_transform = None
     else:
         target_type, gender_transform, age_transform, combined_transform = _get_dataset_config(dataset_type)
-    
-    # Get HDF5 file paths
-    # Note: For 1s segments, this returns lists of files. For 2s/4s, returns single files.
-    hdf5_dir_path = Path(hdf5_dir)
-    train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
-        hdf5_dir_path, segment_length
-    )
-    EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
     
     # DIAGNOSTIC: Log file discovery
     import logging
@@ -393,6 +423,11 @@ def prepare_labram_dataset(dataset_type: str, hdf5_dir: str, segment_length: str
     train_dataset = LaBraMEEGDataset(train_eeg_dataset, sampling_rate=sampling_rate)
     val_dataset = LaBraMEEGDataset(val_eeg_dataset, sampling_rate=sampling_rate)
     test_dataset = LaBraMEEGDataset(test_eeg_dataset, sampling_rate=sampling_rate)
+
+    if dataset_type == "age_regression":
+        for ds in (train_dataset, val_dataset, test_dataset):
+            ds.age_min = age_min
+            ds.age_max = age_max
     
     return train_dataset, val_dataset, test_dataset
 

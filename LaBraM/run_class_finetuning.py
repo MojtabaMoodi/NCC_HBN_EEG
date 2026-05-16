@@ -31,8 +31,10 @@ import torch
 import torch.backends.cudnn as cudnn
 import json
 import os
+import math
 
 from collections import OrderedDict
+from functools import partial
 from timm.data.mixup import Mixup
 from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
@@ -191,6 +193,14 @@ def get_args():
     parser.set_defaults(pin_mem=True)
     parser.add_argument('--aggregate_by_participant', type=str, default=None, metavar='METHOD',
                         help="Participant-level aggregation: 'majority_vote' for classification (same as CNN). Reports segment-level and participant-level (mean prob + majority vote) metrics.")
+    parser.add_argument('--early_stopping_patience', default=0, type=int,
+                        help='Stop after this many consecutive epochs with no validation improvement (0 = disabled). '
+                             'Monitors val accuracy (classification) or val MAE in years (regression). '
+                             'Best checkpoint is still saved when the metric improves; use checkpoint-best.pth after stop.')
+    parser.add_argument('--early_stopping_min_delta', default=0.0, type=float,
+                        help='Minimum relative improvement on the monitored val metric to reset patience '
+                             '(classification: val accuracy must increase by more than this; '
+                             'regression: val MAE must decrease by more than this, in years if MAE is in years).')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -248,6 +258,7 @@ def get_models(args):
         init_values=args.layer_scale_init_value,
         qkv_bias=args.qkv_bias,
         multi_output=is_multi_output,  # Enable multi-output mode
+        prediction_type=getattr(args, 'prediction_type', 'classification'),
     )
 
     return model
@@ -301,6 +312,7 @@ def get_dataset(args):
         
         # Extract dataset type and parameters from dataset name
         dataset_type, kwargs = get_dataset_type_and_params(args.dataset)
+        args.prediction_type = 'regression' if dataset_type == 'age_regression' else 'classification'
         
         # Add segment_length to kwargs for HDF5 dataset preparation
         if hasattr(args, 'segment_length'):
@@ -314,6 +326,14 @@ def get_dataset(args):
             # Basic datasets return (train, test, val)
             train_dataset, test_dataset, val_dataset = result
             cv_folds = None  # Not a CV dataset
+            if dataset_type == 'age_regression':
+                for attr in ('age_min', 'age_max'):
+                    if not hasattr(train_dataset, attr):
+                        raise RuntimeError(
+                            f"Age regression requires LaBraMEEGDataset.{attr} from prepare_labram_dataset."
+                        )
+                args.age_min = float(train_dataset.age_min)
+                args.age_max = float(train_dataset.age_max)
         elif isinstance(result, list):
             # Cross-validation datasets return list of folds
             cv_folds = result  # Store all folds for later processing
@@ -400,9 +420,19 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         dataset_config = get_dataset_config(args.dataset)
         ch_names = CHANNEL_NAMES  # All custom datasets use the same channels
         metrics = dataset_config['metrics']
+        dataset_type_cv, _ = get_dataset_type_and_params(args.dataset)
+        args.prediction_type = 'regression' if dataset_type_cv == 'age_regression' else 'classification'
+        if dataset_type_cv == 'age_regression':
+            if not hasattr(train_dataset, 'age_min') or not hasattr(train_dataset, 'age_max'):
+                raise RuntimeError("CV age regression fold datasets must expose age_min/age_max on the train wrapper.")
+            args.age_min = float(train_dataset.age_min)
+            args.age_max = float(train_dataset.age_max)
     else:
         dataset_train, dataset_test, dataset_val, ch_names, metrics = get_dataset(args)
         train_dataset, val_dataset, test_dataset = dataset_train, dataset_val, dataset_test
+
+    is_reg_task = getattr(args, 'prediction_type', 'classification') == 'regression'
+    cls_is_binary = (args.nb_classes == 1) and (not is_reg_task)
 
 
     # Note: IterableDataset doesn't support samplers (DistributedSampler, RandomSampler, etc.)
@@ -426,7 +456,12 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
 
     # LaBraMEEGDataset yields (eeg, label, participant_id); use custom collate so batch is (eeg, label, pids). Training only uses (eeg, label).
     use_labram_collate = args.dataset in CUSTOM_DATASET_CONFIGS
-    labram_collate = collate_labram_with_participant_ids if use_labram_collate else None
+    if use_labram_collate and is_reg_task:
+        labram_collate = partial(collate_labram_with_participant_ids, label_mode='regression')
+    elif use_labram_collate:
+        labram_collate = collate_labram_with_participant_ids
+    else:
+        labram_collate = None
     val_test_collate = labram_collate
 
     # num_workers: for custom HDF5 datasets use segment-length-aware recommendation (avoids 1s hang with fork + many workers).
@@ -636,7 +671,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
-    if args.nb_classes == 1:
+    if getattr(args, 'prediction_type', 'classification') == 'regression':
+        criterion = torch.nn.MSELoss()
+        print("criterion = MSELoss() (age regression, targets in [0, 1])")
+    elif args.nb_classes == 1:
         # Binary (gender): use pos_weight from train class counts to prevent collapse to majority class (same idea as CNN).
         bce_pos_weight = None
         if args.dataset in CUSTOM_DATASET_CONFIGS:
@@ -682,11 +720,18 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         for data_loader in test_loaders:
             test_stats = evaluate(
                 data_loader, model, device, header='Test:', ch_names=ch_names, metrics=metrics,
-                is_binary=(args.nb_classes == 1),
+                is_binary=cls_is_binary,
                 aggregate_by_participant=aggregate,
+                is_regression=is_reg_task,
+                age_min=getattr(args, 'age_min', None),
+                age_max=getattr(args, 'age_max', None),
             )
-            accuracy.append(test_stats['accuracy'])
-            balanced_accuracy.append(test_stats.get('balanced_accuracy', 0.0))
+            if is_reg_task:
+                accuracy.append(test_stats.get('mae', float('nan')))
+                balanced_accuracy.append(test_stats.get('r2', float('nan')))
+            else:
+                accuracy.append(test_stats['accuracy'])
+                balanced_accuracy.append(test_stats.get('balanced_accuracy', 0.0))
             if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
                 seg_acc = test_stats['segment_metrics'].get('accuracy')
                 part_mp = test_stats.get('participant_mean_prob_metrics') or {}
@@ -697,13 +742,18 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                     _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
                     _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
                     print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
-        print(f"======Accuracy: {np.mean(accuracy)} {np.std(accuracy)}, balanced accuracy: {np.mean(balanced_accuracy)} {np.std(balanced_accuracy)}")
+        if is_reg_task:
+            print(f"======Test MAE (years): mean={np.nanmean(accuracy)} std={np.nanstd(accuracy)}, R²: mean={np.nanmean(balanced_accuracy)} std={np.nanstd(balanced_accuracy)}")
+        else:
+            print(f"======Accuracy: {np.mean(accuracy)} {np.std(accuracy)}, balanced accuracy: {np.mean(balanced_accuracy)} {np.std(balanced_accuracy)}")
         exit(0)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
     max_accuracy_test = 0.0
+    best_val_mae = float('inf')
+    best_test_mae = float('nan')
     
     # Count task types for validation and test sets (once, before training)
     val_task_counts = None
@@ -725,9 +775,11 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     
     training_unstable = False
     early_stop_collapse = False
+    early_stop_patience = False
+    early_stopping_epochs_without_improvement = 0
     try:
         for epoch in range(args.start_epoch, args.epochs):
-            if early_stop_collapse:
+            if early_stop_collapse or early_stop_patience:
                 break
             if args.distributed:
                 # Note: IterableDataset doesn't use samplers, so no set_epoch needed
@@ -741,7 +793,7 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 log_writer=log_writer, start_steps=epoch * num_training_steps_per_epoch,
                 lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
                 num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
-                ch_names=ch_names, is_binary=args.nb_classes == 1
+                ch_names=ch_names, is_binary=cls_is_binary, is_regression=is_reg_task,
             )
         
             # Get current learning rate
@@ -753,10 +805,22 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                     loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema, save_ckpt_freq=args.save_ckpt_freq)
                 
             if data_loader_val is not None:
-                val_stats = evaluate(data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                                     aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
-                test_stats = evaluate(data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                                      aggregate_by_participant=getattr(args, 'aggregate_by_participant', None))
+                val_stats = evaluate(
+                    data_loader_val, model, device, header='Val:', ch_names=ch_names, metrics=metrics,
+                    is_binary=cls_is_binary,
+                    aggregate_by_participant=getattr(args, 'aggregate_by_participant', None),
+                    is_regression=is_reg_task,
+                    age_min=getattr(args, 'age_min', None),
+                    age_max=getattr(args, 'age_max', None),
+                )
+                test_stats = evaluate(
+                    data_loader_test, model, device, header='Test:', ch_names=ch_names, metrics=metrics,
+                    is_binary=cls_is_binary,
+                    aggregate_by_participant=getattr(args, 'aggregate_by_participant', None),
+                    is_regression=is_reg_task,
+                    age_min=getattr(args, 'age_min', None),
+                    age_max=getattr(args, 'age_max', None),
+                )
                 
                 # Evaluate by task type (active/passive) every 5 epochs or on last epoch
                 task_type_results = None
@@ -773,29 +837,57 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                             
                             task_type_results = evaluate_by_task_type(
                                 model, device, dataset_type, hdf5_dir, segment_length,
-                                ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                                random_seed=args.seed
+                                ch_names=ch_names, metrics=metrics, is_binary=cls_is_binary,
+                                random_seed=args.seed,
+                                is_regression=is_reg_task,
+                                age_min=getattr(args, 'age_min', None),
+                                age_max=getattr(args, 'age_max', None),
                             )
                             
                             # Print task-type-specific results
                             for task_type, results in task_type_results.items():
-                                acc = results.get('accuracy', 0.0) * 100
                                 num_samples = results.get('num_samples', 0)
-                                print(f"  {task_type.upper()} Test Acc: {acc:.4f}% (n={num_samples:,})")
+                                if is_reg_task:
+                                    mae_y = results.get('mae', float('nan'))
+                                    print(f"  {task_type.upper()} Test MAE (years): {mae_y:.4f} (n={num_samples:,})")
+                                else:
+                                    acc = results.get('accuracy', 0.0) * 100
+                                    print(f"  {task_type.upper()} Test Acc: {acc:.4f}% (n={num_samples:,})")
                         except Exception as e:
                             print(f"  Warning: Could not evaluate by task type: {e}")
                 
                 # Print epoch summary in a clear format (matching CNN format)
                 train_loss = train_stats.get('loss', 0.0)
-                train_acc = train_stats.get('class_acc', 0.0) * 100  # Convert to percentage
                 val_loss = val_stats.get('loss', 0.0)
-                val_acc = val_stats.get('accuracy', 0.0) * 100  # Convert to percentage
-                print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
-                      f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                      f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
-                      f"LR: {current_lr:.6f}")
+                if is_reg_task:
+                    train_score = train_stats.get('class_acc', 0.0)
+                    val_mae_ep = val_stats.get('mae', float('nan'))
+                    print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
+                          f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                          f"Train score (1/(1+norm_MAE)): {train_score:.4f} | Val MAE (years): {val_mae_ep:.4f} | "
+                          f"LR: {current_lr:.6f}")
+                else:
+                    train_acc = train_stats.get('class_acc', 0.0) * 100  # Convert to percentage
+                    val_acc = val_stats.get('accuracy', 0.0) * 100  # Convert to percentage
+                    print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
+                          f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                          f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
+                          f"LR: {current_lr:.6f}")
+
+                old_best_val_acc = max_accuracy
+                old_best_val_mae = best_val_mae
                 
-                if max_accuracy < val_stats["accuracy"]:
+                if is_reg_task:
+                    cur_val_mae = val_stats.get('mae', float('inf'))
+                    if cur_val_mae < best_val_mae:
+                        best_val_mae = cur_val_mae
+                        best_test_mae = test_stats.get('mae', float('nan'))
+                        torch.cuda.empty_cache()
+                        if args.output_dir and args.save_ckpt:
+                            utils.save_model(
+                                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                                loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
+                elif max_accuracy < val_stats["accuracy"]:
                     max_accuracy = val_stats["accuracy"]
                     max_accuracy_test = test_stats["accuracy"]
                     
@@ -807,28 +899,69 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                             args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                             loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
     
-                print(f'Max accuracy val: {max_accuracy * 100:.2f}%, max accuracy test: {max_accuracy_test * 100:.2f}%')
-                # Early stop on training collapse: if we had clearly above-random val acc and it drops to near-random, stop
-                nb_classes = max(1, args.nb_classes)
-                random_baseline = 1.0 / nb_classes
-                min_good_accuracy = random_baseline + 0.30
-                collapse_threshold = random_baseline + 0.15
-                if max_accuracy > min_good_accuracy and val_stats["accuracy"] < collapse_threshold:
-                    best_ckpt_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
-                    print(f"\n⚠️  Training collapse detected: val accuracy dropped from {max_accuracy*100:.1f}% to {val_stats['accuracy']*100:.1f}%. "
-                          f"Stopping early. Use {best_ckpt_path} (already saved) for evaluation.")
-                    early_stop_collapse = True
-                    break  # exit loop from inside the for-body (avoids lint error on break outside loop)
-                if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
-                    seg_acc = test_stats['segment_metrics'].get('accuracy')
-                    part_mp = test_stats.get('participant_mean_prob_metrics') or {}
-                    part_mv = test_stats.get('participant_metrics') or {}
-                    part_mp_acc = part_mp.get('accuracy')
-                    part_mv_acc = part_mv.get('accuracy')
-                    if seg_acc is not None:
-                        _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
-                        _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
-                        print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
+                if is_reg_task:
+                    print(f'Best val MAE (years): {best_val_mae:.4f}, test MAE at best val: {best_test_mae:.4f}')
+                else:
+                    print(f'Max accuracy val: {max_accuracy * 100:.2f}%, max accuracy test: {max_accuracy_test * 100:.2f}%')
+                # Early stop on training collapse (classification only)
+                if not is_reg_task:
+                    nb_classes = max(1, args.nb_classes)
+                    random_baseline = 1.0 / nb_classes
+                    min_good_accuracy = random_baseline + 0.30
+                    collapse_threshold = random_baseline + 0.15
+                    if max_accuracy > min_good_accuracy and val_stats["accuracy"] < collapse_threshold:
+                        best_ckpt_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
+                        print(f"\n⚠️  Training collapse detected: val accuracy dropped from {max_accuracy*100:.1f}% to {val_stats['accuracy']*100:.1f}%. "
+                              f"Stopping early. Use {best_ckpt_path} (already saved) for evaluation.")
+                        early_stop_collapse = True
+                        break  # exit loop from inside the for-body (avoids lint error on break outside loop)
+                # Patience early stopping (optional): no improvement on validation for N consecutive epochs
+                esp = getattr(args, 'early_stopping_patience', 0) or 0
+                if esp > 0:
+                    min_delta = float(getattr(args, 'early_stopping_min_delta', 0.0) or 0.0)
+                    if is_reg_task:
+                        cur_m = float(val_stats.get('mae', float('inf')))
+                        if not math.isfinite(cur_m):
+                            raise ValueError(
+                                f'early_stopping_patience requires finite val MAE; got {val_stats.get("mae")!r}.'
+                            )
+                        metric_improved = (old_best_val_mae - cur_m) > min_delta
+                    else:
+                        cur_a = float(val_stats.get('accuracy', 0.0))
+                        metric_improved = (cur_a - old_best_val_acc) > min_delta
+                    if metric_improved:
+                        early_stopping_epochs_without_improvement = 0
+                    else:
+                        early_stopping_epochs_without_improvement += 1
+                    if early_stopping_epochs_without_improvement >= esp:
+                        best_ckpt_path = Path(args.output_dir) / utils.CHECKPOINT_BEST_FILENAME
+                        print(
+                            f"\nEarly stopping: validation did not improve for {esp} consecutive epoch(s) "
+                            f"(min_delta={min_delta}). Best checkpoint: {best_ckpt_path}"
+                        )
+                        early_stop_patience = True
+                        break
+                if test_stats.get('segment_metrics'):
+                    if is_reg_task and test_stats.get('participant_median_metrics') and test_stats.get('participant_mean_metrics'):
+                        seg_mae = test_stats['segment_metrics'].get('mae')
+                        pm = test_stats.get('participant_median_metrics') or {}
+                        pmean = test_stats.get('participant_mean_metrics') or {}
+                        pm_mae = pm.get('mae')
+                        pmean_mae = pmean.get('mae')
+                        if seg_mae is not None:
+                            _med = f'{pm_mae:.4f}' if pm_mae is not None else 'N/A'
+                            _mean = f'{pmean_mae:.4f}' if pmean_mae is not None else 'N/A'
+                            print(f'  Test segment MAE: {seg_mae:.4f} | participant median MAE: {_med} | participant mean MAE: {_mean}')
+                    elif test_stats.get('participant_metrics'):
+                        seg_acc = test_stats['segment_metrics'].get('accuracy')
+                        part_mp = test_stats.get('participant_mean_prob_metrics') or {}
+                        part_mv = test_stats.get('participant_metrics') or {}
+                        part_mp_acc = part_mp.get('accuracy')
+                        part_mv_acc = part_mv.get('accuracy')
+                        if seg_acc is not None:
+                            _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
+                            _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
+                            print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
                 if log_writer is not None:
                     for key, value in val_stats.items():
                         if key == 'accuracy':
@@ -843,6 +976,14 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                             log_writer.update(roc_auc=value, head="val", step=epoch)
                         elif key == 'cohen_kappa':
                             log_writer.update(cohen_kappa=value, head="val", step=epoch)
+                        elif key == 'mae':
+                            log_writer.update(mae=value, head="val", step=epoch)
+                        elif key == 'mse':
+                            log_writer.update(mse=value, head="val", step=epoch)
+                        elif key == 'rmse':
+                            log_writer.update(rmse=value, head="val", step=epoch)
+                        elif key == 'r2':
+                            log_writer.update(r2=value, head="val", step=epoch)
                         elif key == 'loss':
                             log_writer.update(loss=value, head="val", step=epoch)
                     for key, value in test_stats.items():
@@ -858,6 +999,14 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                             log_writer.update(roc_auc=value, head="test", step=epoch)
                         elif key == 'cohen_kappa':
                             log_writer.update(cohen_kappa=value, head="test", step=epoch)
+                        elif key == 'mae':
+                            log_writer.update(mae=value, head="test", step=epoch)
+                        elif key == 'mse':
+                            log_writer.update(mse=value, head="test", step=epoch)
+                        elif key == 'rmse':
+                            log_writer.update(rmse=value, head="test", step=epoch)
+                        elif key == 'r2':
+                            log_writer.update(r2=value, head="test", step=epoch)
                         elif key == 'loss':
                             log_writer.update(loss=value, head="test", step=epoch)
                     
@@ -870,8 +1019,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                     log_stats['test_segment_metrics'] = test_stats['segment_metrics']
                 if test_stats.get('participant_mean_prob_metrics') is not None:
                     log_stats['test_participant_mean_prob_metrics'] = test_stats['participant_mean_prob_metrics']
-                if test_stats.get('participant_metrics') is not None:
-                    log_stats['test_participant_metrics'] = test_stats['participant_metrics']
+                if test_stats.get('participant_median_metrics') is not None:
+                    log_stats['test_participant_median_metrics'] = test_stats['participant_median_metrics']
+                if test_stats.get('participant_mean_metrics') is not None:
+                    log_stats['test_participant_mean_metrics'] = test_stats['participant_mean_metrics']
     
                 # Add task type counts if available (from first epoch)
                 if epoch == 0:
@@ -884,15 +1035,27 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                 
                 # Add task-type-specific metrics if available
                 if task_type_results is not None:
-                    log_stats['task_type_metrics'] = {
-                        task_type: {
-                            'accuracy': results.get('accuracy', 0.0),
-                            'f1_weighted': results.get('f1_weighted', 0.0),
-                            'balanced_accuracy': results.get('balanced_accuracy', 0.0),
-                            'num_samples': results.get('num_samples', 0),
+                    if is_reg_task:
+                        log_stats['task_type_metrics'] = {
+                            task_type: {
+                                'mae': results.get('mae', float('nan')),
+                                'mse': results.get('mse', float('nan')),
+                                'rmse': results.get('rmse', float('nan')),
+                                'r2': results.get('r2', float('nan')),
+                                'num_samples': results.get('num_samples', 0),
+                            }
+                            for task_type, results in task_type_results.items()
                         }
-                        for task_type, results in task_type_results.items()
-                    }
+                    else:
+                        log_stats['task_type_metrics'] = {
+                            task_type: {
+                                'accuracy': results.get('accuracy', 0.0),
+                                'f1_weighted': results.get('f1_weighted', 0.0),
+                                'balanced_accuracy': results.get('balanced_accuracy', 0.0),
+                                'num_samples': results.get('num_samples', 0),
+                            }
+                            for task_type, results in task_type_results.items()
+                        }
             else:
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                              'epoch': epoch,
@@ -938,8 +1101,11 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             print(f"{'='*80}")
             final_task_type_results = evaluate_by_task_type(
                 model, device, dataset_type, hdf5_dir, segment_length,
-                ch_names=ch_names, metrics=metrics, is_binary=args.nb_classes == 1,
-                random_seed=args.seed
+                ch_names=ch_names, metrics=metrics, is_binary=cls_is_binary,
+                random_seed=args.seed,
+                is_regression=is_reg_task,
+                age_min=getattr(args, 'age_min', None),
+                age_max=getattr(args, 'age_max', None),
             )
             
             # Print final task-type-specific results
@@ -947,10 +1113,15 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             print("Final Task-Type-Specific Results:")
             print(f"{'='*80}")
             for task_type, results in final_task_type_results.items():
-                acc = results.get('accuracy', 0.0) * 100
-                f1 = results.get('f1_weighted', 0.0)
                 num_samples = results.get('num_samples', 0)
-                print(f"  {task_type.upper()} tasks: Accuracy = {acc:.4f}%, F1-Score = {f1:.4f} (n={num_samples:,})")
+                if is_reg_task:
+                    mae_y = results.get('mae', float('nan'))
+                    r2v = results.get('r2', float('nan'))
+                    print(f"  {task_type.upper()} tasks: MAE (years) = {mae_y:.4f}, R² = {r2v:.4f} (n={num_samples:,})")
+                else:
+                    acc = results.get('accuracy', 0.0) * 100
+                    f1 = results.get('f1_weighted', 0.0)
+                    print(f"  {task_type.upper()} tasks: Accuracy = {acc:.4f}%, F1-Score = {f1:.4f} (n={num_samples:,})")
         except Exception as e:
             print(f"Warning: Could not perform final task-type evaluation: {e}")
             import traceback
@@ -969,22 +1140,40 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         }, final_checkpoint_path)
     
     # Return final metrics including task-type-specific results
-    final_metrics = {
-        'val_accuracy': max_accuracy,
-        'test_accuracy': max_accuracy_test,
-    }
+    if is_reg_task:
+        final_metrics = {
+            'best_val_mae': best_val_mae,
+            'test_mae_at_best_val': best_test_mae,
+        }
+    else:
+        final_metrics = {
+            'val_accuracy': max_accuracy,
+            'test_accuracy': max_accuracy_test,
+        }
     
     # Add task-type-specific metrics if available
     if final_task_type_results is not None:
-        final_metrics['task_type_metrics'] = {
-            task_type: {
-                'accuracy': results.get('accuracy', 0.0),
-                'f1_weighted': results.get('f1_weighted', 0.0),
-                'balanced_accuracy': results.get('balanced_accuracy', 0.0),
-                'num_samples': results.get('num_samples', 0),
+        if is_reg_task:
+            final_metrics['task_type_metrics'] = {
+                task_type: {
+                    'mae': results.get('mae', float('nan')),
+                    'mse': results.get('mse', float('nan')),
+                    'rmse': results.get('rmse', float('nan')),
+                    'r2': results.get('r2', float('nan')),
+                    'num_samples': results.get('num_samples', 0),
+                }
+                for task_type, results in final_task_type_results.items()
             }
-            for task_type, results in final_task_type_results.items()
-        }
+        else:
+            final_metrics['task_type_metrics'] = {
+                task_type: {
+                    'accuracy': results.get('accuracy', 0.0),
+                    'f1_weighted': results.get('f1_weighted', 0.0),
+                    'balanced_accuracy': results.get('balanced_accuracy', 0.0),
+                    'num_samples': results.get('num_samples', 0),
+                }
+                for task_type, results in final_task_type_results.items()
+            }
     
     # Add task type counts to final metrics
     if val_task_counts:

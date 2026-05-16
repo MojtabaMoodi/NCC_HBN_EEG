@@ -36,6 +36,7 @@ from scipy.signal import resample
 import pandas as pd
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from scipy.stats import pearsonr
@@ -483,11 +484,31 @@ def _get_world_size_env():
         return int(os.environ['OMPI_COMM_WORLD_SIZE'])
 
 
+def _ensure_distributed_master_env():
+    """
+    torch.distributed.init_process_group(init_method='env://') requires MASTER_ADDR and MASTER_PORT.
+    HPC / partial launcher env often sets RANK, WORLD_SIZE, LOCAL_RANK without these; set safe defaults.
+    """
+    if not os.environ.get('MASTER_ADDR', '').strip():
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        print(
+            'MASTER_ADDR was unset or empty: set to 127.0.0.1 for distributed rendezvous.',
+            flush=True,
+        )
+    if not os.environ.get('MASTER_PORT', '').strip():
+        os.environ['MASTER_PORT'] = '29500'
+        print(
+            'MASTER_PORT was unset or empty: set to 29500 for distributed rendezvous.',
+            flush=True,
+        )
+
+
 def init_distributed_mode(args):
     if args.dist_on_itp:
         args.rank = _get_rank_env()
         args.world_size = _get_world_size_env()  # int(os.environ['OMPI_COMM_WORLD_SIZE'])
         args.gpu = _get_local_rank_env()
+        _ensure_distributed_master_env()
         args.dist_url = "tcp://%s:%s" % (os.environ['MASTER_ADDR'], os.environ['MASTER_PORT'])
         os.environ['LOCAL_RANK'] = str(args.gpu)
         os.environ['RANK'] = str(args.rank)
@@ -496,6 +517,22 @@ def init_distributed_mode(args):
     elif 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
+        # Stale or launcher-less env (e.g. HPC login node): RANK/WORLD_SIZE set but no rendezvous vars.
+        if args.world_size <= 1:
+            print(
+                'RANK/WORLD_SIZE in environment but WORLD_SIZE<=1: using non-distributed single-process mode. '
+                'Unset RANK, WORLD_SIZE, and LOCAL_RANK if you did not intend distributed launch.',
+                flush=True,
+            )
+            args.distributed = False
+            args.rank = 0
+            args.world_size = 1
+            args.gpu = int(os.environ.get('LOCAL_RANK', 0))
+            return
+        if 'LOCAL_RANK' not in os.environ:
+            raise ValueError(
+                'Distributed training requires LOCAL_RANK in the environment when RANK and WORLD_SIZE are set.'
+            )
         args.gpu = int(os.environ['LOCAL_RANK'])
     elif 'SLURM_PROCID' in os.environ:
         args.rank = int(os.environ['SLURM_PROCID'])
@@ -509,6 +546,9 @@ def init_distributed_mode(args):
 
     torch.cuda.set_device(args.gpu)
     args.dist_backend = 'nccl'
+    dist_url = getattr(args, 'dist_url', 'env://') or 'env://'
+    if dist_url == 'env://' or str(dist_url).startswith('env://'):
+        _ensure_distributed_master_env()
     print('| distributed init (rank {}): {}, gpu {}'.format(
         args.rank, args.dist_url, args.gpu), flush=True)
     torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
@@ -942,11 +982,51 @@ def prepare_TUAB_dataset(root):
     return train_dataset, test_dataset, val_dataset
 
 
-def get_metrics(output, target, metrics, is_binary, threshold=0.5):
+def get_metrics(output, target, metrics, is_binary, threshold=0.5, is_regression=False,
+                age_min=None, age_max=None):
     # Ensure inputs are numpy arrays with correct dtype and shape for sklearn/pyhealth.
     # Do not ravel multiclass output: pyhealth expects (n_samples, n_classes) logits/probs.
     output = np.asarray(output)
     target = np.asarray(target)
+
+    if is_regression:
+        if is_binary:
+            raise ValueError("get_metrics: is_regression and is_binary cannot both be True.")
+        out_1d = np.asarray(output, dtype=np.float64).reshape(-1)
+        tgt_1d = np.asarray(target, dtype=np.float64).reshape(-1)
+        if out_1d.size == 0 or tgt_1d.size == 0:
+            raise ValueError("get_metrics(is_regression=True): empty predictions or targets.")
+        if out_1d.size != tgt_1d.size:
+            raise ValueError(
+                f"get_metrics(is_regression=True): pred length {out_1d.size} != target length {tgt_1d.size}."
+            )
+        if age_min is not None and age_max is not None:
+            span = float(age_max) - float(age_min)
+            if span <= 0:
+                raise ValueError(f"Invalid age span for denormalization: age_min={age_min}, age_max={age_max}")
+            out_y = out_1d * span + float(age_min)
+            tgt_y = tgt_1d * span + float(age_min)
+        else:
+            out_y = out_1d
+            tgt_y = tgt_1d
+        mae = float(mean_absolute_error(tgt_y, out_y))
+        mse = float(mean_squared_error(tgt_y, out_y))
+        rmse = float(np.sqrt(mse))
+        r2 = float(r2_score(tgt_y, out_y))
+        results = {}
+        if 'mae' in metrics:
+            results['mae'] = mae
+        if 'mse' in metrics:
+            results['mse'] = mse
+        if 'rmse' in metrics:
+            results['rmse'] = rmse
+        if 'r2' in metrics:
+            results['r2'] = r2
+        unknown = [m for m in metrics if m not in ('mae', 'mse', 'rmse', 'r2')]
+        if unknown:
+            raise ValueError(f"Unknown regression metric(s): {unknown}. Supported: mae, mse, rmse, r2.")
+        return results
+
     if not is_binary:
         target = target.astype(np.int64)
     if is_binary:
