@@ -99,7 +99,23 @@ Summary is written to `output_root/cv_summary.json`. Each fold’s training subp
 
 **Optional `train_script`:** by default `run_5fold_cv.py` invokes `train_labram_arcface.py`. For CNN or ResNet + ArcFace user identification, pass e.g. `--train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py` plus that script’s flags (`--backbone`, etc.); unknown CLI tokens are forwarded to the training script, and `--hdf5_dir` / `--output_dir` are set per fold automatically. See [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification).
 
-### 4. Optional: open-set analysis
+### 4. Optional: user registration evaluation (unknown-only)
+
+To simulate **enrolling** a subset of unknown users and rejecting unregistered strangers (separate from closed-set / centroid-based open-set in `analyze_confidence.py`), see **[registering_users/README.md](registering_users/README.md)**.
+
+Typical flow after 5-fold training:
+
+```bash
+python user_identification/registering_users/run_registration_pipeline.py \
+  --cv_dir final_user_identification/4s \
+  --hdf5_root /path/to/user_id_5fold \
+  --segment_length 4s \
+  --n_folds 5 \
+  --output_root registering_users_results/pipeline_4s \
+  --device cuda
+```
+
+### 5. Optional: open-set analysis
 
 If you used `--consider_unknown` (or 5-fold data), you can evaluate on test + unknown and tune an open-set threshold:
 
@@ -140,7 +156,7 @@ python user_identification/run_5fold_cv.py \
 
 **Standalone eval** on val or test: `python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --checkpoint ... --hdf5_dir ... --segment_length ... --split test` (or `--split val`). Multi-fold: use `--cv_dir`, `--hdf5_root`, `--n_folds` as in `--help`.
 
-### 5. Evaluate active vs passive tasks (test + unknown, fold-wise + summary)
+### 6. Evaluate active vs passive tasks (test + unknown, fold-wise + summary)
 
 Use this when you want:
 - **Per-fold test accuracy** for `active` and `passive` tasks separately, and
@@ -186,7 +202,7 @@ python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
 
 Omit any `--hdf5_root_*` you do not have; each segment length is evaluated only if its root is set (see `run_all_folds_active_passive_test_unknown_eval.py --help`).
 
-### 6. Example: 1s five-fold LaBraM + ArcFace (`final_user_identification`)
+### 7. Example: 1s five-fold LaBraM + ArcFace (`final_user_identification`)
 
 End-to-end commands for **1s** segments, **20% unknown per fold**, HDF5 under `~/scratch/fold_k`, and checkpoints under `final_user_identification/fold_k` (same training and aggregate layout as `final_user_identification/note.txt` in the repo).
 
