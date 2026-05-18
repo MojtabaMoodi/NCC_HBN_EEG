@@ -20,6 +20,7 @@ This module provides tools for **user identification**: the model learns which *
 | Confidence / open-set analysis | `analyze_confidence.py` (e.g. `--split both`) or `run_analysis_test_unknown.sh` |
 | CNN/LaBraM experiments (non-ArcFace) | `main.py` |
 | Validate HDF5 setup | `validate.py` |
+| Registration / open-world eval (unknown-only) | `registering_users/` — see [registering_users/README.md](registering_users/README.md) |
 | Preprocessing | `data_processing/preprocess_user_identification.py` |
 
 ## Usage steps
