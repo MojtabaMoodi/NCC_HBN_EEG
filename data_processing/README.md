@@ -695,6 +695,8 @@ EEG/data_processing/
 ├── preprocess_user_identification.py  # User identification preprocessing
 ├── multi_file_dataset.py       # Multi-file dataset support
 ├── validate_128channels.py     # Validation for 128-channel data
+├── verify_train_val_test_user_split.py  # Check participant-level train/val/test splits (gender/age HDF5)
+├── verify_user_id_fold_partition.py     # Check 5-fold user-ID unknown partitions from JSON metadata
 ├── processed_eeg_data_hdf5/    # HDF5 files with train/val/test splits (60-channel)
 │   ├── eeg_data_train_1s_part00.h5
 │   ├── eeg_data_val_1s_part00.h5

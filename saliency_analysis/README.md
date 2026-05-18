@@ -117,7 +117,7 @@ pip install tqdm
    ```
 
 3. **Batch (config in code)**  
-   Set `RESNET_BASE` and `CNN_BASE` in `saliency_analysis/main.py`; then run:
+   Edit `RESNET_BASE` and `CNN_BASE` near the bottom of `saliency_analysis/main.py` (defaults: `final_logs/RESNET` and `CNN/report_2025-12-16`); then run:
    ```bash
    python saliency_analysis/main.py --batch --output_dir saliency_results
    ```
