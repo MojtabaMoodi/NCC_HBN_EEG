@@ -1,156 +1,168 @@
-# LaBraM Gender Classification Scripts
+# LaBraM Fine-Tuning Scripts (Project Extensions)
 
-This directory contains shell scripts for fine-tuning LaBraM models on gender classification tasks.
+This document describes how to run **project-specific** LaBraM fine-tuning on gender, age, combined, and multi-output tasks. The upstream paper README is in [README.md](README.md).
 
-## Scripts Overview
+## Layout
 
-### 1. `test_gender_setup.sh` - Quick Test
-**Purpose**: Verify the setup works before running full experiments
-**Usage**: 
+| Path | Purpose |
+|------|---------|
+| `run_class_finetuning.py` | Main training and evaluation entry point |
+| `dataset_config.py` | Dataset names, class counts, default HDF5 paths |
+| `runs/run_<experiment>_<segment>.sh` | SLURM/HPC-ready launchers (conda `eeg_env`, single GPU) |
+| `run_gender_baseline.sh` | Legacy single-script gender baseline (prefer `runs/`) |
+| `run_eval_majority_vote.sh` | Eval-only with participant-level aggregation |
+| `report_generator.py` | Summaries from `outputs/*/log.txt` |
+| [REPORT_GENERATION_PROCESS.md](REPORT_GENERATION_PROCESS.md) | Report pipeline details |
+
+## Data
+
+HDF5 multipart files: `eeg_data_{train,val,test}_{1s|2s|4s}_part*.h5`.
+
+Default directory (override with `--data_path` or env `EEG_HDF5_DIR`):
+
+- `~/scratch/processed_eeg_data_hdf5` (see `dataset_config.DATA_PATHS`)
+
+Preprocessing: [data_processing/README.md](../data_processing/README.md).
+
+## Datasets (`--dataset`)
+
+Names match the CNN experiment framework (see `dataset_config.VALID_DATASET_NAMES`). Examples:
+
+| Task | Example `--dataset` | `--nb_classes` |
+|------|---------------------|----------------|
+| Gender (binary, BCE) | `gender_baseline` | `1` |
+| Age (3-class) | `age_baseline` or `age_classification` | `3` |
+| Age regression | `age_regression_baseline` | `1` |
+| Combined gender+age | `combined_baseline` | `6` |
+| Multi-output heads | `multi_output_baseline` | `2` |
+
+Cross-validation and cross-task variants use the same naming as CNN (e.g. `gender_cv_gender_stratified`, `age_cross_task_active_to_passive`). CV runs create `fold_0/`, `fold_1/`, … under `--output_dir`.
+
+## Run scripts (`runs/`)
+
+Generated launchers live under `LaBraM/runs/`. Run from **project root** or **LaBraM/**:
+
 ```bash
-./test_gender_setup.sh
-```
-**Features**:
-- Runs only 2 epochs with small batch size
-- Tests basic functionality
-- Quick verification (~5-10 minutes)
+# Gender baseline, 1s (writes ./outputs/gender_baseline_1s by default)
+bash LaBraM/runs/run_gender_baseline_1s.sh
 
-### 2. `run_gender_baseline.sh` - Single Baseline Experiment
-**Purpose**: Run gender baseline classification experiment
-**Usage**:
+# Custom output directory
+bash LaBraM/runs/run_gender_baseline_4s.sh --output_dir /path/to/my_run
+
+# Age baseline, 2s
+bash LaBraM/runs/run_age_baseline_2s.sh
+```
+
+**Segment coverage:**
+
+- **1s and 4s:** full suite (baseline, CV, cross-task, cross-task CV) for gender, age, combined, multi-output
+- **2s:** `run_gender_baseline_2s.sh`, `run_age_baseline_2s.sh` only
+
+**Typical hyperparameters in `runs/` scripts** (see script header for exact values):
+
+- Gender/age baseline 1s: `epochs=50`, `batch_size=1024`, `lr=5e-4`, EMA enabled
+- Gender/age baseline 4s: `batch_size=256` (smaller than 1s due to longer windows)
+- Pretrained weights: `LaBraM/checkpoints/labram-base.pth`
+
+Scripts accept `--output_dir` and `--log_dir`; remaining CLI flags are forwarded to `run_class_finetuning.py`.
+
+## Direct Python usage
+
+From `LaBraM/` (or project root with `python LaBraM/run_class_finetuning.py`):
+
 ```bash
-./run_gender_baseline.sh
+cd LaBraM
+python run_class_finetuning.py \
+  --model labram_base_patch200_200 \
+  --finetune checkpoints/labram-base.pth \
+  --dataset gender_baseline \
+  --nb_classes 1 \
+  --segment_length 1s \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --output_dir ./outputs/gender_baseline_1s \
+  --epochs 50 \
+  --batch_size 1024 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling \
+  --auto_resume --save_ckpt
 ```
-**Features**:
-- Uses `gender_baseline` dataset
-- 30 epochs training
-- Full LaBraM-Base hyperparameters
-- Single experiment (~2-3 hours)
 
-### 3. `run_gender_experiments.sh` - Multiple Experiments
-**Purpose**: Run all gender classification experiments
-**Usage**:
+**Age regression:**
+
 ```bash
-./run_gender_experiments.sh
+python run_class_finetuning.py \
+  --dataset age_regression_baseline \
+  --nb_classes 1 \
+  --segment_length 4s \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --output_dir ./outputs/age_regression_baseline_4s \
+  ... # same model/pretrained flags as above
 ```
-**Features**:
-- Runs 4 different experiment types:
-  - `gender_baseline` - Standard train/val/test split
-  - `gender_cv_gender_stratified` - 5-fold cross-validation
-  - `gender_cross_task_active_to_passive` - Train on active, test on passive
-  - `gender_cross_task_passive_to_active` - Train on passive, test on active
-- Sequential execution (~8-12 hours total)
 
-## Configuration Details
+**Useful flags:** `--class_weight_power` (gender imbalance), `--early_stopping_patience` / `--early_stopping_min_delta` (val accuracy for classification, val MAE for regression), `--eval` (evaluation only).
 
-### Model Architecture
-- **Model**: `labram_base_patch200_200` (LaBraM-Base)
-- **Input Size**: 200 time points
-- **Classes**: 2 (male/female)
-- **Patch Size**: 200 (from model name)
+## Evaluation with participant aggregation
 
-### Training Hyperparameters
-Based on LaBraM paper recommendations:
-- **Batch Size**: 64 (reduced from paper's 512 for single GPU)
-- **Epochs**: 30
-- **Learning Rate**: 5e-4
-- **Min Learning Rate**: 1e-6
-- **Warmup Epochs**: 5
-- **Weight Decay**: 0.05
-- **Drop Path**: 0.1
-- **Layer Decay**: 0.65 (for Base model)
+Re-run test metrics without training (segment-level, participant mean-probability, participant majority vote):
 
-### Data Configuration
-- **Segment Length**: 1s (200 time points at 200Hz)
-- **Data Path**: `/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/data_processing/processed_eeg_data_1s_segments`
-- **Task Type**: Both active and passive tasks included
+```bash
+# Wrapper (from LaBraM/ or project root)
+./LaBraM/run_eval_majority_vote.sh \
+  --output_dir ./outputs/gender_baseline_2s \
+  --dataset gender_baseline --nb_classes 1 --segment_length 2s
 
-## Output Structure
+# Or directly
+python run_class_finetuning.py --eval \
+  --aggregate_by_participant majority_vote \
+  --output_dir ./outputs/gender_baseline_2s \
+  --dataset gender_baseline --nb_classes 1 \
+  --segment_length 2s --auto_resume \
+  --data_path ~/scratch/processed_eeg_data_hdf5
+```
 
-Each experiment creates:
+For age classification use `--dataset age_classification --nb_classes 3`.
+
+## Outputs
+
 ```
 outputs/
-├── gender_baseline_YYYYMMDD_HHMMSS/
-│   ├── checkpoint.pth              # Latest checkpoint
-│   ├── checkpoint-best.pth         # Best validation checkpoint
-│   ├── checkpoint-5.pth            # Epoch 5 checkpoint
-│   ├── checkpoint-10.pth           # Epoch 10 checkpoint
-│   ├── ...                         # More checkpoints
-│   ├── log.txt                     # Training logs
-│   └── logs/                       # TensorBoard logs
-└── ...
+├── gender_baseline_1s/
+│   ├── checkpoint-best.pth
+│   ├── checkpoint.pth
+│   ├── log.txt              # JSON lines, one object per epoch
+│   └── ...
+├── gender_cv_gender_stratified_4s/
+│   ├── fold_0/log.txt
+│   ├── fold_1/log.txt
+│   └── ...
 ```
 
-## Usage Recommendations
+TensorBoard logs go to `--log_dir` (default `./logs/<dataset>_<segment>` in run scripts).
 
-### 1. First Time Setup
+## Reports
+
 ```bash
-# Test the setup
-./test_gender_setup.sh
-
-# If successful, run baseline experiment
-./run_gender_baseline.sh
+cd LaBraM
+python report_generator.py 1s    # or 2s, 4s, or no arg for all
 ```
 
-### 2. Full Experiment Suite
+See [REPORT_GENERATION_PROCESS.md](REPORT_GENERATION_PROCESS.md). Reports are written under `reports_{segment}/` by default.
+
+## Environment
+
+Use conda env **`eeg_env`** (see run scripts). Official LaBraM env setup is in [README.md](README.md).
+
+## Monitoring
+
 ```bash
-# Run all gender experiments
-./run_gender_experiments.sh
+tensorboard --logdir=LaBraM/logs/gender_baseline_1s
+tail -f LaBraM/outputs/gender_baseline_1s/log.txt
 ```
-
-### 3. Custom Experiments
-You can modify the scripts to:
-- Change hyperparameters
-- Use different datasets
-- Adjust batch size for your GPU memory
-- Modify number of epochs
-
-## Monitoring Training
-
-### TensorBoard
-```bash
-# Start TensorBoard (in another terminal)
-tensorboard --logdir=outputs/gender_baseline_YYYYMMDD_HHMMSS/logs
-```
-
-### Log Files
-- **Training logs**: `outputs/*/log.txt`
-- **Console output**: Shows real-time progress
-- **Checkpoints**: Saved every 5 epochs
 
 ## Troubleshooting
 
-### Common Issues
-1. **CUDA out of memory**: Reduce `BATCH_SIZE` in the script
-2. **Data path not found**: Check if the data directory exists
-3. **Import errors**: Ensure all dependencies are installed
-4. **Model not found**: Check if LaBraM models are properly registered
-
-### Performance Tips
-1. **GPU Memory**: Adjust batch size based on your GPU
-2. **CPU**: Increase `NUM_WORKERS` if you have more CPU cores
-3. **Storage**: Ensure enough disk space for checkpoints and logs
-
-## Expected Results
-
-### Baseline Performance
-- **Training Time**: ~2-3 hours for 30 epochs
-- **Memory Usage**: ~8-12GB GPU memory
-- **Expected Accuracy**: 70-85% (typical for EEG gender classification)
-
-### Cross-Validation
-- **Training Time**: ~2-3 hours per fold (5 folds total)
-- **Expected Accuracy**: Similar to baseline with confidence intervals
-
-### Cross-Task
-- **Training Time**: ~2-3 hours per direction
-- **Expected Accuracy**: Lower than baseline (domain shift effect)
-
-## Next Steps
-
-After running these experiments, you can:
-1. **Analyze results** using the saved checkpoints
-2. **Run age classification** experiments
-3. **Run combined** age+gender experiments
-4. **Run multi-output** experiments
-5. **Compare with CNN** baseline results
+| Issue | Fix |
+|-------|-----|
+| CUDA OOM | Lower `--batch_size` in the run script or CLI |
+| HDF5 not found | Set `--data_path` or `EEG_HDF5_DIR` |
+| Wrong task/classes | Match `--dataset` and `--nb_classes` to training |
+| Resume | `--auto_resume` or `--resume path/to/checkpoint.pth` |

@@ -11,16 +11,12 @@ LaBraM generates comprehensive reports from JSON-formatted log files using the `
 - **Location**: `outputs/{experiment_name}/log.txt`
 - **Content**: One JSON object per epoch containing training and evaluation metrics
 
-### Example Log Entry
+### Example Log Entry (classification)
 ```json
 {
   "train_lr": 0.00014994946942900462,
-  "train_min_lr": 5.543940617280463e-07,
   "train_loss": 0.9689723954658316,
   "train_class_acc": 0.5000049321338383,
-  "train_loss_scale": 853.3333333333334,
-  "train_weight_decay": 0.05000000000000037,
-  "train_grad_norm": Infinity,
   "val_accuracy": 0.4966634672517026,
   "val_balanced_accuracy": 0.4841386241198486,
   "val_f1_weighted": 0.4964280950466308,
@@ -29,10 +25,14 @@ LaBraM generates comprehensive reports from JSON-formatted log files using the `
   "test_balanced_accuracy": 0.526822638698165,
   "test_f1_weighted": 0.5327838008093472,
   "test_loss": 0.9024075855101857,
+  "test_participant_mean_prob_metrics": { "accuracy": 0.54 },
+  "test_participant_metrics": { "accuracy": 0.53 },
   "epoch": 1,
   "n_parameters": 5825339
 }
 ```
+
+For **age regression** (`age_regression_baseline_*`), logs use `val_mae`, `test_mae`, `val_mse`, `test_r2`, etc. instead of accuracy fields. Participant-level regression metrics may appear as `test_participant_median_metrics` / `test_participant_mean_metrics` when `--aggregate_by_participant` is used during training or eval.
 
 ## Report Generation Process
 
@@ -58,7 +58,7 @@ LaBraM generates comprehensive reports from JSON-formatted log files using the `
 **Process**:
 1. **Read all lines** from log file
 2. **Parse JSON lines**: Each line is a JSON object (one per epoch)
-3. **Find best epoch**: Epoch with highest `val_accuracy`
+3. **Find best epoch**: Epoch with highest `val_accuracy` (classification experiments). For age-regression logs that only contain `val_mae`, this selection may not reflect the training checkpoint criterion (training uses lowest val MAE); prefer inspecting `log.txt` or checkpoint metadata for regression runs.
 4. **Extract metrics**:
    - **Best epoch metrics**: Used for validation/test reporting
    - **Final epoch metrics**: Used for training metrics
@@ -142,9 +142,9 @@ LaBraM generates comprehensive reports from JSON-formatted log files using the `
 
 **Examples**:
 - `age_baseline_1s` → target: `age`, type: `baseline`, segment: `1s`
+- `age_regression_baseline_4s` → target: `age`, type: `regression_baseline`, segment: `4s`
 - `gender_baseline_2s` → target: `gender`, type: `baseline`, segment: `2s`
-- `age_baseline_4s` → target: `age`, type: `baseline`, segment: `4s`
-- `gender_cv_gender_stratified_1s` → target: `gender`, type: `cv_stratified`, segment: `1s`
+- `gender_cv_gender_stratified_1s` → target: `gender`, type: `cv_gender_stratified`, segment: `1s`
 
 ## Report Types Generated
 
@@ -228,9 +228,11 @@ Test Balanced Accuracy: 0.5462
 ## Key Features
 
 ### Best Epoch Selection
-- **Criterion**: Highest `val_accuracy`
-- **Usage**: Validation and test metrics from best epoch are reported
-- **Rationale**: Prevents overfitting by selecting model with best validation performance
+- **Criterion (report generator)**: Highest `val_accuracy` in `log.txt`
+- **Training (classification)**: Best checkpoint by validation accuracy (or early stopping on val accuracy)
+- **Training (age regression)**: Best checkpoint by lowest validation MAE (years); early stopping monitors val MAE when `--early_stopping_patience` is set
+- **Usage**: Validation and test metrics from the selected log epoch are reported
+- **Participant metrics**: When present, `test_participant_mean_prob_metrics` and `test_participant_metrics` (majority vote) are taken from the same epoch
 
 ### Cross-Validation Support
 - Automatically detects CV experiments

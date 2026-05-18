@@ -141,6 +141,21 @@ OMP_NUM_THREADS=1 torchrun --nnodes=1 --nproc_per_node=8 run_class_finetuning.py
 
 ---
 
+## Project Extensions (This Repository)
+
+Beyond the upstream TUAB/TUEV examples, this repo adds fine-tuning on custom HDF5 data (gender, age, age regression, combined, multi-output) via `run_class_finetuning.py` and `dataset_config.py`.
+
+| Topic | Document / script |
+|-------|-------------------|
+| Run scripts, datasets, eval | [README_gender_scripts.md](README_gender_scripts.md) |
+| Report generation from `outputs/` | [REPORT_GENERATION_PROCESS.md](REPORT_GENERATION_PROCESS.md), `report_generator.py` |
+| Participant-level eval (no retrain) | `run_eval_majority_vote.sh` |
+| Shell launchers | `runs/run_<experiment>_{1s,2s,4s}.sh` |
+
+Data preprocessing and loaders: [data_processing/README.md](../data_processing/README.md). CNN baseline comparison: [CNN/README.md](../CNN/README.md).
+
+---
+
 ## Citation
 
 If you find our paper/code useful, please consider citing our work:
