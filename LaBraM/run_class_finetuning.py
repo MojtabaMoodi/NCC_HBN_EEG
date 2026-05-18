@@ -660,16 +660,19 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             get_layer_scale=assigner.get_scale if assigner is not None else None)
         loss_scaler = NativeScaler()
 
-    print("Use step level LR scheduler!")
-    lr_schedule_values = utils.cosine_scheduler(
-        args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
-        warmup_epochs=args.warmup_epochs, warmup_steps=args.warmup_steps,
-    )
-    if args.weight_decay_end is None:
-        args.weight_decay_end = args.weight_decay
-    wd_schedule_values = utils.cosine_scheduler(
-        args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
-    print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
+    lr_schedule_values = None
+    wd_schedule_values = None
+    if not args.eval and args.epochs > 0:
+        print("Use step level LR scheduler!")
+        lr_schedule_values = utils.cosine_scheduler(
+            args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
+            warmup_epochs=args.warmup_epochs, warmup_steps=args.warmup_steps,
+        )
+        if args.weight_decay_end is None:
+            args.weight_decay_end = args.weight_decay
+        wd_schedule_values = utils.cosine_scheduler(
+            args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
+        print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
     if getattr(args, 'prediction_type', 'classification') == 'regression':
         criterion = torch.nn.MSELoss()
@@ -715,6 +718,7 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         aggregate = getattr(args, 'aggregate_by_participant', None)
         balanced_accuracy = []
         accuracy = []
+        f1_scores = []
         # Wrap single DataLoader in a list so we iterate over loaders, not over batches
         test_loaders = data_loader_test if isinstance(data_loader_test, list) else [data_loader_test]
         for data_loader in test_loaders:
@@ -732,20 +736,63 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             else:
                 accuracy.append(test_stats['accuracy'])
                 balanced_accuracy.append(test_stats.get('balanced_accuracy', 0.0))
+                f1_scores.append(test_stats.get('f1_weighted', float('nan')))
             if test_stats.get('segment_metrics') and test_stats.get('participant_metrics'):
-                seg_acc = test_stats['segment_metrics'].get('accuracy')
+                seg = test_stats['segment_metrics']
                 part_mp = test_stats.get('participant_mean_prob_metrics') or {}
                 part_mv = test_stats.get('participant_metrics') or {}
+                seg_acc = seg.get('accuracy')
                 part_mp_acc = part_mp.get('accuracy')
                 part_mv_acc = part_mv.get('accuracy')
                 if seg_acc is not None:
                     _mp = f'{part_mp_acc:.4f}' if part_mp_acc is not None else 'N/A'
                     _mv = f'{part_mv_acc:.4f}' if part_mv_acc is not None else 'N/A'
                     print(f'  Test segment-level: {seg_acc:.4f} | participant (mean prob): {_mp} | participant (majority vote): {_mv}')
+                if not is_reg_task:
+                    seg_f1 = seg.get('f1_weighted')
+                    mp_f1 = part_mp.get('f1_weighted')
+                    mv_f1 = part_mv.get('f1_weighted')
+                    if seg_f1 is not None:
+                        _mpf = f'{mp_f1:.4f}' if isinstance(mp_f1, (int, float)) else 'N/A'
+                        _mvf = f'{mv_f1:.4f}' if isinstance(mv_f1, (int, float)) else 'N/A'
+                        print(f'  Test segment F1: {seg_f1:.4f} | participant (mean prob): {_mpf} | participant (majority vote): {_mvf}')
         if is_reg_task:
             print(f"======Test MAE (years): mean={np.nanmean(accuracy)} std={np.nanstd(accuracy)}, R²: mean={np.nanmean(balanced_accuracy)} std={np.nanstd(balanced_accuracy)}")
         else:
-            print(f"======Accuracy: {np.mean(accuracy)} {np.std(accuracy)}, balanced accuracy: {np.mean(balanced_accuracy)} {np.std(balanced_accuracy)}")
+            f1_mean = np.nanmean(f1_scores) if f1_scores else float('nan')
+            print(
+                f"======Test accuracy: {np.mean(accuracy):.4f} ± {np.std(accuracy):.4f}, "
+                f"balanced accuracy: {np.mean(balanced_accuracy):.4f} ± {np.std(balanced_accuracy):.4f}, "
+                f"F1 (weighted): {f1_mean:.4f}"
+            )
+        if args.dataset in CUSTOM_DATASET_CONFIGS and not is_reg_task:
+            try:
+                dataset_type, _ = get_dataset_type_and_params(args.dataset)
+                hdf5_dir = args.data_path if args.data_path is not None else get_data_path(getattr(args, 'segment_length', '1s'))
+                segment_length = getattr(args, 'segment_length', '1s')
+                print(f"\n{'='*80}")
+                print("Eval by task type (active/passive)")
+                print(f"{'='*80}")
+                task_type_results = evaluate_by_task_type(
+                    model, device, dataset_type, hdf5_dir, segment_length,
+                    ch_names=ch_names, metrics=metrics, is_binary=cls_is_binary,
+                    random_seed=args.seed,
+                    is_regression=is_reg_task,
+                    age_min=getattr(args, 'age_min', None),
+                    age_max=getattr(args, 'age_max', None),
+                )
+                print(f"\n{'='*80}")
+                print("Task-type results:")
+                print(f"{'='*80}")
+                for task_type, results in task_type_results.items():
+                    num_samples = results.get('num_samples', 0)
+                    acc = results.get('accuracy', 0.0) * 100
+                    f1 = results.get('f1_weighted', 0.0)
+                    print(f"  {task_type.upper()} tasks: Accuracy = {acc:.4f}%, F1-Score = {f1:.4f} (n={num_samples:,})")
+            except Exception as e:
+                print(f"Warning: Could not evaluate by task type: {e}")
+                import traceback
+                traceback.print_exc()
         exit(0)
 
     print(f"Start training for {args.epochs} epochs")
