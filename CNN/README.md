@@ -169,7 +169,7 @@ After training, you can re-run evaluation only (no retraining) with **participan
 |--------|------------------------------------------|
 | **CNN** | `python CNN/main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --results_dir <DIR>` or `--checkpoint_dir <DIR>` (dir with `*_best.pth` files) |
 | **ResNet** | `python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint /path/to/gender_resnet34_2s_best.pth` (or omit `--checkpoint` to use `results_dir/checkpoints/...`) |
-| **LaBraM** | `python run_class_finetuning.py --eval --aggregate_by_participant majority_vote --resume /path/to/checkpoint-best.pth --output_dir <DIR> --dataset ... --segment_length 2s ...` (or use `--output_dir` only so it loads `output_dir/checkpoint-best.pth`) |
+| **LaBraM** | `python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote --resume /path/to/checkpoint-best.pth --output_dir <DIR> --dataset ... --segment_length 2s ...` (or `./LaBraM/run_eval_majority_vote.sh`; reports segment-level, participant mean-prob, and majority vote) |
 
 Use the same `--mode` / `--segment_length` and other args as in your training run.
 
@@ -179,7 +179,7 @@ Use the same `--mode` / `--segment_length` and other args as in your training ru
 |----------|----------------------|-----------------|-------------------|------------------------|
 | **CNN** | `--target gender` \| `age` \| `all` (default). Gender = gender baseline; age = age classification + regression. | `--checkpoint_dir DIR` (dir with `*_best.pth`). Default: `results_dir/checkpoints/`. | `--results_dir DIR` | `--data_path DIR` |
 | **ResNet** | **Gender:** `run_resnet_gender.py`. **Age:** `run_resnet_age.py`. (Separate scripts.) | `--checkpoint /path/to/model.pth`. Default: `results_dir/checkpoints/<name>_best.pth`. | `--results_dir DIR` | `--data_path DIR` |
-| **LaBraM** | **Gender:** `--dataset gender_baseline --nb_classes 1`. **Age:** `--dataset age_classification --nb_classes 3`. | `--resume /path/to/checkpoint-best.pth` or `--output_dir DIR` (loads `DIR/checkpoint-best.pth`). | `--output_dir DIR` | `--data_path DIR` |
+| **LaBraM** | **Gender:** `--dataset gender_baseline --nb_classes 1`. **Age (3-class):** `--dataset age_baseline` or `age_classification --nb_classes 3`. **Age regression:** `--dataset age_regression_baseline --nb_classes 1`. | `--resume /path/to/checkpoint-best.pth` or `--output_dir DIR` (loads `DIR/checkpoint-best.pth`). | `--output_dir DIR` | `--data_path DIR` |
 
 You can set task and all three paths independently (e.g. load checkpoint from one place, save eval results to another, read data from a third).
 
