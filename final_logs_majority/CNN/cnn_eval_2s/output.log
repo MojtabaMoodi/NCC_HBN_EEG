@@ -1,0 +1,300 @@
+CUDA_VISIBLE_DEVICES=1,2,3 python CNN/main.py --mode 2s --eval_only --aggregate_by_participant majority_vote --checkpoint_dir final_logs/checkpoints --results_dir final_logs_majority/cnn_eval_2s --data_path ~/scratch/processed_eeg_data_hdf5
+================================================================================
+EEG CLASSIFICATION EXPERIMENT RUNNER
+================================================================================
+Mode: 2s (EEG segment length)
+Results directory: final_logs_majority/cnn_eval_2s
+Reports directory: reports
+Epochs: 50, Learning rate: 0.0001
+Batch size: 192 (auto-selected), Random seed: 42
+Number of GPUs: 3
+Number of workers: 6
+================================================================================
+Creating all experiments for 2s EEG segments...
+Using data path (override): /home/mojtabam/scratch/processed_eeg_data_hdf5
+Evaluation will use participant-level aggregation: majority_vote
+Loading checkpoints from: final_logs/checkpoints
+Running 3 experiments for 2s segments...
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 3
+Random seed: 42
+Results directory: final_logs_majority/cnn_eval_2s
+Generate reports: True
+Mode: EVAL ONLY (load checkpoint, no training)
+================================================================================
+
+Progress: 1/3
+Experiment: gender_baseline_2s
+Setting up experiment: gender_baseline_2s
+Creating standard loaders for gender classification (train on both task types)
+Using stratified train batches for gender classification (balanced classes per batch).
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 3
+Requested GPUs: 3
+Using GPUs: 3
+Device: cuda
+GPU Device IDs: [0, 1, 2]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.7718490501136646, 1.4196280064082287] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: gender_baseline_2s
+Model: gender_cnn | Target: gender
+Channels: 60
+================================================================================
+Evaluating gender_cnn on gender classification...
+? Loaded checkpoint from final_logs/checkpoints/gender_baseline_2s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.8411
+   F1-Score: 0.8445
+   Evaluation time: 229.65s
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/gender_baseline_2s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.8583
+  F1-Score (weighted): 0.8605
+  ROC-AUC: 0.9439
+  Number of samples: 360
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.8450
+  F1-Score (weighted): 0.8483
+  ROC-AUC: 0.9423
+  Number of samples: 471
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.8583, F1 = 0.8605
+  PASSIVE: Accuracy = 0.8450, F1 = 0.8483
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/gender_baseline_2s_task_active
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/gender_baseline_2s_task_passive
+  ACTIVE tasks: Accuracy = 0.8583, F1-Score = 0.8605
+  PASSIVE tasks: Accuracy = 0.8450, F1-Score = 0.8483
+
+✅ Experiment 'gender_baseline_2s' completed successfully!
+   Total time: 686.69s
+   Training time: 0.00s
+   Evaluation time: 686.69s
+   Segment-level (per-window):  Accuracy: 0.8022
+   Participant (mean prob):     Accuracy: 0.8496
+   Participant (majority vote): Accuracy: 0.8411
+   Result saved to: final_logs_majority/cnn_eval_2s/gender_baseline_2s/gender_baseline_2s_result.json
+✅ Experiment completed: gender_baseline_2s
+
+Progress: 2/3
+Experiment: age_classification_2s
+Setting up experiment: age_classification_2s
+Creating standard loaders for age classification (train on both task types)
+Using stratified train batches for age classification (balanced classes per batch).
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 3
+Requested GPUs: 3
+Using GPUs: 3
+Device: cuda
+GPU Device IDs: [0, 1, 2]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.9663624255243037, 0.8122259684152144, 1.3623846753650544] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: age_classification_2s
+Model: age_cnn | Target: age
+Channels: 60
+================================================================================
+Evaluating age_cnn on age classification...
+? Loaded checkpoint from final_logs/checkpoints/age_classification_2s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.5508
+   F1-Score: 0.4193
+   Evaluation time: 259.37s
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_classification_2s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.5444
+  F1-Score (weighted): 0.4175
+  ROC-AUC: 0.8169
+  Number of samples: 360
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.5520
+  F1-Score (weighted): 0.4206
+  ROC-AUC: 0.8512
+  Number of samples: 471
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.5444, F1 = 0.4175
+  PASSIVE: Accuracy = 0.5520, F1 = 0.4206
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_classification_2s_task_active
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_classification_2s_task_passive
+  ACTIVE tasks: Accuracy = 0.5444, F1-Score = 0.4175
+  PASSIVE tasks: Accuracy = 0.5520, F1-Score = 0.4206
+
+✅ Experiment 'age_classification_2s' completed successfully!
+   Total time: 759.39s
+   Training time: 0.00s
+   Evaluation time: 759.39s
+   Segment-level (per-window):  Accuracy: 0.5345
+   Participant (mean prob):     Accuracy: 0.5720
+   Participant (majority vote): Accuracy: 0.5508
+   Result saved to: final_logs_majority/cnn_eval_2s/age_classification_2s/age_classification_2s_result.json
+✅ Experiment completed: age_classification_2s
+
+Progress: 3/3
+Experiment: age_regression_2s
+Setting up experiment: age_regression_2s
+📊 Using training data age range for regression normalization: min=5.04, max=21.90 years
+   (Computed from 12 file(s), used for all splits to avoid data leakage)
+Creating standard loaders for age regression (train on both task types)
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 3
+Requested GPUs: 3
+Using GPUs: 3
+Device: cuda
+GPU Device IDs: [0, 1, 2]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: age_regression_2s
+Model: age_regression_cnn | Target: age
+Channels: 60
+================================================================================
+Evaluating age_regression_cnn on age regression...
+? Loaded checkpoint from final_logs/checkpoints/age_regression_2s_best.pth
+✅ Evaluation completed
+   MAE: 1.6906 years
+   RMSE: 2.3089 years
+   R²: 0.5707
+   Evaluation time: 245.56s
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_regression_2s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  MAE: 1.6741 years
+  RMSE: 2.2288 years
+  R�: 0.6078
+  Number of samples: 360
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  MAE: 1.7106 years
+  RMSE: 2.3549 years
+  R�: 0.5544
+  Number of samples: 471
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: MAE = 1.6741 years, RMSE = 2.2288 years, R� = 0.6078
+  PASSIVE: MAE = 1.7106 years, RMSE = 2.3549 years, R� = 0.5544
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_regression_2s_task_active
+   Evaluation results saved to: final_logs_majority/cnn_eval_2s/age_regression_2s_task_passive
+  ACTIVE tasks: MAE = 1.6741 years, RMSE = 2.2288 years, R² = 0.6078
+  PASSIVE tasks: MAE = 1.7106 years, RMSE = 2.3549 years, R² = 0.5544
+
+✅ Experiment 'age_regression_2s' completed successfully!
+   Total time: 712.87s
+   Training time: 0.00s
+   Evaluation time: 712.87s
+   Segment-level (per-window):  MAE: 2.0037 years, RMSE: 2.6885, R²: 0.4057
+   Participant (mean prob):     MAE: N/A, RMSE: ..., R²: ...
+   Participant (majority vote): MAE: 1.6906 years, RMSE: 2.3089, R²: 0.5707
+   Result saved to: final_logs_majority/cnn_eval_2s/age_regression_2s/age_regression_2s_result.json
+✅ Experiment completed: age_regression_2s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     MAE (years)     RMSE (years)    R²         Time (s)   Description
+------------------------------------------------------------------------------------------------------------------------
+gender_cnn           gender     N/A             N/A             N/A        686.69     Gender classification baseline with 2s segme...
+age_cnn              age        N/A             N/A             N/A        759.39     Age classification baseline with 2s segments...
+age_regression_cnn   age        1.6906          2.3089          0.5707     712.87     Age regression baseline with 2s segments (tr...
+
+Best Model: age_regression_cnn (MAE: 1.6906)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: reports/experiment_results.csv
+Reports generated in: reports
+Reports generated in: reports
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: final_logs_majority/cnn_eval_2s
+================================================================================
+All 2s experiments completed successfully!
+Results saved to: final_logs_majority/cnn_eval_2s
+Reports generated in: report

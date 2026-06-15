@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_4s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 405.9706070423126,
+  "training_time": 0.0,
+  "evaluation_time": 405.9706070423126,
+  "description": "Age regression baseline with 4s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 1.6321265128886144,
+    "mse": 4.95319641230412,
+    "rmse": 2.2255777704461646,
+    "r2": 0.6011258827632369,
+    "mae_normalized": 0.09677481173658033,
+    "mse_normalized": 0.017414162011040006,
+    "rmse_normalized": 0.13196272962863417,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 1.6224423859122787,
+        "mse": 4.7630268818504025,
+        "rmse": 2.1824359971945118,
+        "r2": 0.6239052703294329,
+        "mae_normalized": 0.09620060406482986,
+        "mse_normalized": 0.016745574953870607,
+        "rmse_normalized": 0.12940469448157824,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 360
+      },
+      "passive": {
+        "mae": 1.6528175283195552,
+        "mse": 5.117622949343359,
+        "rmse": 2.262216379868062,
+        "r2": 0.5887546302376974,
+        "mae_normalized": 0.09800165849579637,
+        "mse_normalized": 0.01799224333803984,
+        "rmse_normalized": 0.13413516816271503,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 471
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "final_logs/checkpoints/age_regression_4s_best.pth",
+  "segment_metrics": {
+    "mae": 1.9984962940216064,
+    "mse": 7.132270812988281,
+    "rmse": 2.670631163786621,
+    "r2": 0.41651052236557007,
+    "mae_normalized": 0.11849825829267502,
+    "mse_normalized": 0.02507522702217102,
+    "rmse_normalized": 0.15835159305220461,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}

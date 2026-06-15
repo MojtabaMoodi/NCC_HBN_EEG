@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_1s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 1030.1819899082184,
+  "training_time": 0.0,
+  "evaluation_time": 1030.1819899082184,
+  "description": "Age regression baseline with 1s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 1.7296681999424812,
+    "mse": 5.382624585831827,
+    "rmse": 2.3200484016140326,
+    "r2": 0.5665446206095763,
+    "mae_normalized": 0.10255841878331583,
+    "mse_normalized": 0.018923920793740452,
+    "rmse_normalized": 0.13756424242418686,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 1.7072256227792209,
+        "mse": 5.300123458051518,
+        "rmse": 2.3021996998634844,
+        "r2": 0.5814954337603665,
+        "mae_normalized": 0.10122771545688415,
+        "mse_normalized": 0.01863386809126918,
+        "rmse_normalized": 0.1365059269455696,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 360
+      },
+      "passive": {
+        "mae": 1.753203375066869,
+        "mse": 5.588117402192383,
+        "rmse": 2.363919922965324,
+        "r2": 0.5509463221328896,
+        "mae_normalized": 0.1039539062800657,
+        "mse_normalized": 0.01964638057492708,
+        "rmse_normalized": 0.14016554703252537,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 471
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "final_logs/checkpoints/age_regression_1s_best.pth",
+  "segment_metrics": {
+    "mae": 2.082918882369995,
+    "mse": 7.688013553619385,
+    "rmse": 2.772726736196588,
+    "r2": 0.3678346872329712,
+    "mae_normalized": 0.12350396066904068,
+    "mse_normalized": 0.027029072865843773,
+    "rmse_normalized": 0.164405209363462,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}

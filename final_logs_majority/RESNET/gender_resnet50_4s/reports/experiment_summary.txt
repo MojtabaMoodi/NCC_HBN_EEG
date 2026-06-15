@@ -1,0 +1,20 @@
+EEG CLASSIFICATION EXPERIMENT SUMMARY
+==================================================
+Generated: 2026-03-09 11:45:41
+
+Total Experiments: 1
+Successful: 1
+Failed: 0
+
+SUCCESSFUL EXPERIMENTS:
+------------------------------
+
+Experiment: gender_resnet50_4s
+Model: gender_resnet50
+Target: gender
+Combined Accuracy: 0.8559
+F1-Score: 0.8587
+Active Task Accuracy: 0.8361 (n=360)
+Passive Task Accuracy: 0.8493 (n=471)
+  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)
+Training Time: 336.27s

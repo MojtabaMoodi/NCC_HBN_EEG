@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EEG Classification Experiment Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { background-color: #f0f0f0; padding: 20px; border-radius: 5px; }
+        .experiment { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { border-left: 5px solid #4CAF50; }
+        .failure { border-left: 5px solid #f44336; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .metric { background-color: #f9f9f9; padding: 10px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EEG Classification Experiment Report</h1>
+        <p>Generated: 2026-03-09 12:12:00</p>
+        <p>Total Experiments: 1 | Successful: 1 | Failed: 0</p>
+    </div>
+
+    <div class="experiment success">
+        <h2>age_resnet18_2s - SUCCESS</h2>
+        <p><strong>Model:</strong> age_resnet | <strong>Target:</strong> age</p>
+
+        <div class="metrics">
+            <div class="metric"><strong>Combined Accuracy:</strong> 0.6038</div><div class="metric"><strong>Active Task Accuracy:</strong> 0.5889 (n=360)</div><div class="metric"><strong>Passive Task Accuracy:</strong> 0.6157 (n=471)</div><div class="metric" style="font-size: 0.9em; color: #666;"><em>Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2</em></div>
+            <div class="metric"><strong>Precision:</strong> 0.6575</div>
+            <div class="metric"><strong>Recall:</strong> 0.6038</div>
+            <div class="metric"><strong>F1-Score:</strong> 0.5557</div>
+            <div class="metric"><strong>Training Time:</strong> 576.09s</div>
+        </div>
+    </div>
+
+    <h2>Model Comparison</h2>
+    <table>
+        <tr>
+            <th>Experiment</th>
+            <th>Model</th>
+            <th>Target</th>
+            <th>Combined Accuracy</th>
+            <th>Active Accuracy</th>
+            <th>Passive Accuracy</th>
+            <th>F1-Score</th>
+            <th>Training Time (s)</th>
+        </tr>
+
+        <tr>
+            <td>age_resnet18_2s</td>
+            <td>age_resnet</td>
+            <td>age</td>
+            <td>0.6038</td>
+            <td>0.5889</td>
+            <td>0.6157</td>
+            <td>0.5557</td>
+            <td>576.09</td>
+        </tr>
+    </table>
+
+</body>
+</html>

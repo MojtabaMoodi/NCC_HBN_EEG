@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_2s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 712.8721277713776,
+  "training_time": 0.0,
+  "evaluation_time": 712.8721277713776,
+  "description": "Age regression baseline with 2s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 1.6906084221864635,
+    "mse": 5.331147226533078,
+    "rmse": 2.3089277222410143,
+    "r2": 0.5706900217886941,
+    "mae_normalized": 0.10024242023236939,
+    "mse_normalized": 0.01874293966557398,
+    "rmse_normalized": 0.1369048562527056,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 1.6741452195084918,
+        "mse": 4.967437611259792,
+        "rmse": 2.228774912650399,
+        "r2": 0.6077647361846579,
+        "mae_normalized": 0.09926625611325209,
+        "mse_normalized": 0.01746423039622043,
+        "rmse_normalized": 0.1321523000035203,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 360
+      },
+      "passive": {
+        "mae": 1.7106291831664906,
+        "mse": 5.545413997271645,
+        "rmse": 2.3548702718561048,
+        "r2": 0.554377910923344,
+        "mae_normalized": 0.1014295251285677,
+        "mse_normalized": 0.01949624640906491,
+        "rmse_normalized": 0.1396289597793556,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 471
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "final_logs/checkpoints/age_regression_2s_best.pth",
+  "segment_metrics": {
+    "mae": 2.0037364959716797,
+    "mse": 7.228018760681152,
+    "rmse": 2.688497491291586,
+    "r2": 0.4056759476661682,
+    "mae_normalized": 0.11880894750356674,
+    "mse_normalized": 0.025411853566765785,
+    "rmse_normalized": 0.15941095811381908,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}

@@ -1,0 +1,38 @@
+EEG CLASSIFICATION EXPERIMENT SUMMARY
+==================================================
+Generated: 2026-03-08 06:24:56
+
+Total Experiments: 3
+Successful: 3
+Failed: 0
+
+SUCCESSFUL EXPERIMENTS:
+------------------------------
+
+Experiment: gender_baseline_1s
+Model: gender_cnn
+Target: gender
+Combined Accuracy: 0.8644
+F1-Score: 0.8665
+Active Task Accuracy: 0.8861 (n=360)
+Passive Task Accuracy: 0.8684 (n=471)
+  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)
+Training Time: 1055.23s
+
+Experiment: age_classification_1s
+Model: age_cnn
+Target: age
+Combined Accuracy: 0.5572
+F1-Score: 0.4236
+Active Task Accuracy: 0.5417 (n=360)
+Passive Task Accuracy: 0.5520 (n=471)
+  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)
+Training Time: 1188.32s
+
+Experiment: age_regression_1s
+Model: age_regression_cnn
+Target: age
+MAE: 1.7297 years
+RMSE: 2.3200 years
+R²: 0.5665
+Training Time: 1030.18s

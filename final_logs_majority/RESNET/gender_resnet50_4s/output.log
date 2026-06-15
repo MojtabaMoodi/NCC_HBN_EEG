@@ -1,0 +1,149 @@
+================================================================================
+RESNET50 GENDER CLASSIFICATION EXPERIMENT
+================================================================================
+Model: ResNet50
+Task: Gender Classification (2 classes)
+Mode: 4s (EEG segment length)
+Results directory: final_logs_majority
+Reports directory: final_logs_majority/gender_resnet50_4s/reports
+Epochs: 50, Learning rate: 0.0001
+Batch size: 128 (auto-selected), Random seed: 42
+Number of GPUs: 1
+Using data path (override): /home/mojtabam/scratch/processed_eeg_data_hdf5
+Number of workers: 4
+================================================================================
+Evaluation will use participant-level aggregation: majority_vote
+
+Starting ResNet50 gender classification experiment...
+Experiment name: gender_resnet50_4s
+Model type: gender_resnet50
+Training: Both active and passive tasks
+Evaluation: Separate accuracy reports for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: final_logs_majority
+Generate reports: True
+Mode: EVAL ONLY (load checkpoint, no training)
+================================================================================
+
+Progress: 1/1
+Experiment: gender_resnet50_4s
+Setting up experiment: gender_resnet50_4s
+Creating loaders for evaluation only (skipping stratified train-batch scan).
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 1
+Requested GPUs: 1
+Using GPUs: 1
+Device: cuda
+GPU Device IDs: [0]
+  GPU 0: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.7714920399851907, 1.420837310786854] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: gender_resnet50_4s
+Model: gender_resnet50 | Target: gender
+Channels: 60
+================================================================================
+Evaluating gender_resnet50 on gender classification...
+? Loaded checkpoint from final_logs/checkpoints/gender_resnet50_4s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.8559
+   F1-Score: 0.8587
+   Evaluation time: 123.78s
+   Evaluation results saved to: final_logs_majority/gender_resnet50_4s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.8361
+  F1-Score (weighted): 0.8389
+  ROC-AUC: 0.9373
+  Number of samples: 360
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.8493
+  F1-Score (weighted): 0.8523
+  ROC-AUC: 0.9416
+  Number of samples: 471
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.8361, F1 = 0.8389
+  PASSIVE: Accuracy = 0.8493, F1 = 0.8523
+   Evaluation results saved to: final_logs_majority/gender_resnet50_4s_task_active
+   Evaluation results saved to: final_logs_majority/gender_resnet50_4s_task_passive
+  ACTIVE tasks: Accuracy = 0.8361, F1-Score = 0.8389
+  PASSIVE tasks: Accuracy = 0.8493, F1-Score = 0.8523
+
+✅ Experiment 'gender_resnet50_4s' completed successfully!
+   Total time: 336.27s
+   Training time: 0.00s
+   Evaluation time: 336.27s
+   Segment-level (per-window):  Accuracy: 0.7820
+   Participant (mean prob):     Accuracy: 0.8538
+   Participant (majority vote): Accuracy: 0.8559
+   Result saved to: final_logs_majority/gender_resnet50_4s/gender_resnet50_4s_result.json
+✅ Experiment completed: gender_resnet50_4s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     Accuracy   F1-Score   Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+gender_resnet50      gender     0.8559     0.8587     336.27     ResNet50 gender classification with 4s segme...   
+
+Best Model: gender_resnet50 (Accuracy: 0.8559)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: final_logs_majority/gender_resnet50_4s/reports/experiment_results.csv
+Reports generated in: final_logs_majority/gender_resnet50_4s/reports
+Reports generated in: final_logs_majority/gender_resnet50_4s/reports
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: final_logs_majority
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: final_logs_majority/gender_resnet50_4s/
+Reports generated in: final_logs_majority/gender_resnet50_4s/reports/
+
+Overall Test Set Metrics:
+  Accuracy: 0.8559
+  F1-Score (weighted): 0.8587
+
+Task-Specific Metrics:
+  Active Tasks:
+    Accuracy: 0.8361
+    F1-Score: 0.8389
+  Passive Tasks:
+    Accuracy: 0.8493
+    F1-Score: 0.8523
+================================================================================

@@ -1,0 +1,97 @@
+CUDA_VISIBLE_DEVICES=1,2,3 python CNN/main.py --mode 1s --eval_only --aggregate_by_participant majority_vote --checkpoint_dir final_logs/checkpoints --results_dir final_logs_majority/cnn_eval_1s --data_path ~/scratch/processed_eeg_data_hdf5
+CUDA_VISIBLE_DEVICES=1,2,3 python CNN/main.py --mode 2s --eval_only --aggregate_by_participant majority_vote --checkpoint_dir final_logs/checkpoints --results_dir final_logs_majority/cnn_eval_2s --data_path ~/scratch/processed_eeg_data_hdf5
+CUDA_VISIBLE_DEVICES=1,2,3 python CNN/main.py --mode 4s --eval_only --aggregate_by_participant majority_vote --checkpoint_dir final_logs/checkpoints --results_dir final_logs_majority/cnn_eval_4s --data_path ~/scratch/processed_eeg_data_hdf5
+
+# ResNet18
+CUDA_VISIBLE_DEVICES=1,2,3 python -m CNN.resnet.run_resnet_gender --mode 1s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet18_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet18_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 4s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet18_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+# ResNet34
+python -m CNN.resnet.run_resnet_gender --mode 1s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet34_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet34_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 4s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet34_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+# ResNet50
+python -m CNN.resnet.run_resnet_gender --mode 1s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet50_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 2s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet50_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_gender --mode 4s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/gender_resnet50_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+
+# ResNet18
+python -m CNN.resnet.run_resnet_age --mode 1s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet18_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 2s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet18_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 4s --resnet_type 18 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet18_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+# ResNet34
+python -m CNN.resnet.run_resnet_age --mode 1s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet34_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 2s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet34_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 4s --resnet_type 34 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet34_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+# ResNet50
+python -m CNN.resnet.run_resnet_age --mode 1s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet50_1s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 2s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet50_2s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+python -m CNN.resnet.run_resnet_age --mode 4s --resnet_type 50 --eval_only --aggregate_by_participant majority_vote --checkpoint final_logs/checkpoints/age_resnet50_4s_best.pth --results_dir final_logs_majority --data_path ~/scratch/processed_eeg_data_hdf5
+
+
+cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/gender_labram_1s_best.pth \
+  --output_dir final_logs_majority/labram_gender_1s \
+  --dataset gender_baseline --segment_length 1s --nb_classes 1 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/gender_labram_2s_best.pth \
+  --output_dir final_logs_majority/labram_gender_2s \
+  --dataset gender_baseline --segment_length 2s --nb_classes 1 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/gender_labram_4s_best.pth \
+  --output_dir final_logs_majority/labram_gender_4s \
+  --dataset gender_baseline --segment_length 4s --nb_classes 1 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/age_labram_1s_best.pth \
+  --output_dir final_logs_majority/labram_age_1s \
+  --dataset age_classification --segment_length 1s --nb_classes 3 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/age_labram_2s_best.pth \
+  --output_dir final_logs_majority/labram_age_2s \
+  --dataset age_classification --segment_length 2s --nb_classes 3 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
+
+python LaBraM/run_class_finetuning.py --eval --aggregate_by_participant majority_vote \
+  --resume final_logs/checkpoints/age_labram_4s_best.pth \
+  --output_dir final_logs_majority/labram_age_4s \
+  --dataset age_classification --segment_length 4s --nb_classes 3 \
+  --data_path ~/scratch/processed_eeg_data_hdf5 \
+  --finetune LaBraM/checkpoints/labram-base.pth --model labram_base_patch200_200 \
+  --abs_pos_emb --qkv_bias --use_mean_pooling --auto_resume
