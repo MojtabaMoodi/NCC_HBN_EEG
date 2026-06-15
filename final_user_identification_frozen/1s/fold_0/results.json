@@ -1,0 +1,5 @@
+{
+  "val_accuracy": 0.42876956607885874,
+  "test_accuracy": 0.4259602264178353,
+  "freeze_backbone": true
+}
