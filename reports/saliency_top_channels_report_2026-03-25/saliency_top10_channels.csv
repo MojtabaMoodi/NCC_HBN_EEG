@@ -1,0 +1,991 @@
+experiment,split,rank,channel,mean_importance,std_importance,csv_path
+age_cnn_1s_best,combined (all),1,FC6,0.25424507,1.4700755,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),2,FC4,0.24757011,1.5480179,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),3,FT8,0.18740457,1.1472393,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),4,F9,0.1831895,1.1025817,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),5,PO4,0.18290764,1.0784775,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),6,CPZ,0.18156824,1.0573617,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),7,PZ,0.17643759,1.0898212,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),8,F7,0.17376776,1.0135546,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),9,P5,0.17108281,1.0178854,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,combined (all),10,AF7,0.16230845,0.9832027,age_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,1,FC6,0.21273956,1.2950866,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,2,FC4,0.20822676,1.3179485,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,3,PO4,0.15461944,0.92526776,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,4,FT8,0.15276858,0.9074127,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,5,F9,0.1523077,0.928804,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,6,CPZ,0.14875841,0.8624176,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,7,P5,0.14616798,0.9310855,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,8,F7,0.14552487,0.8536296,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,9,PZ,0.14522877,0.89100295,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,active,10,AF7,0.13857973,0.8593055,age_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,1,FC6,0.26129076,1.4975421,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,2,FC4,0.25425076,1.5846003,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,3,FT8,0.19328386,1.1832119,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,4,F9,0.18843052,1.1298275,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,5,PO4,0.18771839,1.1027858,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,6,CPZ,0.18714434,1.0869548,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,7,PZ,0.18172722,1.1206517,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,8,F7,0.17857131,1.0382152,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,9,P5,0.17531222,1.0319088,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_1s_best,passive,10,AF7,0.16633695,1.0027357,age_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),1,FC4,0.1168676,0.65967804,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),2,FC6,0.100280985,0.54694676,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),3,PZ,0.094916984,0.5172112,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),4,FT8,0.092097715,0.49605975,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),5,FC1,0.08858352,0.48853025,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),6,F7,0.08334501,0.46023226,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),7,PO4,0.08246496,0.45073843,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),8,AF7,0.07982915,0.43790323,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),9,C3,0.07725113,0.41832358,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,combined (all),10,P8,0.07613394,0.42275825,age_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,1,FC4,0.098750815,0.5893278,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,2,FC6,0.085077696,0.5046738,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,3,PZ,0.07960375,0.46477407,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,4,FT8,0.07638416,0.45024273,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,5,FC1,0.074238,0.45011935,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,6,PO4,0.0701762,0.41766503,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,7,F7,0.07015098,0.41681522,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,8,AF7,0.06780762,0.4050304,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,9,C3,0.06579688,0.38959715,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,active,10,F9,0.064838305,0.38641277,age_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,1,FC4,0.11999851,0.6710576,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,2,FC6,0.10290725,0.5539462,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,3,PZ,0.09756377,0.5256657,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,4,FT8,0.09481249,0.50348365,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,5,FC1,0.09106357,0.49480975,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,6,F7,0.08562686,0.4673107,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,7,PO4,0.08458859,0.45619413,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,8,AF7,0.08190592,0.44332564,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,9,C3,0.0792311,0.4230786,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_2s_best,passive,10,P8,0.07828539,0.4305822,age_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),1,FC4,0.060349252,0.3457104,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),2,PZ,0.054993317,0.3076025,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),3,FT8,0.048526663,0.25316927,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),4,PO4,0.045744006,0.25840357,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),5,FC1,0.043925315,0.23675273,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),6,FC6,0.04311343,0.23279831,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),7,F7,0.04038167,0.21909639,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),8,FC5,0.039314616,0.22664699,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),9,PO7,0.03686596,0.1982462,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,combined (all),10,F9,0.035906717,0.19487491,age_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,1,FC4,0.048064984,0.2351403,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,2,PZ,0.04398287,0.21521956,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,3,FT8,0.038851205,0.1783668,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,4,PO4,0.036631558,0.18109816,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,5,FC6,0.034925755,0.16748112,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,6,FC1,0.034784477,0.16690847,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,7,F7,0.032231815,0.1545709,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,8,FC5,0.031091593,0.1542952,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,9,PO7,0.029464647,0.13776603,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,active,10,P5,0.029211404,0.13594705,age_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,1,FC4,0.06262213,0.36244664,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,2,PZ,0.05703054,0.32175586,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,3,FT8,0.050316826,0.2646707,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,4,PO4,0.04743017,0.27025974,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,5,FC1,0.045616563,0.24748899,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,6,FC6,0.044628333,0.2429399,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,7,F7,0.04188964,0.22901894,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,8,FC5,0.04083625,0.23759602,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,9,PO7,0.038235333,0.2074887,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_4s_best,passive,10,F9,0.037239846,0.20393577,age_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),1,FC6,0.04225001,0.43655705,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),2,FC4,0.041681517,0.3375073,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),3,PO4,0.041544527,0.37563017,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),4,FC1,0.03554046,0.33704332,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),5,F9,0.03477769,0.34420982,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),6,CPZ,0.034177523,0.28973013,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),7,POZ,0.033224463,0.34078205,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),8,FT8,0.033167403,0.28718638,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),9,PO7,0.033163164,0.20320924,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,combined (all),10,T10,0.033058032,0.23096792,age_cnn_reg_1s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,1,FC4,0.032562383,0.16046366,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,2,FC6,0.032495506,0.1717657,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,3,PO4,0.031943984,0.15955472,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,4,PO7,0.028401906,0.13701954,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,5,T10,0.028342666,0.16088486,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,6,CPZ,0.02766355,0.13807276,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,7,FC1,0.02761979,0.15247102,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,8,F9,0.0265225,0.13201763,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,9,FT8,0.026100248,0.120766096,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,active,10,P5,0.02486579,0.13031228,age_cnn_reg_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,1,FC6,0.043902554,0.46678564,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,2,FC4,0.043228805,0.35895625,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,3,PO4,0.04317626,0.4008738,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,4,FC1,0.036885146,0.35905027,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,5,F9,0.036179017,0.36826,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,6,CPZ,0.0352833,0.3081317,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,7,POZ,0.034670435,0.3647653,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,8,FT8,0.03436707,0.3065962,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,9,PO7,0.033971526,0.21247871,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_1s_best,passive,10,T10,0.033858176,0.24085037,age_cnn_reg_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),1,FC4,0.029128052,0.21746364,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),2,PO4,0.025379404,0.19303082,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),3,FC6,0.024588374,0.21473171,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),4,F1,0.022279885,0.19655374,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),5,CPZ,0.021772578,0.17697793,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),6,F9,0.021000223,0.16026388,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),7,FC1,0.020472948,0.19396769,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),8,FT8,0.020007705,0.14805315,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),9,P5,0.019315619,0.15218844,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,combined (all),10,F4,0.018802898,0.1468247,age_cnn_reg_2s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,1,FC4,0.025456453,0.1785298,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,2,PO4,0.022353033,0.16214226,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,3,FC6,0.021217886,0.15264224,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,4,CPZ,0.018635299,0.12377584,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,5,F9,0.01850086,0.129065,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,6,F1,0.018305423,0.12164243,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,7,FT8,0.017328344,0.114830576,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,8,P5,0.017083345,0.12604381,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,9,FC1,0.01706484,0.12077153,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,active,10,P8,0.016758816,0.1099696,age_cnn_reg_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,1,FC4,0.02976255,0.22352222,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,2,PO4,0.025902314,0.19806504,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,3,FC6,0.025171075,0.22373463,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,4,F1,0.02296686,0.20675008,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,5,CPZ,0.022314824,0.18462746,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,6,F9,0.021431964,0.16506742,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,7,FC1,0.021061828,0.2039715,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,8,FT8,0.020470925,0.1530782,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,9,P5,0.019701593,0.15628229,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_2s_best,passive,10,F4,0.019319419,0.1532879,age_cnn_reg_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),1,FC4,0.014987235,0.12413669,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),2,FC6,0.010251991,0.07477474,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),3,F1,0.00993351,0.09009269,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),4,FC1,0.009532994,0.07721275,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),5,F9,0.009225147,0.06839406,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),6,PO4,0.009084796,0.06353379,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),7,FT8,0.008921477,0.05467439,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),8,POZ,0.008831356,0.06228558,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),9,O2,0.008704449,0.07325641,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,combined (all),10,CPZ,0.008632664,0.07065692,age_cnn_reg_4s_best/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,1,FC4,0.011516759,0.045230526,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,2,FC6,0.008540628,0.03531531,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,3,FC1,0.0074079414,0.030471751,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,4,FT8,0.0073740208,0.029435804,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,5,F1,0.0073518096,0.028975602,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,6,PO4,0.007318723,0.02953915,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,7,F9,0.007301131,0.029154206,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,8,POZ,0.0070988215,0.028771235,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,9,CPZ,0.006921695,0.028386526,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,active,10,P2,0.006716168,0.029738188,age_cnn_reg_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,1,FC4,0.015629608,0.13371482,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,2,FC6,0.010568651,0.079965144,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,3,F1,0.010411214,0.0972739,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,4,FC1,0.009926145,0.08301804,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,5,F9,0.009581175,0.07338314,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,6,PO4,0.009411551,0.06797969,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,7,FT8,0.009207789,0.058151048,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,8,POZ,0.009151901,0.06665827,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,9,O2,0.00907554,0.07889591,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_cnn_reg_4s_best,passive,10,CPZ,0.008949263,0.07593646,age_cnn_reg_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),1,FZ,0.45819166,0.5446333,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),2,PO7,0.42643946,0.34850022,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),3,PO4,0.4178875,0.4809702,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),4,P3,0.4178018,0.43401495,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),5,P5,0.41008157,0.3438795,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),6,F9,0.40811434,0.5007824,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),7,PO3,0.3714282,0.382384,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),8,PZ,0.34863943,0.34187394,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),9,F8,0.33906916,0.33520865,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,combined (all),10,P1,0.33726218,0.3179417,age_labram_1s_best/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,1,P3,0.45428163,0.47677225,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,2,PO4,0.44878092,0.4951423,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,3,PO7,0.4451148,0.34982643,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,4,FZ,0.43885922,0.5229797,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,5,P5,0.42506015,0.34297824,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,6,F9,0.40122402,0.48409197,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,7,PO3,0.40051812,0.39395645,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,8,PZ,0.36978006,0.34425583,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,9,P6,0.3569792,0.31451306,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,active,10,P1,0.3517386,0.33387145,age_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,1,FZ,0.46146938,0.54819816,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,2,PO7,0.42326656,0.34819365,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,3,PO4,0.41264272,0.47832614,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,4,P3,0.41160926,0.42602617,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,5,F9,0.4092816,0.5035585,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,6,P5,0.4075331,0.34398293,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,7,PO3,0.3664561,0.380169,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,8,PZ,0.34505013,0.34134132,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,9,F8,0.34077972,0.33967772,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_1s_best,passive,10,P1,0.33477375,0.31510934,age_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),1,PO4,0.2033511,0.23635007,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),2,FZ,0.20296237,0.27926728,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),3,P5,0.18552227,0.17271718,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),4,PO7,0.185147,0.15431787,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),5,P6,0.18134324,0.17839126,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),6,F9,0.17086321,0.17694889,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),7,OZ,0.1686642,0.16005439,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),8,P1,0.16662344,0.1721341,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),9,PO3,0.16306692,0.17320074,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,combined (all),10,CPZ,0.16203737,0.13969198,age_labram_2s_best/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,1,PO4,0.22662145,0.2511575,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,2,P6,0.1998312,0.1971669,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,3,PO7,0.1938373,0.15564686,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,4,P5,0.19117276,0.16910651,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,5,FZ,0.18292193,0.24599978,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,6,OZ,0.17995812,0.16489181,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,7,PO3,0.17928585,0.19120115,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,8,F9,0.17649095,0.17793146,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,9,P1,0.17020564,0.16644433,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,active,10,CPZ,0.17019463,0.13839999,age_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,1,FZ,0.20642464,0.28448188,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,2,PO4,0.19932893,0.23345828,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,3,P5,0.18454485,0.17331995,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,4,PO7,0.18364735,0.1540378,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,5,P6,0.1781448,0.17474717,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,6,F9,0.16989103,0.17676201,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,7,OZ,0.16671363,0.15912259,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,8,P1,0.16600735,0.1730947,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,9,CPZ,0.16062587,0.13986659,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_2s_best,passive,10,PO3,0.16027197,0.16973901,age_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),1,P6,0.145037,0.13530618,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),2,P5,0.14497593,0.12930469,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),3,PO4,0.14478923,0.16728246,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),4,F3,0.13834539,0.14607444,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),5,FZ,0.13687819,0.18073688,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),6,PO7,0.13090774,0.10415661,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),7,F8,0.12307609,0.1243177,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),8,P3,0.12244665,0.13895576,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),9,P1,0.108433,0.115181535,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,combined (all),10,F9,0.10830599,0.11177084,age_labram_4s_best/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,1,PO4,0.15976697,0.17313606,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,2,P6,0.15415953,0.14269376,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,3,P5,0.149181,0.1255129,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,4,F3,0.14885207,0.15634502,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,5,PO7,0.1348041,0.10601364,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,6,P3,0.12979668,0.14526321,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,7,FZ,0.12758407,0.16507915,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,8,F8,0.12481681,0.11956003,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,9,T7,0.116636895,0.13013399,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,active,10,CPZ,0.11227916,0.09479268,age_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,1,P5,0.14419746,0.12997955,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,2,P6,0.14334965,0.13382818,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,3,PO4,0.14201887,0.16602899,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,4,FZ,0.13859716,0.18343729,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,5,F3,0.13640022,0.14401115,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,6,PO7,0.13018572,0.10379363,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,7,F8,0.122754216,0.12517656,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,8,P3,0.121086806,0.13771467,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,9,F9,0.10801505,0.11228239,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_labram_4s_best,passive,10,P1,0.107914105,0.11539393,age_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),1,PZ,0.04511135,0.081231005,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),2,T10,0.03828403,0.06392666,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),3,P4,0.036595955,0.061971143,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),4,FC3,0.036557883,0.06836345,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),5,P7,0.034477215,0.059202638,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),6,C3,0.0344573,0.05093383,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),7,P8,0.034239434,0.053021353,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),8,FC4,0.033049047,0.05583134,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),9,POZ,0.03192421,0.056950416,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,combined (all),10,PO8,0.03171922,0.045784336,age_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,1,PZ,0.040839,0.06952825,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,2,T10,0.035041533,0.055088267,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,3,P4,0.033336,0.052168597,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,4,FC3,0.033044774,0.059073202,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,5,C3,0.032042492,0.043789327,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,6,P8,0.03165208,0.04626751,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,7,P7,0.030919531,0.047680553,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,8,FC4,0.030263182,0.04882432,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,9,PO8,0.029341808,0.03849892,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,active,10,CPZ,0.02870224,0.042212762,age_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,1,PZ,0.045836452,0.08303673,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,2,T10,0.038834594,0.065291315,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,3,FC3,0.0371542,0.06980503,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,4,P4,0.037149124,0.06346999,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,5,P7,0.035081115,0.06092278,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,6,C3,0.034867074,0.052041117,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,7,P8,0.034678537,0.05407421,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,8,FC4,0.033521973,0.056924406,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,9,POZ,0.03252252,0.058583047,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_1s_best,passive,10,PO8,0.032122325,0.046897642,age_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),1,PZ,0.037246823,0.05894295,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),2,P4,0.034450848,0.056138217,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),3,FC3,0.033149045,0.054253004,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),4,T10,0.030688295,0.046359092,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),5,FC4,0.030596212,0.04926852,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),6,P7,0.029570697,0.048011728,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),7,PO8,0.029285956,0.04301831,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),8,P3,0.028080612,0.047812525,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),9,CPZ,0.028042858,0.04426956,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,combined (all),10,C3,0.027970763,0.039994743,age_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,1,PZ,0.035297066,0.051847752,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,2,P4,0.032517623,0.048626695,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,3,FC3,0.031268876,0.047537517,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,4,T10,0.02904796,0.04042979,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,5,FC4,0.028947005,0.04295874,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,6,PO8,0.02811828,0.037702505,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,7,P7,0.02748711,0.040201742,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,8,C3,0.026903644,0.035275385,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,9,P3,0.026352564,0.04156936,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,active,10,CPZ,0.026307352,0.037773896,age_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,1,PZ,0.03758393,0.06007783,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,2,P4,0.034784913,0.057329796,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,3,FC3,0.03347351,0.055325136,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,4,T10,0.030971428,0.04730259,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,5,FC4,0.03088117,0.050274838,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,6,P7,0.029930566,0.049228698,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,7,PO8,0.029487979,0.04386877,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,8,P3,0.028379159,0.048804168,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,9,CPZ,0.028342796,0.045291398,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_2s_best,passive,10,C3,0.028155252,0.040752377,age_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),1,PZ,0.01917952,0.028776722,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),2,P4,0.017616833,0.024959786,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),3,AFZ,0.01756154,0.027043875,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),4,FC3,0.017064113,0.025630958,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),5,C6,0.01694485,0.02775584,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),6,T10,0.01676389,0.022955893,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),7,P7,0.016364213,0.02351386,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),8,CPZ,0.016026977,0.023841135,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),9,P1,0.01584876,0.022188645,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,combined (all),10,FC4,0.015680602,0.022392292,age_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,1,PZ,0.019045413,0.023717111,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,2,P4,0.017515637,0.02090643,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,3,AFZ,0.017474778,0.022655832,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,4,FC3,0.016878149,0.021130327,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,5,C6,0.016741063,0.022473767,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,6,T10,0.016567482,0.01941681,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,7,P7,0.016029341,0.01902282,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,8,CPZ,0.015688315,0.018910544,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,9,FC4,0.015588242,0.01858265,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,active,10,P3,0.015573897,0.019321812,age_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,1,PZ,0.019204475,0.02961823,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,2,P4,0.017635599,0.025639635,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,3,AFZ,0.01757772,0.027779778,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,4,FC3,0.017098455,0.026379675,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,5,C6,0.016982537,0.028626418,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,6,T10,0.016800351,0.023552475,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,7,P7,0.016426222,0.024253335,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,8,CPZ,0.016089628,0.024645101,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,9,P1,0.01592367,0.022837875,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet18_4s_best,passive,10,FC4,0.015697686,0.0230283,age_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),1,PZ,0.04256707,0.0870941,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),2,PO8,0.041859757,0.087927505,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),3,CPZ,0.039214086,0.075992495,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),4,T10,0.039009184,0.075841606,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),5,PO3,0.038649242,0.07954637,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),6,FC3,0.037559886,0.0750296,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),7,P3,0.036258943,0.07243035,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),8,FC4,0.035891905,0.069366366,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),9,P4,0.034447867,0.06163083,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,combined (all),10,P8,0.033914693,0.05625759,age_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,1,PZ,0.039762363,0.09192861,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,2,PO8,0.038386866,0.08913568,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,3,T10,0.036310133,0.079715885,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,4,CPZ,0.03587796,0.074995205,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,5,PO3,0.035392832,0.08069532,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,6,FC3,0.0345264,0.07519319,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,7,FC4,0.033201624,0.07052104,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,8,P3,0.03301427,0.07180469,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,9,P4,0.032250784,0.06308727,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,active,10,P8,0.031847876,0.05627302,age_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,1,PZ,0.043045864,0.08624198,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,2,PO8,0.04245197,0.08770847,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,3,CPZ,0.03977991,0.076150335,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,4,T10,0.039467737,0.07515928,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,5,PO3,0.03920167,0.07933733,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,6,FC3,0.038074777,0.07499391,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,7,P3,0.036809467,0.07252657,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,8,FC4,0.0363487,0.069162354,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,9,P4,0.034820817,0.061372805,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_1s_best,passive,10,P8,0.034264956,0.05624727,age_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),1,PO8,0.032897048,0.08485412,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),2,PO3,0.032778524,0.08440639,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),3,CPZ,0.032709487,0.08504018,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),4,FC4,0.029861845,0.08058536,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),5,PZ,0.02984199,0.077776544,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),6,FC3,0.027859448,0.073087126,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),7,T10,0.027837947,0.069331996,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),8,PO4,0.026898906,0.07203464,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),9,P3,0.026756741,0.07079126,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,combined (all),10,P5,0.026246391,0.06638354,age_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,1,CPZ,0.03199095,0.083087176,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,2,PO3,0.031657193,0.082944855,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,3,PO8,0.03144187,0.08187937,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,4,PZ,0.02985402,0.078770116,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,5,FC4,0.0293167,0.081250355,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,6,FC3,0.027322493,0.07228654,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,7,T10,0.027000485,0.067894846,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,8,P3,0.026566226,0.071477726,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,9,PO4,0.026541226,0.07122296,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,active,10,P5,0.025522353,0.065253414,age_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,1,PO8,0.03314873,0.08535736,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,2,PO3,0.032972015,0.08465632,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,3,CPZ,0.03283359,0.08537166,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,4,FC4,0.029955888,0.08047023,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,5,PZ,0.02984,0.07760396,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,6,T10,0.02798264,0.06957909,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,7,FC3,0.027952444,0.07322511,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,8,PO4,0.026960706,0.07217413,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,9,P3,0.026789498,0.07067496,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_2s_best,passive,10,P5,0.02637142,0.066577956,age_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),1,P7,0.025016867,0.05185065,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),2,P1,0.022217143,0.04318269,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),3,CPZ,0.021678522,0.04371159,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),4,PO3,0.02161494,0.04148786,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),5,PO8,0.021595212,0.042317525,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),6,F1,0.01960081,0.03534625,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),7,P5,0.01860759,0.035655804,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),8,AF7,0.018345045,0.035401724,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),9,F7,0.018266844,0.033562347,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,combined (all),10,PO4,0.018127361,0.034501802,age_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,1,P7,0.02628715,0.050562344,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,2,P1,0.023394765,0.041927878,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,3,CPZ,0.022789253,0.04255043,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,4,PO8,0.022188574,0.039549306,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,5,PO3,0.022127122,0.03981247,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,6,F1,0.020315496,0.033978723,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,7,PO4,0.0191375,0.03453184,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,8,AF7,0.01894887,0.03285959,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,9,F7,0.018879512,0.031672236,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,active,10,P5,0.018816913,0.032379817,age_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,1,P7,0.02478213,0.052082125,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,2,P1,0.02199931,0.043407615,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,3,PO3,0.021520082,0.04179015,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,4,PO8,0.021485483,0.042808995,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,5,CPZ,0.021473123,0.04392058,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,6,F1,0.019468607,0.035591807,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,7,P5,0.018568816,0.03622934,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,8,AF7,0.018233312,0.03585156,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,9,F7,0.018153643,0.033899162,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet34_4s_best,passive,10,PO4,0.017940348,0.03449322,age_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),1,PO8,0.055890813,0.12796876,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),2,PZ,0.055038765,0.11326347,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),3,P4,0.05011395,0.09917093,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),4,F9,0.04986922,0.1236963,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),5,P1,0.049449082,0.102880426,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),6,FC4,0.048891447,0.10158879,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),7,FC3,0.04649153,0.102681555,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),8,F7,0.046211794,0.10077869,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),9,T10,0.046075433,0.101867534,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,combined (all),10,PO4,0.045645695,0.08907094,age_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,1,PO8,0.05069159,0.12605259,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,2,PZ,0.050141037,0.108611144,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,3,P4,0.04433678,0.088315316,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,4,FC4,0.04426187,0.09742534,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,5,P1,0.044239778,0.09740931,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,6,F9,0.043933213,0.11937589,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,7,T10,0.042084374,0.09924965,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,8,FC3,0.0416888,0.096639276,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,9,F7,0.04154262,0.09541574,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,active,10,PO4,0.041227672,0.083784565,age_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,1,PO8,0.056773268,0.12827462,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,2,PZ,0.055871606,0.11401515,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,3,P4,0.051095687,0.10086503,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,4,F9,0.05087805,0.12438838,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,5,P1,0.05033346,0.10375682,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,6,FC4,0.049677685,0.102262996,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,7,FC3,0.047307137,0.10365509,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,8,F7,0.047004707,0.10164676,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,9,T10,0.046753503,0.10229516,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_1s_best,passive,10,F4,0.04651838,0.11808437,age_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),1,PO8,0.059632227,0.13345155,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),2,P4,0.056785505,0.12907103,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),3,PZ,0.05605796,0.11015401,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),4,FC4,0.054219868,0.12003712,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),5,P1,0.048927534,0.10281183,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),6,F4,0.047585633,0.10888791,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),7,FC3,0.047415227,0.09941178,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),8,T10,0.046941932,0.10182897,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),9,F7,0.04625412,0.105160125,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,combined (all),10,P7,0.045581803,0.109152906,age_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,1,PO8,0.060682043,0.13802792,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,2,P4,0.054907795,0.124644384,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,3,PZ,0.05433272,0.10749671,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,4,FC4,0.053181257,0.11840966,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,5,T10,0.04710975,0.10340728,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,6,P1,0.04698414,0.099875554,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,7,F4,0.046358265,0.10675084,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,8,FC3,0.046099827,0.09726751,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,9,F7,0.045694947,0.10468779,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,active,10,P7,0.044889912,0.10810935,age_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,1,PO8,0.059449784,0.13264674,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,2,P4,0.05710987,0.12981895,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,3,PZ,0.05635618,0.11060709,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,4,FC4,0.05439924,0.12031676,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,5,P1,0.04926314,0.10330936,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,6,F4,0.047797732,0.10925045,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,7,FC3,0.047642205,0.09977657,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,8,T10,0.04691296,0.10155822,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,9,F7,0.04635012,0.10524199,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_2s_best,passive,10,P7,0.045702036,0.10933397,age_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),1,FC4,0.031048702,0.07622468,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),2,PO4,0.030454239,0.07238294,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),3,FC3,0.0296644,0.07344948,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),4,PO8,0.029529776,0.0707092,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),5,P4,0.028650641,0.06320485,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),6,PZ,0.0277919,0.058734164,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),7,F4,0.027704543,0.06785276,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),8,P1,0.026898282,0.060172662,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),9,F9,0.02583468,0.062300563,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,combined (all),10,F3,0.025600646,0.061805137,age_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,1,FC4,0.028338356,0.07321511,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,2,PO4,0.02719086,0.06483313,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,3,PO8,0.0268857,0.06696465,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,4,FC3,0.026758391,0.06856719,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,5,P4,0.025958797,0.05833618,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,6,F4,0.025252927,0.06361148,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,7,PZ,0.024829498,0.052936286,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,8,P1,0.02445913,0.05616701,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,9,F3,0.022992468,0.057385933,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,active,10,CP4,0.02297526,0.057292257,age_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,1,FC4,0.031550333,0.07675724,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,2,PO4,0.031058054,0.07368056,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,3,FC3,0.03020215,0.0743064,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,4,PO8,0.030019304,0.07137071,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,5,P4,0.029148977,0.064052984,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,6,PZ,0.028339846,0.059729584,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,7,F4,0.02815857,0.06859991,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,8,P1,0.02735016,0.06087379,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,9,F9,0.026377415,0.06308909,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+age_resnet50_4s_best,passive,10,F3,0.026083453,0.062577635,age_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),1,C3,0.38224503,8.790008,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),2,FT8,0.3516358,8.618619,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),3,P2,0.2551655,6.282224,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),4,PZ,0.22786692,5.6287503,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),5,C5,0.22767884,5.962965,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),6,P8,0.20928048,4.880135,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),7,P3,0.20618664,4.694307,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),8,FT7,0.2006377,4.6045237,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),9,PO7,0.19624124,4.674894,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,combined (all),10,OZ,0.17979558,4.264539,gender_cnn_1s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,1,C3,0.19682468,0.7725764,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,2,FT8,0.17223793,0.68345314,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,3,P2,0.12570697,0.5067552,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,4,PZ,0.11077087,0.4559972,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,5,P3,0.10629821,0.45842224,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,6,C5,0.105986334,0.46279064,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,7,P8,0.10583372,0.43524277,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,8,FT7,0.10298508,0.41084605,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,9,PO7,0.100244515,0.4150576,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,active,10,F5,0.09936799,0.4196864,gender_cnn_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,1,C3,0.4137211,9.500948,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,2,FT8,0.38208845,9.316699,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,3,P2,0.27714145,6.790924,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,4,C5,0.2483386,6.4460435,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,5,PZ,0.24774551,6.0845327,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,6,P8,0.22684307,5.2747602,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,7,P3,0.22314605,5.073317,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,8,FT7,0.21721643,4.976829,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,9,PO7,0.21253783,5.05297,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_1s_best,passive,10,OZ,0.1949577,4.6094866,gender_cnn_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),1,C3,0.15605305,2.0617433,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),2,FT8,0.13303383,1.7787981,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),3,P2,0.10887482,1.5771241,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),4,PZ,0.101387054,1.7468231,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),5,P8,0.09396118,1.5855436,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),6,F5,0.08578356,1.3620296,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),7,P3,0.085641354,1.2096444,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),8,FT7,0.084715754,1.1166103,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),9,C5,0.08420189,1.0589064,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,combined (all),10,PO7,0.08293453,1.0599794,gender_cnn_2s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,1,C3,0.10617056,0.44569105,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,2,FT8,0.0889806,0.37634256,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,3,P2,0.07505316,0.33023345,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,4,PZ,0.06259085,0.2708215,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,5,P8,0.061439767,0.26505992,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,6,P3,0.061409153,0.28928828,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,7,C5,0.060107727,0.26560235,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,8,PO7,0.058230437,0.2526529,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,9,F5,0.057213984,0.2526685,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,active,10,FT7,0.057040013,0.23272476,gender_cnn_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,1,C3,0.16467468,2.2247922,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,2,FT8,0.14064677,1.919773,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,3,P2,0.114720054,1.7022899,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,4,PZ,0.10809245,1.8882139,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,5,P8,0.099581845,1.7133592,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,6,F5,0.090720624,1.4711291,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,7,P3,0.08982841,1.3043377,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,8,FT7,0.08949806,1.2052287,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,9,C5,0.08836553,1.1413069,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_2s_best,passive,10,P6,0.087676875,1.35414,gender_cnn_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),1,FT8,0.01846841,0.08654654,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),2,C3,0.018087922,0.08190803,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),3,P2,0.0149094565,0.06812607,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),4,PZ,0.012639581,0.06008968,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),5,P8,0.012562981,0.06075698,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),6,P7,0.01173733,0.05569672,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),7,FT7,0.011577556,0.059999954,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),8,OZ,0.011521837,0.05573187,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),9,AF4,0.010962696,0.054338306,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,combined (all),10,PO7,0.010408586,0.049298875,gender_cnn_4s_best/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,1,C3,0.015963158,0.064092785,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,2,FT8,0.015671382,0.06460761,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,3,P2,0.013409259,0.05417014,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,4,P8,0.010650001,0.04089658,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,5,PZ,0.010645602,0.041638665,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,6,FT7,0.010517705,0.042216215,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,7,AF4,0.010088454,0.049103044,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,8,OZ,0.010077564,0.04146882,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,9,P7,0.009955158,0.04000471,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,active,10,AF7,0.00931253,0.045704145,gender_cnn_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,1,FT8,0.018985866,0.090013795,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,2,C3,0.018480968,0.084789485,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,3,P2,0.015186985,0.07040238,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,4,PZ,0.013008412,0.06290594,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,5,P8,0.012917078,0.0637504,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,6,P7,0.012067123,0.058132187,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,7,OZ,0.011789121,0.05798374,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,8,FT7,0.011773673,0.062738135,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,9,AF4,0.011124435,0.05525183,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_cnn_4s_best,passive,10,PO7,0.010689069,0.05138508,gender_cnn_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),1,C3,2.3537662,2.5273764,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),2,FZ,2.046666,2.7048573,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),3,FT7,1.9456161,2.5404809,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),4,C5,1.8821996,2.0709217,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),5,PO7,1.8249876,2.095255,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),6,C1,1.7900012,1.8329612,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),7,FT8,1.7736778,2.0842364,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),8,PZ,1.771635,1.9721495,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),9,P6,1.6011703,1.5465504,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,combined (all),10,OZ,1.565128,1.5572548,gender_labram_1s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,1,C3,2.284862,2.648719,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,2,FT7,1.8119248,2.620894,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,3,C5,1.7522418,1.9412674,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,4,PO7,1.7339985,2.1496959,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,5,FZ,1.7025136,2.3715272,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,6,PZ,1.668059,1.9311055,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,7,C1,1.6511188,1.74661,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,8,FT8,1.6497718,2.014943,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,9,P6,1.5643456,1.590616,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,active,10,P3,1.5214345,1.578696,gender_labram_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,1,C3,2.3654716,2.5060828,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,2,FZ,2.105098,2.7533424,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,3,FT7,1.9682977,2.5259686,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,4,C5,1.904245,2.0914469,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,5,PO7,1.8404247,2.0855143,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,6,C1,1.8135761,1.8462371,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,7,FT8,1.7946949,2.0950541,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,8,PZ,1.7892178,1.9784703,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,9,P6,1.6074116,1.5389478,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_1s_best,passive,10,OZ,1.5777324,1.5714865,gender_labram_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),1,FZ,0.89037883,1.7906514,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),2,C3,0.83920395,1.3063096,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),3,PO7,0.7695737,1.4424658,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),4,FT8,0.7339085,1.3082935,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),5,F1,0.6548095,0.9664391,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),6,C5,0.65275437,1.0206555,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),7,FT7,0.615883,1.2352343,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),8,C1,0.6143613,0.9089217,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),9,PZ,0.59230345,0.8968673,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,combined (all),10,OZ,0.5879284,0.8751787,gender_labram_2s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,1,C3,0.8106241,1.3210032,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,2,FZ,0.702893,1.4850979,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,3,PO7,0.6945572,1.214324,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,4,FT8,0.67855304,1.2246214,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,5,F1,0.6395802,0.93082815,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,6,C5,0.5982406,0.94580257,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,7,OZ,0.57135713,0.8733959,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,8,C1,0.57134485,0.86861515,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,9,FT7,0.5650503,1.186207,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,active,10,F3,0.5642804,0.9530664,gender_labram_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,1,FZ,0.9227763,1.8364198,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,2,C3,0.8441396,1.303701,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,3,PO7,0.78254056,1.4779403,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,4,FT8,0.74347675,1.3219903,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,5,C5,0.6621778,1.0327377,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,6,F1,0.6574305,0.97244596,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,7,FT7,0.62466514,1.243328,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,8,C1,0.62176603,0.9155008,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,9,PZ,0.5988137,0.9024316,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_2s_best,passive,10,OZ,0.59080416,0.8754551,gender_labram_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),1,C3,0.025494745,0.1383555,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),2,PZ,0.024226353,0.12292399,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),3,FT8,0.021104163,0.11626332,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),4,OZ,0.02087074,0.10487467,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),5,FT7,0.020680606,0.12104401,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),6,F5,0.018705372,0.108070254,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),7,O1,0.01798586,0.10352067,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),8,PO7,0.016764442,0.09124918,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),9,F2,0.016758278,0.095290504,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,combined (all),10,C5,0.01577368,0.09182715,gender_labram_4s_best/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,1,C3,0.026168743,0.14425747,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,2,PZ,0.023587834,0.11998997,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,3,OZ,0.020844642,0.106468685,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,4,FT8,0.020516276,0.11429462,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,5,FT7,0.020268375,0.12313393,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,6,F5,0.01863063,0.11488917,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,7,O1,0.01662545,0.093464926,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,8,PO7,0.016249213,0.08922377,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,9,C5,0.015903145,0.09617111,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,active,10,F2,0.015876766,0.09253291,gender_labram_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,1,C3,0.025369616,0.13725388,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,2,PZ,0.024343979,0.12346097,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,3,FT8,0.021212593,0.116628915,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,4,OZ,0.020875933,0.10458599,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,5,FT7,0.020756664,0.12065171,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,6,F5,0.018718954,0.10675483,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,7,O1,0.018237514,0.10528309,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,8,F2,0.01692133,0.095794044,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,9,PO7,0.016859718,0.09161868,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_labram_4s_best,passive,10,C5,0.015749678,0.090994194,gender_labram_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),1,C3,0.079731226,0.15861233,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),2,FT8,0.07829051,0.1606661,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),3,P2,0.07761101,0.15059534,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),4,PZ,0.07419063,0.14763433,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),5,P8,0.059972215,0.11283314,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),6,P3,0.057704568,0.12063127,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),7,PO7,0.05697623,0.1091109,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),8,C5,0.049501207,0.097074844,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),9,FT7,0.049129765,0.09534762,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,combined (all),10,AF4,0.047950137,0.088872105,gender_resnet18_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,1,C3,0.0685054,0.1348368,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,2,P2,0.06714067,0.12717535,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,3,FT8,0.066384226,0.13276994,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,4,PZ,0.063506514,0.12255215,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,5,P8,0.051731903,0.09242161,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,6,PO7,0.049844287,0.09630039,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,7,P3,0.04848654,0.10019895,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,8,C5,0.04217546,0.07919299,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,9,AF4,0.042127576,0.07699381,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,active,10,FT7,0.041648094,0.075549506,gender_resnet18_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,1,C3,0.08163925,0.16223139,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,2,FT8,0.08031154,0.16484909,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,3,P2,0.07939007,0.15414779,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,4,PZ,0.07600324,0.15140586,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,5,P8,0.061371822,0.115885474,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,6,P3,0.05926898,0.12369819,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,7,PO7,0.058186676,0.11109427,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,8,C5,0.05074439,0.09973948,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,9,FT7,0.050398875,0.098261975,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_1s_best,passive,10,AF4,0.048938733,0.090698905,gender_resnet18_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),1,C3,0.08265433,0.1536371,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),2,FT8,0.079676166,0.15687937,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),3,P2,0.0767616,0.13097228,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),4,PZ,0.07619886,0.13227555,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),5,P3,0.06311243,0.125168,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),6,PO7,0.059718303,0.106610775,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),7,P8,0.053382296,0.08687567,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),8,F5,0.051560372,0.090369694,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),9,FC6,0.05091026,0.08377311,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,combined (all),10,T8,0.048043586,0.086862326,gender_resnet18_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,1,C3,0.074890815,0.13294272,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,2,FT8,0.071794294,0.1333634,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,3,P2,0.07036931,0.1108837,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,4,PZ,0.069575556,0.11009344,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,5,P3,0.056229025,0.106664866,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,6,PO7,0.054438323,0.09287564,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,7,P8,0.04908899,0.07264088,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,8,F5,0.046366382,0.07723982,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,9,FC6,0.04630074,0.072444946,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,active,10,T8,0.04316592,0.07242115,gender_resnet18_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,1,C3,0.08399557,0.15689988,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,2,FT8,0.08103777,0.16055802,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,3,P2,0.0778632,0.13410755,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,4,PZ,0.07734475,0.13571045,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,5,P3,0.06430209,0.12805879,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,6,PO7,0.06063048,0.108785786,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,7,P8,0.054124393,0.08908569,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,8,F5,0.052457362,0.09242102,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,9,FC6,0.05170659,0.08555402,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_2s_best,passive,10,T8,0.04888627,0.08909304,gender_resnet18_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),1,FT8,0.021044044,0.034833,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),2,C3,0.018764306,0.029624397,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),3,P2,0.017883388,0.027574837,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),4,PZ,0.01651502,0.024750305,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),5,P8,0.014469817,0.020840967,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),6,P3,0.013902748,0.020776525,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),7,PO7,0.013725801,0.020412073,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),8,C5,0.013665063,0.021094956,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),9,AF3,0.012431181,0.017248398,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,combined (all),10,C6,0.012353213,0.017006503,gender_resnet18_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,1,FT8,0.020250184,0.025229286,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,2,C3,0.018014908,0.022289613,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,3,P2,0.01716119,0.019432582,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,4,PZ,0.015630204,0.017336521,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,5,P8,0.014040195,0.015344677,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,6,P3,0.0133473985,0.01501416,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,7,PO7,0.013285911,0.015782755,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,8,C5,0.013030924,0.015145929,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,9,AF3,0.012280052,0.0129363425,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,active,10,C6,0.0118144555,0.012530131,gender_resnet18_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,1,FT8,0.02119086,0.036330905,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,2,C3,0.018902993,0.030788338,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,3,P2,0.018016985,0.028828429,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,4,PZ,0.01667868,0.025887296,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,5,P8,0.014549324,0.021705076,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,6,P3,0.014005492,0.021673782,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,7,PO7,0.013807172,0.021156956,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,8,C5,0.013782454,0.02201796,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,9,AF3,0.012459212,0.017932849,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet18_4s_best,passive,10,C6,0.012452922,0.017709507,gender_resnet18_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),1,FT8,0.107887246,0.32869318,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),2,P2,0.09766406,0.28537118,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),3,PZ,0.09722789,0.26249743,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),4,C3,0.091672085,0.26070333,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),5,P8,0.07411208,0.19344531,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),6,AF4,0.0609451,0.18084008,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),7,T8,0.058365867,0.1786152,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),8,F5,0.058167573,0.17564979,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),9,P3,0.057835177,0.17445102,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,combined (all),10,C1,0.055834543,0.17461985,gender_resnet34_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,1,FT8,0.08063201,0.26310593,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,2,PZ,0.07454909,0.20314533,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,3,P2,0.073340684,0.2238042,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,4,C3,0.06890516,0.20192058,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,5,P8,0.057089984,0.14735714,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,6,AF4,0.04643309,0.1451298,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,7,P3,0.0433185,0.1360987,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,8,F5,0.042978548,0.1272969,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,9,T8,0.042940278,0.13574551,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,active,10,P7,0.042082477,0.11498017,gender_resnet34_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,1,FT8,0.11251448,0.33835298,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,2,P2,0.10179244,0.29435515,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,3,PZ,0.1010769,0.27110624,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,4,C3,0.095536016,0.2692226,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,5,P8,0.07700094,0.20008688,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,6,AF4,0.06340814,0.18611318,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,7,T8,0.060984056,0.18478076,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,8,F5,0.06074552,0.18246704,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,9,P3,0.060299248,0.1800344,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_1s_best,passive,10,C1,0.058342814,0.18157569,gender_resnet34_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),1,PZ,0.094560534,0.21145271,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),2,C3,0.0858943,0.20039393,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),3,FT8,0.0808161,0.19506891,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),4,P2,0.076689355,0.16884007,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),5,P8,0.070715494,0.1534534,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),6,T10,0.057928532,0.12613718,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),7,OZ,0.054578066,0.120189175,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),8,P5,0.04945128,0.10815798,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),9,C1,0.047832955,0.11138983,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,combined (all),10,T8,0.047583837,0.11891338,gender_resnet34_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,1,PZ,0.081324905,0.15678108,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,2,C3,0.07318461,0.14692876,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,3,FT8,0.06797518,0.14487763,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,4,P2,0.06566779,0.124196716,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,5,P8,0.061322507,0.11434835,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,6,T10,0.050412107,0.095205426,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,7,OZ,0.047805093,0.09128596,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,8,P5,0.04246524,0.07985726,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,9,PO7,0.041531947,0.079147846,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,active,10,C1,0.04137181,0.08349757,gender_resnet34_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,1,PZ,0.096847855,0.21944536,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,2,C3,0.0880907,0.20816393,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,3,FT8,0.08303376,0.20240271,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,4,P2,0.07858985,0.17533992,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,5,P8,0.07233768,0.15918297,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,6,T10,0.059227932,0.13070048,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,7,OZ,0.055748466,0.12446873,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,8,P5,0.05065847,0.11228608,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,9,T8,0.048950292,0.12359137,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_2s_best,passive,10,C1,0.048949324,0.11549336,gender_resnet34_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),1,FT8,0.02339825,0.04551941,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),2,C3,0.01918753,0.033614643,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),3,PZ,0.018796353,0.03210808,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),4,P2,0.018282946,0.033346713,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),5,P8,0.017033463,0.029221062,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),6,T8,0.013735135,0.026105694,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),7,T10,0.013221729,0.021846127,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),8,AF7,0.012918869,0.022241855,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),9,PO7,0.012547712,0.019860428,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,combined (all),10,P3,0.012473075,0.021954726,gender_resnet34_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,1,FT8,0.021566084,0.03353698,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,2,C3,0.01781327,0.026325017,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,3,PZ,0.017167447,0.023298826,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,4,P2,0.016733997,0.023758044,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,5,P8,0.015551658,0.021248471,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,6,T8,0.012612911,0.019501464,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,7,T10,0.01207757,0.01604881,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,8,AF7,0.011862635,0.015850836,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,9,PO7,0.011574894,0.014597192,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,active,10,P3,0.01130919,0.016107751,gender_resnet34_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,1,FT8,0.023737257,0.0473981,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,2,C3,0.019441817,0.034790583,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,3,PZ,0.019097831,0.033476483,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,4,P2,0.018569557,0.034825247,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,5,P8,0.017307693,0.03046026,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,6,T8,0.013942789,0.02714719,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,7,T10,0.013433273,0.02275115,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,8,AF7,0.013114363,0.023227066,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,9,PO7,0.012727711,0.020682955,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet34_4s_best,passive,10,P3,0.012688181,0.02286695,gender_resnet34_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),1,FT8,0.13107802,0.37788126,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),2,P2,0.12056682,0.328131,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),3,PZ,0.115381286,0.29882547,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),4,C3,0.104561865,0.32237825,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),5,P8,0.102487214,0.27230912,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),6,P3,0.099767424,0.32612103,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),7,PO7,0.09282935,0.2394918,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),8,FT7,0.080876894,0.21879447,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),9,T8,0.07986657,0.25958672,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,combined (all),10,OZ,0.06802646,0.16299035,gender_resnet50_1s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,1,FT8,0.1064711,0.31818017,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,2,P2,0.09862406,0.27361798,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,3,PZ,0.09545052,0.24565136,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,4,C3,0.08538633,0.27715537,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,5,P8,0.08355037,0.21836399,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,6,P3,0.07956746,0.27797103,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,7,PO7,0.077484585,0.20040834,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,8,FT7,0.06642137,0.17904703,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,9,T8,0.06394213,0.22146253,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,active,10,OZ,0.05721014,0.13347518,gender_resnet50_1s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,1,FT8,0.13525362,0.38698468,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,2,P2,0.12429255,0.33638072,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,3,PZ,0.11876326,0.3068187,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,4,C3,0.107816495,0.32934493,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,5,P8,0.105700344,0.28033,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,6,P3,0.103195205,0.33350474,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,7,PO7,0.09543557,0.24543327,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,8,FT7,0.083330445,0.22476086,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,9,T8,0.082570836,0.2654167,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_1s_best,passive,10,OZ,0.06986195,0.167422,gender_resnet50_1s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),1,FT8,0.10578434,0.31057322,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),2,C3,0.09947304,0.26686794,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),3,P2,0.098584585,0.2720885,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),4,PZ,0.09698067,0.2508467,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),5,PO7,0.09223655,0.24652724,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),6,P8,0.07000587,0.17694281,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),7,FT7,0.06594609,0.18442197,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),8,OZ,0.064110555,0.16324982,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),9,P3,0.06358323,0.1858116,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,combined (all),10,T10,0.059199665,0.14730331,gender_resnet50_2s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,1,FT8,0.09374417,0.25353763,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,2,C3,0.08717824,0.21226528,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,3,P2,0.08650406,0.2171183,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,4,PZ,0.085469596,0.19854884,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,5,PO7,0.08053878,0.19527708,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,6,P8,0.06215173,0.14151758,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,7,FT7,0.058122918,0.14792559,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,8,OZ,0.055794608,0.12871018,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,9,P3,0.05521911,0.14825009,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,active,10,T10,0.051320124,0.11572299,gender_resnet50_2s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,1,FT8,0.10786447,0.3193621,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,2,C3,0.10159793,0.27514836,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,3,P2,0.10067227,0.2804395,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,4,PZ,0.09897009,0.25877294,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,5,PO7,0.094259076,0.25429156,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,6,P8,0.071362846,0.18233487,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,7,FT7,0.06729781,0.18998657,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,8,OZ,0.06554761,0.16846505,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,9,P3,0.0650287,0.1915215,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_2s_best,passive,10,T10,0.060561344,0.15205258,gender_resnet50_2s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),1,FT8,0.040515658,0.099598214,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),2,P2,0.03504595,0.08364185,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),3,P8,0.03426946,0.08138564,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),4,PZ,0.033365443,0.07911009,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),5,PO7,0.029233128,0.0696464,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),6,C3,0.029192884,0.073444426,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),7,P3,0.028382279,0.072505996,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),8,F2,0.024247974,0.058225095,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),9,T9,0.023839884,0.055919193,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,combined (all),10,AF3,0.023269312,0.052427955,gender_resnet50_4s_best/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,1,FT8,0.03964399,0.078947775,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,2,P2,0.035078876,0.0667113,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,3,P8,0.034740742,0.06509999,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,4,PZ,0.033956904,0.06430092,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,5,PO7,0.029761367,0.056369774,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,6,C3,0.027895628,0.0562584,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,7,P3,0.027539995,0.054856833,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,8,F2,0.02512149,0.04620215,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,9,T9,0.024969673,0.045306426,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,active,10,AF3,0.023926657,0.042990424,gender_resnet50_4s_best/active/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,1,FT8,0.040677086,0.10296563,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,2,P2,0.035039995,0.086412065,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,3,P8,0.03418227,0.084053025,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,4,PZ,0.033256147,0.08155561,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,5,C3,0.029433073,0.076198176,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,6,PO7,0.029135164,0.071834646,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,7,P3,0.028538264,0.07531882,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,8,F2,0.02408624,0.060185775,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,9,T9,0.023630757,0.05766683,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
+gender_resnet50_4s_best,passive,10,AF3,0.023147268,0.053992603,gender_resnet50_4s_best/passive/channel_ranking_vanilla_gradients.csv
