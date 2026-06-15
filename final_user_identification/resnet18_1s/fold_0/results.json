@@ -1,0 +1,10 @@
+{
+  "val_accuracy": 0.06525328578033156,
+  "test_accuracy": 0.0020753238802330588,
+  "backbone": "resnet18",
+  "factory_model_type": "resnet18",
+  "segment_length": "1s",
+  "experiment_name": "user_identification_resnet18_1s",
+  "num_classes": 2516,
+  "use_arcface": true
+}

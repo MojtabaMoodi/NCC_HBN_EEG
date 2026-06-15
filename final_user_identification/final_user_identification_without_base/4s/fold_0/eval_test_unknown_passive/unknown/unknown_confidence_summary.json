@@ -1,0 +1,25 @@
+{
+  "n_samples": 148660,
+  "note": "For unknown vs known, use known_user_score (low = unknown). Softmax confidence is closed-world and is often high for unknown users.",
+  "known_user_score": {
+    "mean": 0.5726168255792065,
+    "min": 0.4999999701976794,
+    "max": 0.9999996607197389,
+    "std": 0.10678364576928924,
+    "note": "1/(1+OOD distance). Low = unknown; use this to flag unknown users."
+  },
+  "ood_distance_to_nearest_known": {
+    "mean": 0.7941709160804749,
+    "min": 3.392803762380936e-07,
+    "max": 1.0000001192092896,
+    "std": 0.2613285481929779,
+    "note": "Higher = more out-of-distribution (unknown)."
+  },
+  "softmax_confidence": {
+    "mean": 0.9565370678901672,
+    "min": 0.05360902473330498,
+    "max": 1.0,
+    "std": 0.14275549352169037,
+    "note": "Closed-world (max over known classes); often high for unknown users."
+  }
+}

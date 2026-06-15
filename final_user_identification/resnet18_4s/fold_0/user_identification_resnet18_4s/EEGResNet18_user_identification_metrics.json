@@ -1,0 +1,13 @@
+{
+  "model_name": "EEGResNet18",
+  "target_type": "user_identification",
+  "metrics": {
+    "accuracy": 4.479002436577326e-05,
+    "f1_macro": 3.56025582745166e-08,
+    "f1_weighted": 4.012112862740243e-09,
+    "fpr_macro": 0.000397456279809221,
+    "fnr_macro": 0.9996025437201908
+  },
+  "evaluation_time": 123.83554291725159,
+  "num_samples": 111632
+}

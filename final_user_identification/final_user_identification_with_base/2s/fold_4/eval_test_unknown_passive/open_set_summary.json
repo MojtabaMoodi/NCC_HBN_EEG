@@ -1,0 +1,75 @@
+{
+  "best_threshold_known_user_score": 0.8,
+  "best_open_set_accuracy": 0.9365904985466316,
+  "note": "Reject (predict unknown) when known_user_score < threshold.",
+  "threshold_sweep": [
+    {
+      "threshold": 0.1,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.15000000000000002,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.2,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.25,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.30000000000000004,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.35,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.4,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.45000000000000007,
+      "accuracy": 0.3629019686952695
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.3653639839716845
+    },
+    {
+      "threshold": 0.55,
+      "accuracy": 0.7452066350623986
+    },
+    {
+      "threshold": 0.6,
+      "accuracy": 0.8228839047470589
+    },
+    {
+      "threshold": 0.65,
+      "accuracy": 0.8745128694169104
+    },
+    {
+      "threshold": 0.7000000000000001,
+      "accuracy": 0.9102739851637217
+    },
+    {
+      "threshold": 0.75,
+      "accuracy": 0.9327415938454203
+    },
+    {
+      "threshold": 0.8,
+      "accuracy": 0.9365904985466316
+    },
+    {
+      "threshold": 0.85,
+      "accuracy": 0.882593506148161
+    },
+    {
+      "threshold": 0.9,
+      "accuracy": 0.6776593891267869
+    }
+  ]
+}

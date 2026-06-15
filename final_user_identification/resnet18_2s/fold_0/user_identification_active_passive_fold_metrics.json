@@ -1,0 +1,38 @@
+{
+  "val_accuracy_percent": 0.05498252718727366,
+  "val_active": {
+    "accuracy_percent": 0.0,
+    "f1_macro": 0.0,
+    "f1_weighted": 0.0,
+    "fpr_macro": 0.0,
+    "fnr_macro": 1.0
+  },
+  "val_passive": {
+    "accuracy_percent": 0.013627269404921922,
+    "f1_macro": 1.0839628188730995e-07,
+    "f1_weighted": 3.713543374126361e-08,
+    "fpr_macro": 0.0003977724741447892,
+    "fnr_macro": 0.9996022275258553
+  },
+  "test_active": {
+    "accuracy_percent": 0.016353229762878167,
+    "f1_macro": 1.6416220802109684e-07,
+    "f1_weighted": 5.347687953851593e-08,
+    "fpr_macro": 0.000502008032128514,
+    "fnr_macro": 0.9994979919678715
+  },
+  "test_passive": {
+    "accuracy_percent": 0.0,
+    "f1_macro": 0.0,
+    "f1_weighted": 0.0,
+    "fpr_macro": 0.0,
+    "fnr_macro": 1.0
+  },
+  "backbone": "resnet18",
+  "segment_length": "2s",
+  "num_classes": 2516,
+  "use_arcface": true,
+  "best_model_path": "/project/6101794/mojtabam/EEG/final_user_identification/resnet18_2s/fold_0/best_model.pth",
+  "task_active_metrics_json": "/project/6101794/mojtabam/EEG/final_user_identification/resnet18_2s/fold_0/user_identification_resnet18_2s_task_active/EEGResNet18_user_identification_metrics.json",
+  "task_passive_metrics_json": "/project/6101794/mojtabam/EEG/final_user_identification/resnet18_2s/fold_0/user_identification_resnet18_2s_task_passive/EEGResNet18_user_identification_metrics.json"
+}

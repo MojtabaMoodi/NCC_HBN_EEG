@@ -1,0 +1,988 @@
+{
+  "final_root": "/project/6101794/mojtabam/EEG/final_user_identification",
+  "n_folds": 5,
+  "segments": {
+    "4s": {
+      "hdf5_parent": "/scratch/mojtabam",
+      "folds": {
+        "fold_0": {
+          "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/best_model.pth",
+          "hdf5_dir": "/scratch/mojtabam/fold_0",
+          "test_task_accuracy_json": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/eval_task_type_test_accuracy.json",
+          "test": {
+            "active": {
+              "accuracy_percent": 97.06706124821646,
+              "loss": 5.116012760334545,
+              "f1_macro": 0.9608886250505466,
+              "f1_weighted": 0.9693284736476517,
+              "fpr_macro": 1.4518632074804583e-05,
+              "fnr_macro": 0.033900709258389984,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+            },
+            "passive": {
+              "accuracy_percent": 96.57962010160826,
+              "loss": 5.855097932344793,
+              "f1_macro": 0.9598614092494036,
+              "f1_weighted": 0.9645995307784728,
+              "fpr_macro": 1.3610984189387214e-05,
+              "fnr_macro": 0.039081039665475915,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+            },
+            "checkpoint_val_accuracy_percent": 96.90965896755802,
+            "checkpoint_test_accuracy_percent": 96.66135158377526
+          },
+          "analyze_output_dirs": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/eval_test_unknown_active",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/eval_test_unknown_passive"
+          },
+          "unknown_open_set": {
+            "active": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9520218579234973,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.40139890710382514
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.4040655737704918
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7730710382513661
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8360437158469946
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8818142076502732
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9151912568306011
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9398251366120218
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9520218579234973
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9264262295081968
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.7452021857923498
+                }
+              ]
+            },
+            "passive": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9400212951953233,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.37092998686658185
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.37346966677576654
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7433763242172773
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.817176190811579
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8685042403954112
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.905435246448384
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9308030443014638
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9400212951953233
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.905352385766192
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.6979355261031864
+                }
+              ]
+            }
+          },
+          "unknown_summaries": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/eval_test_unknown_active/unknown/unknown_confidence_summary.json",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_0/eval_test_unknown_passive/unknown/unknown_confidence_summary.json"
+          }
+        },
+        "fold_1": {
+          "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/best_model.pth",
+          "hdf5_dir": "/scratch/mojtabam/fold_1",
+          "test_task_accuracy_json": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/eval_task_type_test_accuracy.json",
+          "test": {
+            "active": {
+              "accuracy_percent": 97.04838709677419,
+              "loss": 4.652403854201617,
+              "f1_macro": 0.9597322837728588,
+              "f1_weighted": 0.9697809452204198,
+              "fpr_macro": 1.2277647214872287e-05,
+              "fnr_macro": 0.03520000413552102,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+            },
+            "passive": {
+              "accuracy_percent": 96.68118108359872,
+              "loss": 5.4668778488134615,
+              "f1_macro": 0.9601463168037497,
+              "f1_weighted": 0.9655984409566626,
+              "fpr_macro": 1.3201515446305067e-05,
+              "fnr_macro": 0.03872360682970383,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+            },
+            "checkpoint_val_accuracy_percent": 96.97890936728102,
+            "checkpoint_test_accuracy_percent": 96.74455923982619
+          },
+          "analyze_output_dirs": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/eval_test_unknown_active",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/eval_test_unknown_passive"
+          },
+          "unknown_open_set": {
+            "active": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9406940462135267,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.38060802833530105
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.38322229718333617
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7710195648507336
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8371774329566537
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8818308315061562
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9157741609040311
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9366250632484399
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9406940462135267
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9000042165626582
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.7144965424186204
+                }
+              ]
+            },
+            "passive": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9338835848475516,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.36658659275228417
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.36936659480546147
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.745874140232009
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8216569140745303
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8714998460117032
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9076891489580126
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9302576737501284
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9338835848475516
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.8794990247407863
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.6713191664100195
+                }
+              ]
+            }
+          },
+          "unknown_summaries": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/eval_test_unknown_active/unknown/unknown_confidence_summary.json",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_1/eval_test_unknown_passive/unknown/unknown_confidence_summary.json"
+          }
+        },
+        "fold_2": {
+          "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/best_model.pth",
+          "hdf5_dir": "/scratch/mojtabam/fold_2",
+          "test_task_accuracy_json": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/eval_task_type_test_accuracy.json",
+          "test": {
+            "active": {
+              "accuracy_percent": 97.0767421975203,
+              "loss": 5.069557471456481,
+              "f1_macro": 0.961451145430992,
+              "f1_weighted": 0.9695479746350557,
+              "fpr_macro": 1.4331856884789475e-05,
+              "fnr_macro": 0.0336434679273554,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+            },
+            "passive": {
+              "accuracy_percent": 96.70264307652377,
+              "loss": 5.534541363756662,
+              "f1_macro": 0.962309453459767,
+              "f1_weighted": 0.9660272743982972,
+              "fpr_macro": 1.3116405276241412e-05,
+              "fnr_macro": 0.03673559666524147,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+            },
+            "checkpoint_val_accuracy_percent": 97.0115029657564,
+            "checkpoint_test_accuracy_percent": 96.76560532469868
+          },
+          "analyze_output_dirs": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/eval_test_unknown_active",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/eval_test_unknown_passive"
+          },
+          "unknown_open_set": {
+            "active": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9462294381542405,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.3881435590685751
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.39045075838496046
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7765434736167486
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8431745353556932
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8892757957701346
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9199743644520402
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9404828028199103
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9462294381542405
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9057893612475967
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.7194616534928434
+                }
+              ]
+            },
+            "passive": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9338271971374038,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.3686210976308554
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.3713872296219345
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7478079125391113
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8217431990666881
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8717314502199301
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9060793067768173
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9280269770011171
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9338271971374038
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.882082802574028
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.6743384574794807
+                }
+              ]
+            }
+          },
+          "unknown_summaries": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/eval_test_unknown_active/unknown/unknown_confidence_summary.json",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/eval_test_unknown_passive/unknown/unknown_confidence_summary.json"
+          }
+        },
+        "fold_3": {
+          "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/best_model.pth",
+          "hdf5_dir": "/scratch/mojtabam/fold_3",
+          "test_task_accuracy_json": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/eval_task_type_test_accuracy.json",
+          "test": {
+            "active": {
+              "accuracy_percent": 97.29077253218884,
+              "loss": 4.85511443267266,
+              "f1_macro": 0.9627102396837245,
+              "f1_weighted": 0.9719070734626759,
+              "fpr_macro": 1.3363696138862794e-05,
+              "fnr_macro": 0.031345985363842505,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+            },
+            "passive": {
+              "accuracy_percent": 97.0334493718783,
+              "loss": 5.105678340717767,
+              "f1_macro": 0.9647162931630551,
+              "f1_weighted": 0.969378871738348,
+              "fpr_macro": 1.1805198638384849e-05,
+              "fnr_macro": 0.03469868595835475,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+            },
+            "checkpoint_val_accuracy_percent": 97.25571607325674,
+            "checkpoint_test_accuracy_percent": 97.07570767874174
+          },
+          "analyze_output_dirs": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/eval_test_unknown_active",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/eval_test_unknown_passive"
+          },
+          "unknown_open_set": {
+            "active": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9506371449134245,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.3839380212522755
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.3861394521823801
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7410566868464502
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.8100842470682867
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8608018288810804
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.9001735743617967
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.931035942593455
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9506371449134245
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9460437746073409
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.8127725329156259
+                }
+              ]
+            },
+            "passive": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9413591960661364,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.3702971849113891
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.3725454605458566
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.712158839642256
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.7867562126662486
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.842195802118742
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.8864806442031616
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9208524471139566
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9413591960661364
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9317514273456322
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.7592241180159071
+                }
+              ]
+            }
+          },
+          "unknown_summaries": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/eval_test_unknown_active/unknown/unknown_confidence_summary.json",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_3/eval_test_unknown_passive/unknown/unknown_confidence_summary.json"
+          }
+        },
+        "fold_4": {
+          "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/best_model.pth",
+          "hdf5_dir": "/scratch/mojtabam/fold_4",
+          "test_task_accuracy_json": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/eval_task_type_test_accuracy.json",
+          "test": {
+            "active": {
+              "accuracy_percent": 97.3567339076462,
+              "loss": 4.619502694656451,
+              "f1_macro": 0.9613175878382754,
+              "f1_weighted": 0.972849424531934,
+              "fpr_macro": 1.2297265630755418e-05,
+              "fnr_macro": 0.029965593365287084,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+            },
+            "passive": {
+              "accuracy_percent": 97.02124892996848,
+              "loss": 5.170854392668439,
+              "f1_macro": 0.9645880168421264,
+              "f1_weighted": 0.9693658170112269,
+              "fpr_macro": 1.1853562119122211e-05,
+              "fnr_macro": 0.03483618588295062,
+              "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+            },
+            "checkpoint_val_accuracy_percent": 97.26945607489058,
+            "checkpoint_test_accuracy_percent": 97.07774653979239
+          },
+          "analyze_output_dirs": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/eval_test_unknown_active",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/eval_test_unknown_passive"
+          },
+          "unknown_open_set": {
+            "active": {
+              "best_threshold_known_user_score": 0.85,
+              "best_open_set_accuracy": 0.9516118708796484,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.38821446096733586
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.39047598728424826
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.71905869300847
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.7880992511360969
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.840477054041945
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.8838940922958759
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9211452710631307
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9465554393974952
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9516118708796484
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.8506325873141175
+                }
+              ]
+            },
+            "passive": {
+              "best_threshold_known_user_score": 0.8,
+              "best_open_set_accuracy": 0.9431611603314061,
+              "note": "Reject (predict unknown) when known_user_score < threshold.",
+              "threshold_sweep": [
+                {
+                  "threshold": 0.1,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.15000000000000002,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.2,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.25,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.30000000000000004,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.35,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.4,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.45000000000000007,
+                  "accuracy": 0.3674273356614373
+                },
+                {
+                  "threshold": 0.5,
+                  "accuracy": 0.36957351378191056
+                },
+                {
+                  "threshold": 0.55,
+                  "accuracy": 0.7013160216505464
+                },
+                {
+                  "threshold": 0.6,
+                  "accuracy": 0.7774991895407671
+                },
+                {
+                  "threshold": 0.65,
+                  "accuracy": 0.8347812170430343
+                },
+                {
+                  "threshold": 0.7000000000000001,
+                  "accuracy": 0.8818822351439745
+                },
+                {
+                  "threshold": 0.75,
+                  "accuracy": 0.9189499731214786
+                },
+                {
+                  "threshold": 0.8,
+                  "accuracy": 0.9431611603314061
+                },
+                {
+                  "threshold": 0.85,
+                  "accuracy": 0.9427918371366784
+                },
+                {
+                  "threshold": 0.9,
+                  "accuracy": 0.8103115035967976
+                }
+              ]
+            }
+          },
+          "unknown_summaries": {
+            "active": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/eval_test_unknown_active/unknown/unknown_confidence_summary.json",
+            "passive": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_4/eval_test_unknown_passive/unknown/unknown_confidence_summary.json"
+          }
+        }
+      },
+      "summary_open_set_accuracy": {
+        "active_mean": 0.9482388716168675,
+        "active_std": 0.00480629892525082,
+        "passive_mean": 0.9384504867155643,
+        "passive_std": 0.004340215273369543,
+        "n_folds_in_summary": 5
+      },
+      "summary_test_accuracy_percent": {
+        "active_mean": 97.16793939646921,
+        "active_std": 0.1444969108101221,
+        "passive_mean": 96.8036285127155,
+        "passive_std": 0.2094919287100497,
+        "n_folds_in_summary": 5
+      },
+      "summary_test_f1_macro": {
+        "active_mean": 0.9612199763552794,
+        "active_std": 0.0010731815827510404,
+        "passive_mean": 0.9623242979036203,
+        "passive_std": 0.0023267846540712426,
+        "n_folds_in_summary": 5
+      },
+      "summary_test_f1_weighted": {
+        "active_mean": 0.9706827782995473,
+        "active_std": 0.0015912634832479626,
+        "passive_mean": 0.9669939869766015,
+        "passive_std": 0.0022320817316766215,
+        "n_folds_in_summary": 5
+      },
+      "summary_test_fpr_macro": {
+        "active_mean": 1.3357819588816913e-05,
+        "active_std": 1.0709593679038353e-06,
+        "passive_mean": 1.271753313388815e-05,
+        "passive_std": 8.322248493182668e-07,
+        "n_folds_in_summary": 5
+      },
+      "summary_test_fnr_macro": {
+        "active_mean": 0.0328111520100792,
+        "active_std": 0.0021113038958734368,
+        "passive_mean": 0.036815023000345316,
+        "passive_std": 0.002072348372953179,
+        "n_folds_in_summary": 5
+      }
+    }
+  }
+}

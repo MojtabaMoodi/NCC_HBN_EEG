@@ -1,0 +1,55 @@
+{
+  "segment_length": "4s",
+  "device": "cuda",
+  "folds": [
+    {
+      "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/4s/fold_2/best_model.pth",
+      "hdf5_dir": "/scratch/mojtabam/fold_2",
+      "segment_length": "4s",
+      "num_classes": 2516,
+      "checkpoint_val_accuracy_percent": 97.0115029657564,
+      "checkpoint_test_accuracy_percent": 96.76560532469868,
+      "active": {
+        "accuracy_percent": 97.0767421975203,
+        "loss": 5.069557471456481,
+        "f1_macro": 0.961451145430992,
+        "f1_weighted": 0.9695479746350557,
+        "fpr_macro": 1.4331856884789475e-05,
+        "fnr_macro": 0.0336434679273554,
+        "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_active.npz"
+      },
+      "passive": {
+        "accuracy_percent": 96.70264307652377,
+        "loss": 5.534541363756662,
+        "f1_macro": 0.962309453459767,
+        "f1_weighted": 0.9660272743982972,
+        "fpr_macro": 1.3116405276241412e-05,
+        "fnr_macro": 0.03673559666524147,
+        "predictions_npz": "/project/6101794/mojtabam/EEG/final_user_identification/test_predictions/4s/fold_00_4s_passive.npz"
+      }
+    }
+  ],
+  "summary": {
+    "n_folds": 1,
+    "active_test_accuracy_mean_percent": 97.0767421975203,
+    "active_test_accuracy_std_percent": 0.0,
+    "passive_test_accuracy_mean_percent": 96.70264307652377,
+    "passive_test_accuracy_std_percent": 0.0,
+    "active_test_f1_macro_mean": 0.961451145430992,
+    "active_test_f1_macro_std": 0.0,
+    "passive_test_f1_macro_mean": 0.962309453459767,
+    "passive_test_f1_macro_std": 0.0,
+    "active_test_f1_weighted_mean": 0.9695479746350557,
+    "active_test_f1_weighted_std": 0.0,
+    "passive_test_f1_weighted_mean": 0.9660272743982972,
+    "passive_test_f1_weighted_std": 0.0,
+    "active_test_fpr_macro_mean": 1.4331856884789475e-05,
+    "active_test_fpr_macro_std": 0.0,
+    "passive_test_fpr_macro_mean": 1.3116405276241412e-05,
+    "passive_test_fpr_macro_std": 0.0,
+    "active_test_fnr_macro_mean": 0.0336434679273554,
+    "active_test_fnr_macro_std": 0.0,
+    "passive_test_fnr_macro_mean": 0.03673559666524147,
+    "passive_test_fnr_macro_std": 0.0
+  }
+}

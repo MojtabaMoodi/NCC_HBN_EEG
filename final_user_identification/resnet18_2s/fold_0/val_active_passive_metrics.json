@@ -1,0 +1,55 @@
+{
+  "segment_length": "2s",
+  "device": "cuda",
+  "pipeline": "cnn_resnet_arcface",
+  "folds": [
+    {
+      "checkpoint": "/project/6101794/mojtabam/EEG/final_user_identification/resnet18_2s/fold_0/best_model.pth",
+      "hdf5_dir": "/scratch/mojtabam/2s/fold_0",
+      "segment_length": "2s",
+      "factory_model_type": "resnet18",
+      "num_classes": 2516,
+      "use_arcface": true,
+      "embedding_dim": 128,
+      "active": {
+        "accuracy_percent": 0.0,
+        "loss": 0.019676719393048967,
+        "f1_macro": 0.0,
+        "f1_weighted": 0.0,
+        "fpr_macro": 0.0,
+        "fnr_macro": 1.0
+      },
+      "passive": {
+        "accuracy_percent": 0.013627269404921922,
+        "loss": 0.019664032549797733,
+        "f1_macro": 1.0839628188730995e-07,
+        "f1_weighted": 3.713543374126361e-08,
+        "fpr_macro": 0.0003977724741447892,
+        "fnr_macro": 0.9996022275258553
+      }
+    }
+  ],
+  "summary": {
+    "n_folds": 1,
+    "active_test_accuracy_mean_percent": 0.0,
+    "active_test_accuracy_std_percent": 0.0,
+    "passive_test_accuracy_mean_percent": 0.013627269404921922,
+    "passive_test_accuracy_std_percent": 0.0,
+    "active_test_f1_macro_mean": 0.0,
+    "active_test_f1_macro_std": 0.0,
+    "passive_test_f1_macro_mean": 1.0839628188730995e-07,
+    "passive_test_f1_macro_std": 0.0,
+    "active_test_f1_weighted_mean": 0.0,
+    "active_test_f1_weighted_std": 0.0,
+    "passive_test_f1_weighted_mean": 3.713543374126361e-08,
+    "passive_test_f1_weighted_std": 0.0,
+    "active_test_fpr_macro_mean": 0.0,
+    "active_test_fpr_macro_std": 0.0,
+    "passive_test_fpr_macro_mean": 0.0003977724741447892,
+    "passive_test_fpr_macro_std": 0.0,
+    "active_test_fnr_macro_mean": 1.0,
+    "active_test_fnr_macro_std": 0.0,
+    "passive_test_fnr_macro_mean": 0.9996022275258553,
+    "passive_test_fnr_macro_std": 0.0
+  }
+}
