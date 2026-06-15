@@ -1,0 +1,27 @@
+{
+  "config": {
+    "enrollment_fraction_per_user": 0.7,
+    "unknown_recall_weight": 0.4,
+    "register_fraction_of_unknown": 0.5,
+    "threshold_criterion": "harmonic_recall_balance",
+    "threshold_on": "known_user_score"
+  },
+  "objective_unknown_weight": 0.5,
+  "objective_score": 0.8086468392575021,
+  "aggregate": {
+    "open_world_accuracy_mean": 0.8094157503645129,
+    "open_world_accuracy_std": 0.025498206545832472,
+    "open_world_balanced_accuracy_mean": 0.7960234244619452,
+    "open_world_balanced_accuracy_std": 0.02720097384140411,
+    "open_world_f1_macro_mean": 0.7136589184967979,
+    "open_world_f1_macro_std": 0.03425233672693561,
+    "open_world_mcc_mean": 0.6230985869608568,
+    "open_world_mcc_std": 0.036919064531665824,
+    "unknown_recall_mean": 0.8213732476414799,
+    "unknown_recall_std": 0.02450581016178997,
+    "mean_registered_recall_mean": 0.7959204308735245,
+    "mean_registered_recall_std": 0.0272139002065778,
+    "registered_probe_accuracy_mean": 0.8755397384732231,
+    "registered_probe_accuracy_std": 0.022929068506533343
+  }
+}

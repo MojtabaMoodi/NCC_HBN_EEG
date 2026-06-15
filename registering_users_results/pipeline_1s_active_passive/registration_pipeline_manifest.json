@@ -1,0 +1,129 @@
+{
+  "segment_length": "1s",
+  "n_folds": 5,
+  "cv_dir": "/project/6101794/mojtabam/EEG/final_user_identification/final_user_identification_without_base/1s",
+  "hdf5_root": "/scratch/mojtabam/1s",
+  "objective_unknown_weight": 0.5,
+  "threshold_on": "known_user_score",
+  "active": {
+    "grid_output_dir": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/grid_search_active",
+    "ranked_results": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/grid_search_active/grid_search_ranked_results.json",
+    "best_config": {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8087740034851679,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8121604361827035,
+        "open_world_accuracy_std": 0.027277831367724967,
+        "open_world_balanced_accuracy_mean": 0.7910318428104018,
+        "open_world_balanced_accuracy_std": 0.027414131857140613,
+        "open_world_f1_macro_mean": 0.7149603369087985,
+        "open_world_f1_macro_std": 0.03465721318474336,
+        "open_world_mcc_mean": 0.6243801094153172,
+        "open_world_mcc_std": 0.037545835217083025,
+        "unknown_recall_mean": 0.8266602721730871,
+        "unknown_recall_std": 0.02881722426431865,
+        "mean_registered_recall_mean": 0.7908877347972487,
+        "mean_registered_recall_std": 0.027445189940815424,
+        "registered_probe_accuracy_mean": 0.8755397384732231,
+        "registered_probe_accuracy_std": 0.022929068506533343
+      }
+    },
+    "search_space": {
+      "grid_enrollment_fractions": [
+        0.5,
+        0.6,
+        0.7
+      ],
+      "grid_unknown_recall_weights": [
+        0.4,
+        0.5,
+        0.6,
+        0.7
+      ],
+      "grid_register_fractions": [
+        0.5
+      ],
+      "grid_threshold_criteria": [
+        "weighted_recall_balance",
+        "harmonic_recall_balance"
+      ],
+      "objective_unknown_weight": 0.5,
+      "threshold_on": "known_user_score"
+    },
+    "ranking_note": "Sorted by descending objective_score; ties broken by open_world_f1_macro_mean then open_world_mcc_mean."
+  },
+  "passive": {
+    "grid_output_dir": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/grid_search_passive",
+    "ranked_results": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/grid_search_passive/grid_search_ranked_results.json",
+    "best_config": {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.7334165117362019,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.7601525856980895,
+        "open_world_accuracy_std": 0.017131587594504977,
+        "open_world_balanced_accuracy_mean": 0.6777466166564058,
+        "open_world_balanced_accuracy_std": 0.03649644704629242,
+        "open_world_f1_macro_mean": 0.5974544241272511,
+        "open_world_f1_macro_std": 0.0317173731216168,
+        "open_world_mcc_mean": 0.5231621420758379,
+        "open_world_mcc_std": 0.030498659962559398,
+        "unknown_recall_mean": 0.7894421249954215,
+        "unknown_recall_std": 0.013772758527928006,
+        "mean_registered_recall_mean": 0.6773908984769823,
+        "mean_registered_recall_std": 0.03658840876909645,
+        "registered_probe_accuracy_mean": 0.7976375756319436,
+        "registered_probe_accuracy_std": 0.03590918795319012
+      }
+    },
+    "search_space": {
+      "grid_enrollment_fractions": [
+        0.5,
+        0.6,
+        0.7
+      ],
+      "grid_unknown_recall_weights": [
+        0.4,
+        0.5,
+        0.6,
+        0.7
+      ],
+      "grid_register_fractions": [
+        0.5
+      ],
+      "grid_threshold_criteria": [
+        "weighted_recall_balance",
+        "harmonic_recall_balance"
+      ],
+      "objective_unknown_weight": 0.5,
+      "threshold_on": "known_user_score"
+    },
+    "ranking_note": "Sorted by descending objective_score; ties broken by open_world_f1_macro_mean then open_world_mcc_mean."
+  },
+  "recommended_next_steps": [
+    "Use best hyperparameters below for paper tables and deployment experiments.",
+    "Passive best settings may differ from active; always report them separately.",
+    "If disk is tight, re-run grid with --prune_after_grid or delete old config folders manually."
+  ],
+  "final_eval_commands": {
+    "active": "/home/mojtabam/miniconda3/envs/eeg_env/bin/python /project/6101794/mojtabam/EEG/user_identification/registering_users/run_all_folds_registration_eval.py --cv_dir final_user_identification/final_user_identification_without_base/1s --hdf5_root /home/mojtabam/scratch/1s --segment_length 1s --task_type active --n_folds 5 --output_root /project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/eval_all_folds_active_best_from_grid --device cuda --seed 42 --batch_size 192 --num_workers 4 --dropout_rate 0.1 --model_name labram_base_patch200_200 --arcface_margin 0.5 --arcface_scale 256.0 --register_fraction_of_unknown 0.5 --enrollment_fraction_per_user 0.7 --threshold_criterion weighted_recall_balance --unknown_recall_weight 0.5 --threshold_grid_points 501 --threshold_on known_user_score",
+    "passive": "/home/mojtabam/miniconda3/envs/eeg_env/bin/python /project/6101794/mojtabam/EEG/user_identification/registering_users/run_all_folds_registration_eval.py --cv_dir final_user_identification/final_user_identification_without_base/1s --hdf5_root /home/mojtabam/scratch/1s --segment_length 1s --task_type passive --n_folds 5 --output_root /project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/eval_all_folds_passive_best_from_grid --device cuda --seed 42 --batch_size 192 --num_workers 4 --dropout_rate 0.1 --model_name labram_base_patch200_200 --arcface_margin 0.5 --arcface_scale 256.0 --register_fraction_of_unknown 0.5 --enrollment_fraction_per_user 0.7 --threshold_criterion weighted_recall_balance --unknown_recall_weight 0.5 --threshold_grid_points 501 --threshold_on known_user_score"
+  },
+  "final_eval_output_roots": {
+    "active": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/eval_all_folds_active_best_from_grid",
+    "passive": "/project/6101794/mojtabam/EEG/registering_users_results/pipeline_1s_active_passive/eval_all_folds_passive_best_from_grid"
+  }
+}

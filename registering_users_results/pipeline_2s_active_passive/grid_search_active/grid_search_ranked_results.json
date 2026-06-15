@@ -1,0 +1,702 @@
+{
+  "search_space": {
+    "grid_enrollment_fractions": [
+      0.5,
+      0.6,
+      0.7
+    ],
+    "grid_unknown_recall_weights": [
+      0.4,
+      0.5,
+      0.6,
+      0.7
+    ],
+    "grid_register_fractions": [
+      0.5
+    ],
+    "grid_threshold_criteria": [
+      "weighted_recall_balance",
+      "harmonic_recall_balance"
+    ],
+    "objective_unknown_weight": 0.5,
+    "threshold_on": "known_user_score"
+  },
+  "ranking_note": "Sorted by descending objective_score; ties broken by open_world_f1_macro_mean then open_world_mcc_mean.",
+  "best_config": {
+    "config": {
+      "enrollment_fraction_per_user": 0.7,
+      "unknown_recall_weight": 0.5,
+      "register_fraction_of_unknown": 0.5,
+      "threshold_criterion": "weighted_recall_balance",
+      "threshold_on": "known_user_score"
+    },
+    "objective_unknown_weight": 0.5,
+    "objective_score": 0.8207559936250308,
+    "aggregate": {
+      "open_world_accuracy_mean": 0.8228853848880217,
+      "open_world_accuracy_std": 0.01733307940431699,
+      "open_world_balanced_accuracy_mean": 0.8061491849719046,
+      "open_world_balanced_accuracy_std": 0.02775801495120056,
+      "open_world_f1_macro_mean": 0.7490270771440605,
+      "open_world_f1_macro_std": 0.016080600613424346,
+      "open_world_mcc_mean": 0.6462988411920054,
+      "open_world_mcc_std": 0.028182374710899846,
+      "unknown_recall_mean": 0.8354817318534721,
+      "unknown_recall_std": 0.01779711645209906,
+      "mean_registered_recall_mean": 0.8060302553965896,
+      "mean_registered_recall_std": 0.027845376026277558,
+      "registered_probe_accuracy_mean": 0.8861393468994893,
+      "registered_probe_accuracy_std": 0.024212517252540502
+    }
+  },
+  "ranked_results": [
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8207559936250308,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8228853848880217,
+        "open_world_accuracy_std": 0.01733307940431699,
+        "open_world_balanced_accuracy_mean": 0.8061491849719046,
+        "open_world_balanced_accuracy_std": 0.02775801495120056,
+        "open_world_f1_macro_mean": 0.7490270771440605,
+        "open_world_f1_macro_std": 0.016080600613424346,
+        "open_world_mcc_mean": 0.6462988411920054,
+        "open_world_mcc_std": 0.028182374710899846,
+        "unknown_recall_mean": 0.8354817318534721,
+        "unknown_recall_std": 0.01779711645209906,
+        "mean_registered_recall_mean": 0.8060302553965896,
+        "mean_registered_recall_std": 0.027845376026277558,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8206321023612339,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8218055398775409,
+        "open_world_accuracy_std": 0.01845750260247759,
+        "open_world_balanced_accuracy_mean": 0.8079722485411551,
+        "open_world_balanced_accuracy_std": 0.024325322924310125,
+        "open_world_f1_macro_mean": 0.748561978508176,
+        "open_world_f1_macro_std": 0.016706816042410175,
+        "open_world_mcc_mean": 0.6459061187554823,
+        "open_world_mcc_std": 0.028741324580496042,
+        "unknown_recall_mean": 0.8333951209401658,
+        "unknown_recall_std": 0.01869679863925183,
+        "mean_registered_recall_mean": 0.8078690837823019,
+        "mean_registered_recall_std": 0.024380840715457666,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8206321023612339,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8218055398775409,
+        "open_world_accuracy_std": 0.01845750260247759,
+        "open_world_balanced_accuracy_mean": 0.8079722485411551,
+        "open_world_balanced_accuracy_std": 0.024325322924310125,
+        "open_world_f1_macro_mean": 0.748561978508176,
+        "open_world_f1_macro_std": 0.016706816042410175,
+        "open_world_mcc_mean": 0.6459061187554823,
+        "open_world_mcc_std": 0.028741324580496042,
+        "unknown_recall_mean": 0.8333951209401658,
+        "unknown_recall_std": 0.01869679863925183,
+        "mean_registered_recall_mean": 0.8078690837823019,
+        "mean_registered_recall_std": 0.024380840715457666,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8206321023612339,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8218055398775409,
+        "open_world_accuracy_std": 0.01845750260247759,
+        "open_world_balanced_accuracy_mean": 0.8079722485411551,
+        "open_world_balanced_accuracy_std": 0.024325322924310125,
+        "open_world_f1_macro_mean": 0.748561978508176,
+        "open_world_f1_macro_std": 0.016706816042410175,
+        "open_world_mcc_mean": 0.6459061187554823,
+        "open_world_mcc_std": 0.028741324580496042,
+        "unknown_recall_mean": 0.8333951209401658,
+        "unknown_recall_std": 0.01869679863925183,
+        "mean_registered_recall_mean": 0.8078690837823019,
+        "mean_registered_recall_std": 0.024380840715457666,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8206321023612339,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8218055398775409,
+        "open_world_accuracy_std": 0.01845750260247759,
+        "open_world_balanced_accuracy_mean": 0.8079722485411551,
+        "open_world_balanced_accuracy_std": 0.024325322924310125,
+        "open_world_f1_macro_mean": 0.748561978508176,
+        "open_world_f1_macro_std": 0.016706816042410175,
+        "open_world_mcc_mean": 0.6459061187554823,
+        "open_world_mcc_std": 0.028741324580496042,
+        "unknown_recall_mean": 0.8333951209401658,
+        "unknown_recall_std": 0.01869679863925183,
+        "mean_registered_recall_mean": 0.8078690837823019,
+        "mean_registered_recall_std": 0.024380840715457666,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8188074562150572,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8190704173916415,
+        "open_world_accuracy_std": 0.019524510374710823,
+        "open_world_balanced_accuracy_mean": 0.8011110829447583,
+        "open_world_balanced_accuracy_std": 0.03279526776451373,
+        "open_world_f1_macro_mean": 0.7631710823992542,
+        "open_world_f1_macro_std": 0.015356189832289216,
+        "open_world_mcc_mean": 0.675043440730709,
+        "open_world_mcc_std": 0.02840252687182817,
+        "unknown_recall_mean": 0.836648301645492,
+        "unknown_recall_std": 0.027436741220566156,
+        "mean_registered_recall_mean": 0.8009666107846225,
+        "mean_registered_recall_std": 0.032959483026198,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8187778229863656,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.80831374966244,
+        "open_world_accuracy_std": 0.022711852028138094,
+        "open_world_balanced_accuracy_mean": 0.8289440749788657,
+        "open_world_balanced_accuracy_std": 0.022049172026474148,
+        "open_world_f1_macro_mean": 0.7394553515513194,
+        "open_world_f1_macro_std": 0.019342961054267294,
+        "open_world_mcc_mean": 0.6392463606679719,
+        "open_world_mcc_std": 0.03036367011820147,
+        "unknown_recall_mean": 0.8085275010653881,
+        "unknown_recall_std": 0.026453707913189673,
+        "mean_registered_recall_mean": 0.8290281449073431,
+        "mean_registered_recall_std": 0.02209823695902104,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8184048804743322,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8142500399336345,
+        "open_world_accuracy_std": 0.017380008941052967,
+        "open_world_balanced_accuracy_mean": 0.811693259378958,
+        "open_world_balanced_accuracy_std": 0.023878927659917684,
+        "open_world_f1_macro_mean": 0.7614695121017251,
+        "open_world_f1_macro_std": 0.01574429287265976,
+        "open_world_mcc_mean": 0.6730974431715437,
+        "open_world_mcc_std": 0.026404057566371965,
+        "unknown_recall_mean": 0.8251709185037642,
+        "unknown_recall_std": 0.016330521134795533,
+        "mean_registered_recall_mean": 0.8116388424449001,
+        "mean_registered_recall_std": 0.02393415101396768,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8184048804743322,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8142500399336345,
+        "open_world_accuracy_std": 0.017380008941052967,
+        "open_world_balanced_accuracy_mean": 0.811693259378958,
+        "open_world_balanced_accuracy_std": 0.023878927659917684,
+        "open_world_f1_macro_mean": 0.7614695121017251,
+        "open_world_f1_macro_std": 0.01574429287265976,
+        "open_world_mcc_mean": 0.6730974431715437,
+        "open_world_mcc_std": 0.026404057566371965,
+        "unknown_recall_mean": 0.8251709185037642,
+        "unknown_recall_std": 0.016330521134795533,
+        "mean_registered_recall_mean": 0.8116388424449001,
+        "mean_registered_recall_std": 0.02393415101396768,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8184048804743322,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8142500399336345,
+        "open_world_accuracy_std": 0.017380008941052967,
+        "open_world_balanced_accuracy_mean": 0.811693259378958,
+        "open_world_balanced_accuracy_std": 0.023878927659917684,
+        "open_world_f1_macro_mean": 0.7614695121017251,
+        "open_world_f1_macro_std": 0.01574429287265976,
+        "open_world_mcc_mean": 0.6730974431715437,
+        "open_world_mcc_std": 0.026404057566371965,
+        "unknown_recall_mean": 0.8251709185037642,
+        "unknown_recall_std": 0.016330521134795533,
+        "mean_registered_recall_mean": 0.8116388424449001,
+        "mean_registered_recall_std": 0.02393415101396768,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8184048804743322,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8142500399336345,
+        "open_world_accuracy_std": 0.017380008941052967,
+        "open_world_balanced_accuracy_mean": 0.811693259378958,
+        "open_world_balanced_accuracy_std": 0.023878927659917684,
+        "open_world_f1_macro_mean": 0.7614695121017251,
+        "open_world_f1_macro_std": 0.01574429287265976,
+        "open_world_mcc_mean": 0.6730974431715437,
+        "open_world_mcc_std": 0.026404057566371965,
+        "unknown_recall_mean": 0.8251709185037642,
+        "unknown_recall_std": 0.016330521134795533,
+        "mean_registered_recall_mean": 0.8116388424449001,
+        "mean_registered_recall_std": 0.02393415101396768,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8177793258706338,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8153978877427697,
+        "open_world_accuracy_std": 0.018692132522404956,
+        "open_world_balanced_accuracy_mean": 0.7991243784837831,
+        "open_world_balanced_accuracy_std": 0.03328529874120631,
+        "open_world_f1_macro_mean": 0.773106938739968,
+        "open_world_f1_macro_std": 0.01799877798236935,
+        "open_world_mcc_mean": 0.6945490844663347,
+        "open_world_mcc_std": 0.027555960834179324,
+        "unknown_recall_mean": 0.8365844997181574,
+        "unknown_recall_std": 0.024719054821608556,
+        "mean_registered_recall_mean": 0.7989741520231103,
+        "mean_registered_recall_std": 0.03343650099812352,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8174208468165002,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8368512612482821,
+        "open_world_accuracy_std": 0.01662026410971831,
+        "open_world_balanced_accuracy_mean": 0.7684565762972788,
+        "open_world_balanced_accuracy_std": 0.03045607346950133,
+        "open_world_f1_macro_mean": 0.7508846550532147,
+        "open_world_f1_macro_std": 0.0182687813196649,
+        "open_world_mcc_mean": 0.6489994870903445,
+        "open_world_mcc_std": 0.030669320973477444,
+        "unknown_recall_mean": 0.8667866033815408,
+        "unknown_recall_std": 0.01624406701755586,
+        "mean_registered_recall_mean": 0.7680550902514596,
+        "mean_registered_recall_std": 0.030566825773459688,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8173672716674036,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8129518762839772,
+        "open_world_accuracy_std": 0.021377460496255725,
+        "open_world_balanced_accuracy_mean": 0.8060490935594519,
+        "open_world_balanced_accuracy_std": 0.01878765311949486,
+        "open_world_f1_macro_mean": 0.7732826378867801,
+        "open_world_f1_macro_std": 0.01773448489374912,
+        "open_world_mcc_mean": 0.6943901019403231,
+        "open_world_mcc_std": 0.027799002951657218,
+        "unknown_recall_mean": 0.8287762691973327,
+        "unknown_recall_std": 0.025619121595019386,
+        "mean_registered_recall_mean": 0.8059582741374746,
+        "mean_registered_recall_std": 0.018806027208279456,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.5,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8173672716674036,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8129518762839772,
+        "open_world_accuracy_std": 0.021377460496255725,
+        "open_world_balanced_accuracy_mean": 0.8060490935594519,
+        "open_world_balanced_accuracy_std": 0.01878765311949486,
+        "open_world_f1_macro_mean": 0.7732826378867801,
+        "open_world_f1_macro_std": 0.01773448489374912,
+        "open_world_mcc_mean": 0.6943901019403231,
+        "open_world_mcc_std": 0.027799002951657218,
+        "unknown_recall_mean": 0.8287762691973327,
+        "unknown_recall_std": 0.025619121595019386,
+        "mean_registered_recall_mean": 0.8059582741374746,
+        "mean_registered_recall_std": 0.018806027208279456,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8173672716674036,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8129518762839772,
+        "open_world_accuracy_std": 0.021377460496255725,
+        "open_world_balanced_accuracy_mean": 0.8060490935594519,
+        "open_world_balanced_accuracy_std": 0.01878765311949486,
+        "open_world_f1_macro_mean": 0.7732826378867801,
+        "open_world_f1_macro_std": 0.01773448489374912,
+        "open_world_mcc_mean": 0.6943901019403231,
+        "open_world_mcc_std": 0.027799002951657218,
+        "unknown_recall_mean": 0.8287762691973327,
+        "unknown_recall_std": 0.025619121595019386,
+        "mean_registered_recall_mean": 0.8059582741374746,
+        "mean_registered_recall_std": 0.018806027208279456,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "harmonic_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8173672716674036,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8129518762839772,
+        "open_world_accuracy_std": 0.021377460496255725,
+        "open_world_balanced_accuracy_mean": 0.8060490935594519,
+        "open_world_balanced_accuracy_std": 0.01878765311949486,
+        "open_world_f1_macro_mean": 0.7732826378867801,
+        "open_world_f1_macro_std": 0.01773448489374912,
+        "open_world_mcc_mean": 0.6943901019403231,
+        "open_world_mcc_std": 0.027799002951657218,
+        "unknown_recall_mean": 0.8287762691973327,
+        "unknown_recall_std": 0.025619121595019386,
+        "mean_registered_recall_mean": 0.8059582741374746,
+        "mean_registered_recall_std": 0.018806027208279456,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8156754186241508,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8282441524621522,
+        "open_world_accuracy_std": 0.0177049420364208,
+        "open_world_balanced_accuracy_mean": 0.7653255925396223,
+        "open_world_balanced_accuracy_std": 0.02705477028220536,
+        "open_world_f1_macro_mean": 0.7610607574103743,
+        "open_world_f1_macro_std": 0.016494506035053758,
+        "open_world_mcc_mean": 0.673279347628582,
+        "open_world_mcc_std": 0.028750248498667433,
+        "unknown_recall_mean": 0.866437700863424,
+        "unknown_recall_std": 0.019301400522065488,
+        "mean_registered_recall_mean": 0.7649131363848776,
+        "mean_registered_recall_std": 0.027156155735400204,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.6,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8153785061582963,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8207049205612711,
+        "open_world_accuracy_std": 0.018603216648037546,
+        "open_world_balanced_accuracy_mean": 0.7698700936114851,
+        "open_world_balanced_accuracy_std": 0.024206898985960727,
+        "open_world_f1_macro_mean": 0.7702835441639101,
+        "open_world_f1_macro_std": 0.01696710133486085,
+        "open_world_mcc_mean": 0.6914385079130241,
+        "open_world_mcc_std": 0.027586698518238202,
+        "unknown_recall_mean": 0.8612594462058508,
+        "unknown_recall_std": 0.02095509623003106,
+        "mean_registered_recall_mean": 0.7694975661107419,
+        "mean_registered_recall_std": 0.024287851781032273,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8150037722230724,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8018955262971643,
+        "open_world_accuracy_std": 0.018184252151995334,
+        "open_world_balanced_accuracy_mean": 0.8316177991694991,
+        "open_world_balanced_accuracy_std": 0.027858083151052034,
+        "open_world_f1_macro_mean": 0.7535101310206025,
+        "open_world_f1_macro_std": 0.015842689435480208,
+        "open_world_mcc_mean": 0.6673804750482236,
+        "open_world_mcc_std": 0.02584559116435322,
+        "unknown_recall_mean": 0.7982541653067217,
+        "unknown_recall_std": 0.021504404906497916,
+        "mean_registered_recall_mean": 0.8317533791394232,
+        "mean_registered_recall_std": 0.02796110846901083,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.4,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8142260297964208,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8023946157650638,
+        "open_world_accuracy_std": 0.022356004025183146,
+        "open_world_balanced_accuracy_mean": 0.8290816226374386,
+        "open_world_balanced_accuracy_std": 0.022451058299106128,
+        "open_world_f1_macro_mean": 0.7680183882450584,
+        "open_world_f1_macro_std": 0.018245246830834397,
+        "open_world_mcc_mean": 0.6912800053695449,
+        "open_world_mcc_std": 0.027492746215833763,
+        "unknown_recall_mean": 0.7992480550582534,
+        "unknown_recall_std": 0.029376995190872623,
+        "mean_registered_recall_mean": 0.8292040045345883,
+        "mean_registered_recall_std": 0.022516297222335665,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.7,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8107184719260998,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8413027296035338,
+        "open_world_accuracy_std": 0.018262478740518027,
+        "open_world_balanced_accuracy_mean": 0.740074141701211,
+        "open_world_balanced_accuracy_std": 0.025528670522920502,
+        "open_world_f1_macro_mean": 0.7455313710134895,
+        "open_world_f1_macro_std": 0.017897877484337073,
+        "open_world_mcc_mean": 0.6446090177124535,
+        "open_world_mcc_std": 0.030945655419311748,
+        "unknown_recall_mean": 0.8819404660206409,
+        "unknown_recall_std": 0.02067467813069478,
+        "mean_registered_recall_mean": 0.7394964778315586,
+        "mean_registered_recall_std": 0.02562710851117603,
+        "registered_probe_accuracy_mean": 0.8861393468994893,
+        "registered_probe_accuracy_std": 0.024212517252540502
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.6,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8079922518422203,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.8304106116698039,
+        "open_world_accuracy_std": 0.017676172511700054,
+        "open_world_balanced_accuracy_mean": 0.7327859107716439,
+        "open_world_balanced_accuracy_std": 0.031549300506129016,
+        "open_world_f1_macro_mean": 0.7517576187947946,
+        "open_world_f1_macro_std": 0.02072181193108299,
+        "open_world_mcc_mean": 0.6648141246003071,
+        "open_world_mcc_std": 0.03234204899362632,
+        "unknown_recall_mean": 0.8838132030320123,
+        "unknown_recall_std": 0.01643332674829632,
+        "mean_registered_recall_mean": 0.7321713006524284,
+        "mean_registered_recall_std": 0.03166156652630115,
+        "registered_probe_accuracy_mean": 0.8821801433592913,
+        "registered_probe_accuracy_std": 0.024565302204190315
+      }
+    },
+    {
+      "config": {
+        "enrollment_fraction_per_user": 0.5,
+        "unknown_recall_weight": 0.7,
+        "register_fraction_of_unknown": 0.5,
+        "threshold_criterion": "weighted_recall_balance",
+        "threshold_on": "known_user_score"
+      },
+      "objective_unknown_weight": 0.5,
+      "objective_score": 0.8056706860483419,
+      "aggregate": {
+        "open_world_accuracy_mean": 0.820382442680688,
+        "open_world_accuracy_std": 0.019394684267492572,
+        "open_world_balanced_accuracy_mean": 0.727415478708456,
+        "open_world_balanced_accuracy_std": 0.035714794077005535,
+        "open_world_f1_macro_mean": 0.755989198804941,
+        "open_world_f1_macro_std": 0.023330208313643585,
+        "open_world_mcc_mean": 0.6777600862339105,
+        "open_world_mcc_std": 0.03429569231244768,
+        "unknown_recall_mean": 0.8845658956141245,
+        "unknown_recall_std": 0.015480141210809867,
+        "mean_registered_recall_mean": 0.7267754764825594,
+        "mean_registered_recall_std": 0.03584403488932011,
+        "registered_probe_accuracy_mean": 0.8802726499786517,
+        "registered_probe_accuracy_std": 0.02312441723021778
+      }
+    }
+  ]
+}
