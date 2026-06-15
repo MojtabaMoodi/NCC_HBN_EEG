@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "name": "age_regression_cnn",
+      "target_type": "age",
+      "mae": 8.936728477478027,
+      "rmse": 9.567869187471901,
+      "r2": -6.510708808898926,
+      "evaluation_time": 99.79921674728394,
+      "experiment_name": "age_regression_4s",
+      "description": "Age regression baseline with 4s segments (train on both, evaluate separately)"
+    }
+  ],
+  "metrics_comparison": {},
+  "best_model": "age_regression_cnn",
+  "best_mae": 8.936728477478027
+}

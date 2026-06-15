@@ -1,0 +1,22 @@
+{
+  "model_name": "EEGAgeRegressionCNN",
+  "target_type": "age",
+  "metrics": {
+    "mae": 8.936728477478027,
+    "mse": 91.54412078857422,
+    "rmse": 9.567869187471901,
+    "r2": -6.510708808898926,
+    "mae_normalized": 0.5298916697502136,
+    "mse_normalized": 0.32184553146362305,
+    "rmse_normalized": 0.5673143145238123,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  },
+  "evaluation_time": 45.89101433753967,
+  "num_samples": 66286,
+  "class_names": [
+    "<8.5 years",
+    "8.5-12.5 years",
+    ">12.5 years"
+  ]
+}
