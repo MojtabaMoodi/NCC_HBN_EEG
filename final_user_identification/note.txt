@@ -1,0 +1,190 @@
+# Step 1. Prepare 5-fold data (20% unknown per fold)
+
+python data_processing/preprocess_user_identification.py --data_root ~/scratch/preprocessed_new --output_dir ~/scratch --n_folds 5 --segment_length 1s --random_seed 42
+
+# OR
+
+python data_processing/preprocess_user_identification.py --data_root ~/scratch/preprocessed_new --output_dir ~/scratch --n_folds 5 --fold_index 4 --segment_length 1s --random_seed 42
+
+
+# Step 2. Train each fold
+
+# Experimental with labram-base.pth
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_4 --output_dir final_user_identification/fold_4 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+===> (labram user identification with base for 1s and 4s. 2s is the same)
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/1s/fold_0 --output_dir final_user_identification/1s_with_base/fold_0 --segment_length 1s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/1s/fold_1 --output_dir final_user_identification/1s_with_base --segment_length 1s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/1s/fold_2 --output_dir final_user_identification/1s_with_base --segment_length 1s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/1s/fold_3 --output_dir final_user_identification/1s_with_base --segment_length 1s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/1s/fold_4 --output_dir final_user_identification/1s_with_base --segment_length 1s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/4s/fold_0 --output_dir final_user_identification/4s_with_base/fold_0 --segment_length 4s --epochs 200 --batch_size 384 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+salloc -p gpubase_l40s_b4 -N 1   --gres=gpu:l40s:1   --cpus-per-task=16   --mem=128G   --time=2-00:00:0 && conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/4s/fold_1 --output_dir final_user_identification/4s_with_base/fold_1 --segment_length 4s --epochs 200 --batch_size 384 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+salloc -p gpubase_l40s_b4 -N 1   --gres=gpu:l40s:1   --cpus-per-task=16   --mem=128G   --time=2-00:00:0 && conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/4s/fold_2 --output_dir final_user_identification/4s_with_base/fold_2 --segment_length 4s --epochs 200 --batch_size 384 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+salloc -p gpubase_l40s_b4 -N 1   --gres=gpu:l40s:1   --cpus-per-task=16   --mem=128G   --time=2-00:00:0 && conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/4s/fold_3 --output_dir final_user_identification/4s_with_base/fold_3 --segment_length 4s --epochs 200 --batch_size 384 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+
+salloc -p gpubase_l40s_b4 -N 1   --gres=gpu:l40s:1   --cpus-per-task=16   --mem=128G   --time=2-00:00:0 && conda deactivate && conda activate eeg_env && python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/4s/fold_4 --output_dir final_user_identification/4s_with_base/fold_4 --segment_length 4s --epochs 200 --batch_size 384 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth
+<===
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_0 --output_dir final_user_identification/fold_0 --segment_length 2s --epochs 200 --batch_size 768 --seed 42
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_1 --output_dir final_user_identification/fold_1 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --resume final_user_identification/fold_1/best_model.pth
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_2 --output_dir final_user_identification/fold_2 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --resume final_user_identification/fold_2/best_model.pth
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_3 --output_dir final_user_identification/fold_3 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --resume final_user_identification/fold_3/best_model.pth
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/fold_4 --output_dir final_user_identification/fold_4 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --resume final_user_identification/fold_4/best_model.pth
+
+
+# Step 3. Collect results and aggregate
+python user_identification/run_5fold_cv.py --output_root final_user_identification --n_folds 5 --aggregate_only
+
+
+# Step 4. Saliency map
+conda deactivate && conda activate eeg_env && python saliency_analysis/main.py --checkpoint final_user_identification/fold_3/best_model.pth --target_type user_identification --segment_length 1s --hdf5_dir ~/scratch/fold_3 --output_dir final_user_identification/fold_3/saliency/
+
+
+# Compute the accuracy per task type with f1 score
+# python user_identification/run_all_folds_active_passive_test_unknown_eval.py --final_root final_user_identification --hdf5_root_4s "${HOME}/scratch" --n_folds 5 --device cuda --log_dir final_user_identification
+
+python user_identification/run_all_folds_active_passive_test_unknown_eval.py --final_root final_user_identification/final_user_identification_with_base --hdf5_root_4s "${HOME}/scratch/4s" --n_folds 5 --device cuda --log_dir final_user_identification/final_user_identification_with_base --save_predictions_dir final_user_identification/final_user_identification_with_base/test_predictions
+
+# User registration
+## for one fold:
+python user_identification/registering_users/run_registration_pipeline.py \
+  --cv_dir final_user_identification/final_user_identification_without_base/1s \
+  --hdf5_root "${HOME}/scratch/1s" \
+  --segment_length 1s \
+  --n_folds 5 \
+  --output_root registering_users_results/pipeline_1s_active_passive \
+  --objective_unknown_weight 0.5 \
+  --prune_after_grid \
+  --prune_keep_top_k 3 \
+  --threshold_on known_user_score \
+  --device cuda
+
+
+--------------------------------------------------------- FROZEN --------------------------------------------------------
+Note: “All but last layer” in the codebase is implemented as freeze all of labram_model and train feature_projection + ArcFace (the built-in LaBraM head is not used in the ArcFace path and stays frozen with the backbone).
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/2s/fold_0 --output_dir final_user_identification_frozen/2s/fold_0 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth --freeze_backbone
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/2s/fold_1 --output_dir final_user_identification_frozen/2s/fold_1 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth --freeze_backbone
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/2s/fold_2 --output_dir final_user_identification_frozen/2s/fold_2 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth --freeze_backbone
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/2s/fold_3 --output_dir final_user_identification_frozen/2s/fold_3 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth --freeze_backbone
+
+python user_identification/train_labram_arcface.py --hdf5_dir ~/scratch/2s/fold_4 --output_dir final_user_identification_frozen/2s/fold_4 --segment_length 2s --epochs 200 --batch_size 768 --seed 42 --pretrained_path LaBraM/checkpoints/labram-base.pth --freeze_backbone
+
+# Aggregate frozen runs:
+python user_identification/run_5fold_cv.py --output_root final_user_identification_frozen --n_folds 5 --aggregate_only
+
+
+---------------------------------- CNN / RESNET USER IDENTIFICATION (ARCFACE) ----------------------------------
+
+# NOTE:
+# - Commands below are "all folds at once" (n_folds=5) for each (window, backbone) combination.
+# - Backbones: cnn, resnet18, resnet34, resnet50
+# - Windows: 1s, 2s, 4s
+# - Source lives under user_identification/cnn_resnet_arcface/ (shared train script for CNN + ResNets).
+#   Choose output folder names yourself, e.g. final_user_identification/resnet34_2s (not required to
+#   include "cnn_" in the name for ResNet runs).
+# - run_5fold_cv.py: optional --train_script path; all other flags before --hdf5_dir are forwarded to
+#   that script; each fold runs with --hdf5_dir <root>/fold_k --output_dir <output_root>/fold_k.
+#   Per-fold training log: <output_root>/fold_k/train_fold_k.log (stdout+stderr).
+# - After train_user_identification_backbone.py per fold: results.json, best_model.pth, compact
+#   *_user_identification_metrics.json under *_task_active/ and *_task_passive/, val_active_passive_metrics.json,
+#   user_identification_active_passive_fold_metrics.json, user_identification_fold_metrics.log
+#   (no *_predictions.json for user_identification — see user_identification/README.md).
+#
+# --- Training stability (user identification only; gender/age CNN runs unchanged) ---
+# CNN.trainer.EEGTrainer for target_key=user_identification:
+#   - Mixed precision (AMP) is OFF — full fp32 for ArcFace + thousands of classes.
+#   - torch.compile() is SKIPPED for the same reason.
+#   - Two Adam LR groups: backbone at --learning_rate; ArcFace head at learning_rate × arcface_lr_multiplier.
+#   - Global gradient clipping max_grad_norm=0.2 by default (backbone + ArcFace); tune with --max_grad_norm
+#     (e.g. 0.1 if updates feel unstable). Clipping limits exploding gradients; it does not fix vanishing grads.
+# train_user_identification_backbone.py defaults (override with flags; pass through run_5fold_cv before --hdf5_dir):
+#   - backbone=cnn: --learning_rate 3e-4, --warmup_epochs 20, --arcface_lr_multiplier 0.15 → head LR 4.5e-5; arcface_scale from TrainingConfig (256) unless --arcface_scale set.
+#   - resnet*: --learning_rate 4e-4, --warmup_epochs 18, --arcface_lr_multiplier 0.22 → head ~8.8e-5; --arcface_scale 96 by default.
+#   - EEGTrainer: validation-time ArcFace collapse (single predicted class many batches) no longer aborts the run;
+#     training collapse still aborts. Tune LR/scale if warnings repeat every epoch.
+# Useful flags: --learning_rate, --warmup_epochs, --arcface_lr_multiplier, --arcface_margin, --arcface_scale,
+# --max_grad_norm, --batch_size, --dropout_rate, etc.
+#
+# If training aborts with "Model collapse" (many consecutive batches, one predicted class, diverse labels),
+# that is an optimization / landscape issue, not proof the model cannot learn. Try in order:
+#   - Defaults first (omit custom LR); or lower backbone only, e.g. --learning_rate 3e-4 (resnet) or 1e-4
+#   - Softer logits: lower --arcface_scale (cnn default 256; resnet default 96)
+#   - Longer warmup: --warmup_epochs 25
+#   - Tighter clip: --max_grad_norm 0.1
+#   - Smaller batches: --batch_size 128
+
+# -------------------- 1s --------------------
+# Train all folds
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/cnn_1s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 1s --epochs 200 --seed 42 --backbone cnn
+
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch/1s --output_root final_user_identification/resnet18_1s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 1s --epochs 200 --seed 42 --backbone resnet18 --batch_size 512 --num_workers 4
+
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet34_1s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 1s --epochs 200 --seed 42 --backbone resnet34
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet50_1s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 1s --epochs 200 --seed 42 --backbone resnet50
+
+# Aggregate only (optional if train command already ran end-to-end)
+python user_identification/run_5fold_cv.py --output_root final_user_identification/cnn_1s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet18_1s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet34_1s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet50_1s --n_folds 5 --aggregate_only
+
+# Evaluate active/passive for all folds
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/cnn_1s --hdf5_root ~/scratch --segment_length 1s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/cnn_1s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet18_1s --hdf5_root ~/scratch --segment_length 1s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet18_1s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet34_1s --hdf5_root ~/scratch --segment_length 1s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet34_1s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet50_1s --hdf5_root ~/scratch --segment_length 1s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet50_1s/test_predictions
+
+# -------------------- 2s --------------------
+# Train all folds
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/cnn_2s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 2s --epochs 200 --seed 42 --backbone cnn
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet18_2s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 2s --epochs 200 --seed 42 --backbone resnet18
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet34_2s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 2s --epochs 200 --seed 42 --backbone resnet34
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet50_2s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 2s --epochs 200 --seed 42 --backbone resnet50
+
+# Aggregate only (optional if train command already ran end-to-end)
+python user_identification/run_5fold_cv.py --output_root final_user_identification/cnn_2s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet18_2s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet34_2s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet50_2s --n_folds 5 --aggregate_only
+
+# Evaluate active/passive for all folds
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/cnn_2s --hdf5_root ~/scratch --segment_length 2s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/cnn_2s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet18_2s --hdf5_root ~/scratch --segment_length 2s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet18_2s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet34_2s --hdf5_root ~/scratch --segment_length 2s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet34_2s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet50_2s --hdf5_root ~/scratch --segment_length 2s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet50_2s/test_predictions
+
+# -------------------- 4s --------------------
+# Train all folds
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/cnn_4s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 4s --epochs 200 --seed 42 --backbone cnn
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet18_4s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 4s --epochs 200 --seed 42 --backbone resnet18
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet34_4s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 4s --epochs 200 --seed 42 --backbone resnet34
+python user_identification/run_5fold_cv.py --hdf5_root ~/scratch --output_root final_user_identification/resnet50_4s --n_folds 5 --train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py --segment_length 4s --epochs 200 --seed 42 --backbone resnet50
+
+# Aggregate only (optional if train command already ran end-to-end)
+python user_identification/run_5fold_cv.py --output_root final_user_identification/cnn_4s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet18_4s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet34_4s --n_folds 5 --aggregate_only
+python user_identification/run_5fold_cv.py --output_root final_user_identification/resnet50_4s --n_folds 5 --aggregate_only
+
+# Evaluate active/passive for all folds
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/cnn_4s --hdf5_root ~/scratch --segment_length 4s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/cnn_4s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet18_4s --hdf5_root ~/scratch --segment_length 4s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet18_4s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet34_4s --hdf5_root ~/scratch --segment_length 4s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet34_4s/test_predictions
+python user_identification/cnn_resnet_arcface/eval_active_passive_cnn_resnet.py --cv_dir final_user_identification/resnet50_4s --hdf5_root ~/scratch --segment_length 4s --n_folds 5 --device cuda --save_predictions_dir final_user_identification/resnet50_4s/test_predictions
