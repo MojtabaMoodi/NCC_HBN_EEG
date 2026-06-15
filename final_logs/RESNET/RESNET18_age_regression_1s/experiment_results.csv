@@ -1,0 +1,2 @@
+experiment_name,model_type,target_type,mae,rmse,r2,mae_normalized,training_time,evaluation_time,active_mae,active_rmse,active_r2,active_num_samples,passive_mae,passive_rmse,passive_r2,passive_num_samples
+age_regression_resnet18_1s,age_regression_resnet,age,2.2729079723358154,2.973205595850673,0.2731139659881592,0.13476908206939697,11791.36554813385,464.8798906803131,2.2681891918182373,2.9893342201215716,0.296708345413208,69183,2.2737085819244385,2.9704589743420984,0.26826757192611694,407568

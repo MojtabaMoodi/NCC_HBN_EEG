@@ -1,0 +1,23 @@
+{
+  "model_name": "EEGAgeRegressionResNet34",
+  "target_type": "age",
+  "metrics": {
+    "mae": 2.0406503677368164,
+    "mse": 7.232213020324707,
+    "rmse": 2.689277416021766,
+    "r2": 0.4033125638961792,
+    "mae_normalized": 0.12099768966436386,
+    "mse_normalized": 0.025426596403121948,
+    "rmse_normalized": 0.15945719301154762,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "num_samples": 113222
+  },
+  "evaluation_time": 116.43389201164246,
+  "num_samples": 113222,
+  "class_names": [
+    "<8.5 years",
+    "8.5-12.5 years",
+    ">12.5 years"
+  ]
+}

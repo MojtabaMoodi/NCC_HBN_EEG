@@ -1,0 +1,37 @@
+{
+  "models": [
+    {
+      "name": "gender_cnn",
+      "target_type": "gender",
+      "mae": null,
+      "rmse": null,
+      "r2": null,
+      "evaluation_time": 341.8993363380432,
+      "experiment_name": "gender_baseline_4s",
+      "description": "Gender classification baseline with 4s segments (train on both, evaluate separately)"
+    },
+    {
+      "name": "age_cnn",
+      "target_type": "age",
+      "mae": null,
+      "rmse": null,
+      "r2": null,
+      "evaluation_time": 351.6877076625824,
+      "experiment_name": "age_classification_4s",
+      "description": "Age classification baseline with 4s segments (train on both, evaluate separately)"
+    },
+    {
+      "name": "age_regression_cnn",
+      "target_type": "age",
+      "mae": 1.9974819421768188,
+      "rmse": 2.669940627505926,
+      "r2": 0.4168122410774231,
+      "evaluation_time": 342.02850461006165,
+      "experiment_name": "age_regression_4s",
+      "description": "Age regression baseline with 4s segments (train on both, evaluate separately)"
+    }
+  ],
+  "metrics_comparison": {},
+  "best_model": "age_regression_cnn",
+  "best_mae": 1.9974819421768188
+}

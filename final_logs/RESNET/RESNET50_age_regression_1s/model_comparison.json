@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "name": "age_regression_resnet50",
+      "target_type": "age",
+      "mae": 2.205458641052246,
+      "rmse": 2.9044052339822684,
+      "r2": 0.30636513233184814,
+      "evaluation_time": 459.78836488723755,
+      "experiment_name": "age_regression_resnet50_1s",
+      "description": "ResNet50 age regression with 1s segments (train on both, evaluate separately on active and passive)"
+    }
+  ],
+  "metrics_comparison": {},
+  "best_model": "age_regression_resnet50",
+  "best_mae": 2.205458641052246
+}

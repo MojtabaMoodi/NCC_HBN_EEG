@@ -1,0 +1,328 @@
+================================================================================
+RESNET50 AGE REGRESSION EXPERIMENT
+================================================================================
+Model: ResNet50 (age_regression_resnet50)
+Task: Age regression (normalized age)
+Mode: 1s (EEG segment length)
+Results directory: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+Reports directory: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+Epochs: 50, Learning rate: 0.0001
+Batch size: 512 (auto-selected), Random seed: 42
+Number of GPUs: 1
+Using data path (override): /home/mojtabam/scratch/processed_eeg_data_hdf5
+Number of workers: 8
+================================================================================
+
+Starting ResNet50 age regression experiment...
+Experiment name: age_regression_resnet50_1s
+Model type: age_regression_resnet50
+Training: Both active and passive tasks
+Evaluation: Separate metrics for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+Generate reports: True
+================================================================================
+
+Progress: 1/1
+Experiment: age_regression_resnet50_1s
+Setting up experiment: age_regression_resnet50_1s
+📊 Using training data age range for regression normalization: min=5.04, max=21.90 years
+   (Computed from 23 file(s), used for all splits to avoid data leakage)
+Creating standard loaders for age regression (train on both task types)
+Building HDF5 DataLoaders (segment_length=1s, 8 workers). Multi-part 1s data can take 1-2 minutes before the first epoch.
+DataLoaders built successfully.
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 1
+Requested GPUs: 1
+Using GPUs: 1
+Device: cuda
+GPU Device IDs: [0]
+  GPU 0: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: age_regression_resnet50_1s
+Model: age_regression_resnet50 | Target: age
+Channels: 60
+================================================================================
+Training age_regression_resnet50 for age regression...
+Starting training for age_regression_resnet50_1s
+Model: EEGAgeRegressionResNet50
+Target: age
+Epochs: 50
+Learning rate: 0.0001
+------------------------------------------------------------
+   No existing checkpoint found. Starting fresh training.
+⏳ Loading first batch (batch_size=512, num_workers=8)...
+
+🔄 Starting epoch 1/50
+   🔥 Warmup: LR = 0.000010 (target: 0.000100)
+  ✅ First batch loaded! (took 732.9s)
+  Processed 1000 batches, elapsed: 301.3s
+  Processed 2000 batches, elapsed: 436.4s
+  Processed 3000 batches, elapsed: 556.2s
+  Processed 4000 batches, elapsed: 690.4s
+  → Epoch   1/50 | Train Loss: 0.0394 | Val Loss: 0.0385 | Train MAE: 2.70y | Val MAE: 2.65y | LR: 0.000010 | Time: 1743.21s
+New best model saved at epoch 1 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 2/50
+  ✅ First batch loaded! (took 6.9s)
+  Processed 1000 batches, elapsed: 273.4s
+  Processed 2000 batches, elapsed: 458.4s
+  Processed 3000 batches, elapsed: 625.5s
+  Processed 4000 batches, elapsed: 784.8s
+  → Epoch   2/50 | Train Loss: 0.0353 | Val Loss: 0.0343 | Train MAE: 2.54y | Val MAE: 2.44y | LR: 0.000020 | Time: 902.53s
+New best model saved at epoch 2 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 3/50
+   🔥 Warmup: LR = 0.000030 (target: 0.000100)
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 272.2s
+  Processed 2000 batches, elapsed: 458.1s
+  Processed 3000 batches, elapsed: 625.4s
+  Processed 4000 batches, elapsed: 797.6s
+  → Epoch   3/50 | Train Loss: 0.0298 | Val Loss: 0.0303 | Train MAE: 2.31y | Val MAE: 2.29y | LR: 0.000030 | Time: 944.03s
+New best model saved at epoch 3 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 4/50
+  ✅ First batch loaded! (took 7.1s)
+  Processed 1000 batches, elapsed: 282.5s
+  Processed 2000 batches, elapsed: 507.9s
+  Processed 3000 batches, elapsed: 674.6s
+  Processed 4000 batches, elapsed: 843.6s
+  → Epoch   4/50 | Train Loss: 0.0263 | Val Loss: 0.0288 | Train MAE: 2.16y | Val MAE: 2.22y | LR: 0.000040 | Time: 964.23s
+New best model saved at epoch 4 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 5/50
+  ✅ First batch loaded! (took 6.9s)
+  Processed 1000 batches, elapsed: 282.3s
+  Processed 2000 batches, elapsed: 479.9s
+  Processed 3000 batches, elapsed: 652.4s
+  Processed 4000 batches, elapsed: 813.0s
+  → Epoch   5/50 | Train Loss: 0.0242 | Val Loss: 0.0281 | Train MAE: 2.06y | Val MAE: 2.19y | LR: 0.000050 | Time: 928.48s
+New best model saved at epoch 5 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 6/50
+   🔥 Warmup: LR = 0.000060 (target: 0.000100)
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 287.0s
+  Processed 2000 batches, elapsed: 485.2s
+  Processed 3000 batches, elapsed: 658.3s
+  Processed 4000 batches, elapsed: 845.4s
+  → Epoch   6/50 | Train Loss: 0.0225 | Val Loss: 0.0275 | Train MAE: 1.99y | Val MAE: 2.16y | LR: 0.000060 | Time: 963.48s
+New best model saved at epoch 6 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 7/50
+  ✅ First batch loaded! (took 6.4s)
+  Processed 1000 batches, elapsed: 277.5s
+  Processed 2000 batches, elapsed: 465.7s
+  Processed 3000 batches, elapsed: 633.8s
+  Processed 4000 batches, elapsed: 817.0s
+  → Epoch   7/50 | Train Loss: 0.0212 | Val Loss: 0.0275 | Train MAE: 1.93y | Val MAE: 2.15y | LR: 0.000070 | Time: 939.35s
+
+🔄 Starting epoch 8/50
+  ✅ First batch loaded! (took 7.0s)
+  Processed 1000 batches, elapsed: 278.8s
+  Processed 2000 batches, elapsed: 460.3s
+  Processed 3000 batches, elapsed: 628.7s
+  Processed 4000 batches, elapsed: 790.4s
+  → Epoch   8/50 | Train Loss: 0.0201 | Val Loss: 0.0272 | Train MAE: 1.87y | Val MAE: 2.14y | LR: 0.000080 | Time: 905.35s
+New best model saved at epoch 8 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 9/50
+   🔥 Warmup: LR = 0.000090 (target: 0.000100)
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 277.8s
+  Processed 2000 batches, elapsed: 461.6s
+  Processed 3000 batches, elapsed: 633.0s
+  Processed 4000 batches, elapsed: 798.9s
+  → Epoch   9/50 | Train Loss: 0.0191 | Val Loss: 0.0271 | Train MAE: 1.83y | Val MAE: 2.14y | LR: 0.000090 | Time: 913.82s
+New best model saved at epoch 9 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+🔄 Starting epoch 10/50
+  ✅ First batch loaded! (took 7.0s)
+  Processed 1000 batches, elapsed: 280.3s
+  Processed 2000 batches, elapsed: 466.6s
+  Processed 3000 batches, elapsed: 635.5s
+  Processed 4000 batches, elapsed: 799.5s
+  → Epoch  10/50 | Train Loss: 0.0182 | Val Loss: 0.0274 | Train MAE: 1.78y | Val MAE: 2.15y | LR: 0.000100 | Time: 913.35s
+
+🔄 Starting epoch 11/50
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 273.8s
+  Processed 2000 batches, elapsed: 457.4s
+  Processed 3000 batches, elapsed: 622.2s
+  Processed 4000 batches, elapsed: 785.0s
+  → Epoch  11/50 | Train Loss: 0.0170 | Val Loss: 0.0280 | Train MAE: 1.72y | Val MAE: 2.15y | LR: 0.000100 | Time: 899.63s
+
+🔄 Starting epoch 12/50
+  ✅ First batch loaded! (took 6.9s)
+  Processed 1000 batches, elapsed: 301.7s
+  Processed 2000 batches, elapsed: 484.5s
+  Processed 3000 batches, elapsed: 647.5s
+  Processed 4000 batches, elapsed: 802.9s
+  → Epoch  12/50 | Train Loss: 0.0157 | Val Loss: 0.0279 | Train MAE: 1.65y | Val MAE: 2.14y | LR: 0.000100 | Time: 912.31s
+
+🔄 Starting epoch 13/50
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 270.7s
+  Processed 2000 batches, elapsed: 447.3s
+  Processed 3000 batches, elapsed: 606.0s
+  Processed 4000 batches, elapsed: 759.8s
+  → Epoch  13/50 | Train Loss: 0.0145 | Val Loss: 0.0282 | Train MAE: 1.59y | Val MAE: 2.17y | LR: 0.000100 | Time: 871.69s
+
+🔄 Starting epoch 14/50
+  ✅ First batch loaded! (took 6.9s)
+  Processed 1000 batches, elapsed: 270.8s
+  Processed 2000 batches, elapsed: 449.4s
+  Processed 3000 batches, elapsed: 609.9s
+  Processed 4000 batches, elapsed: 765.1s
+  → Epoch  14/50 | Train Loss: 0.0134 | Val Loss: 0.0284 | Train MAE: 1.52y | Val MAE: 2.18y | LR: 0.000100 | Time: 875.80s
+
+🔄 Starting epoch 15/50
+  ✅ First batch loaded! (took 6.6s)
+  Processed 1000 batches, elapsed: 279.8s
+  Processed 2000 batches, elapsed: 455.0s
+  Processed 3000 batches, elapsed: 616.6s
+  Processed 4000 batches, elapsed: 776.1s
+  → Epoch  15/50 | Train Loss: 0.0124 | Val Loss: 0.0287 | Train MAE: 1.46y | Val MAE: 2.20y | LR: 0.000100 | Time: 886.33s
+
+🔄 Starting epoch 16/50
+  ✅ First batch loaded! (took 7.5s)
+  Processed 1000 batches, elapsed: 271.7s
+  Processed 2000 batches, elapsed: 449.3s
+  Processed 3000 batches, elapsed: 609.1s
+  Processed 4000 batches, elapsed: 766.0s
+  → Epoch  16/50 | Train Loss: 0.0114 | Val Loss: 0.0295 | Train MAE: 1.40y | Val MAE: 2.22y | LR: 0.000100 | Time: 878.65s
+
+🔄 Starting epoch 17/50
+  ✅ First batch loaded! (took 6.5s)
+  Processed 1000 batches, elapsed: 269.0s
+  Processed 2000 batches, elapsed: 442.3s
+  Processed 3000 batches, elapsed: 603.8s
+  Processed 4000 batches, elapsed: 759.0s
+  → Epoch  17/50 | Train Loss: 0.0105 | Val Loss: 0.0301 | Train MAE: 1.34y | Val MAE: 2.25y | LR: 0.000100 | Time: 870.51s
+
+🔄 Starting epoch 18/50
+  ✅ First batch loaded! (took 6.6s)
+  Processed 1000 batches, elapsed: 273.7s
+  Processed 2000 batches, elapsed: 447.4s
+  Processed 3000 batches, elapsed: 608.6s
+  Processed 4000 batches, elapsed: 760.4s
+  → Epoch  18/50 | Train Loss: 0.0097 | Val Loss: 0.0303 | Train MAE: 1.29y | Val MAE: 2.25y | LR: 0.000100 | Time: 871.03s
+
+🔄 Starting epoch 19/50
+  ✅ First batch loaded! (took 6.7s)
+  Processed 1000 batches, elapsed: 271.3s
+  Processed 2000 batches, elapsed: 445.5s
+  Processed 3000 batches, elapsed: 605.9s
+  Processed 4000 batches, elapsed: 759.8s
+  → Epoch  19/50 | Train Loss: 0.0089 | Val Loss: 0.0301 | Train MAE: 1.24y | Val MAE: 2.24y | LR: 0.000100 | Time: 872.04s
+Early stopping at epoch 19 (patience: 10)
+Last model saved at epoch 19 in /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints
+
+Training completed in 18059.13s
+Best validation loss: 0.0271 at epoch 9
+✅ Training completed
+   Training metrics saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s/age_regression_resnet50_1s_training_metrics.json
+Evaluating age_regression_resnet50 on age regression...
+? Loaded checkpoint from /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/checkpoints/age_regression_resnet50_1s_best.pth
+✅ Evaluation completed
+   MAE: 2.2055 years
+   RMSE: 2.9044 years
+   R²: 0.3064
+   Evaluation time: 221.59s
+   Evaluation results saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  MAE: 2.1949 years
+  RMSE: 2.8981 years
+  R�: 0.3390
+  Number of samples: 69183
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  MAE: 2.2073 years
+  RMSE: 2.9055 years
+  R�: 0.2999
+  Number of samples: 407568
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: MAE = 2.1949 years, RMSE = 2.8981 years, R� = 0.3390
+  PASSIVE: MAE = 2.2073 years, RMSE = 2.9055 years, R� = 0.2999
+   Evaluation results saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s_task_active
+   Evaluation results saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s_task_passive
+  ACTIVE tasks: MAE = 2.1949 years, RMSE = 2.8981 years, R² = 0.3390
+  PASSIVE tasks: MAE = 2.2073 years, RMSE = 2.9055 years, R² = 0.2999
+
+✅ Experiment 'age_regression_resnet50_1s' completed successfully!
+   Total time: 18518.92s
+   Training time: 18059.14s
+   Evaluation time: 459.79s
+   MAE: 2.2055 years
+   RMSE: 2.9044 years
+   R²: 0.3064
+   Result saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s/age_regression_resnet50_1s_result.json
+✅ Experiment completed: age_regression_resnet50_1s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     MAE (years)     RMSE (years)    R²         Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+age_regression_resnet50 age        2.2055          2.9044          0.3064     459.79     ResNet50 age regression with 1s segments (tr...   
+
+Best Model: age_regression_resnet50 (MAE: 2.2055)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/experiment_results.csv
+Reports generated in: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+Reports generated in: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/age_regression_resnet50_1s/
+Reports generated in: /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/RESNET/RESNET50_age_regression_1s/
+
+Overall test set metrics:
+  MAE: 2.2055 years
+  RMSE: 2.9044 years
+  R²: 0.3064
+
+Metrics by task type (active vs passive):
+  ACTIVE: MAE = 2.1949 years, RMSE = 2.8981 years, R² = 0.3390
+  PASSIVE: MAE = 2.2073 years, RMSE = 2.9055 years, R² = 0.2999
+================================================================================

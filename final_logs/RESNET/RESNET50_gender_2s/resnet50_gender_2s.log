@@ -1,0 +1,382 @@
+================================================================================
+RESNET50 GENDER CLASSIFICATION EXPERIMENT
+================================================================================
+Model: ResNet50
+Task: Gender Classification (2 classes)
+Mode: 2s (EEG segment length)
+Results directory: ./final_logs4
+Reports directory: ./final_logs4
+Epochs: 50, Learning rate: 0.0001
+Batch size: 192 (auto-selected), Random seed: 42
+Number of GPUs: 4
+Stratified train batches disabled (--no_stratified); using class weights in loss.
+Number of workers: 8
+================================================================================
+
+Starting ResNet50 gender classification experiment...
+Experiment name: gender_resnet50_2s
+Model type: gender_resnet50
+Training: Both active and passive tasks
+Evaluation: Separate accuracy reports for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: ./final_logs4
+Generate reports: True
+================================================================================
+
+Progress: 1/1
+Experiment: gender_resnet50_2s
+Setting up experiment: gender_resnet50_2s
+Creating standard loaders for gender classification (train on both task types)
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 4
+Requested GPUs: 4
+Using GPUs: 4
+Device: cuda
+GPU Device IDs: [0, 1, 2, 3]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+  GPU 3: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.7718490501136646, 1.4196280064082287] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: gender_resnet50_2s
+Model: gender_resnet50 | Target: gender
+Channels: 60
+================================================================================
+Training gender_resnet50 for gender classification...
+Starting training for gender_resnet50_2s
+Model: EEGGenderResNet50
+Target: gender
+Epochs: 50
+Learning rate: 0.0001
+------------------------------------------------------------
+   No existing checkpoint found. Starting fresh training.
+⏳ Loading first batch (batch_size=192, num_workers=8)...
+
+🔄 Starting epoch 1/50
+   🔥 Warmup: LR = 0.000010 (target: 0.000100)
+  ✅ First batch loaded! (took 392.1s)
+  First batch label distribution: class 0: 126, class 1: 66
+W0305 17:38:25.642000 2673915 site-packages/torch/_logging/_internal.py:1081] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+/home/mojtabam/miniconda3/envs/eeg_env/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py:725: UserWarning: Graph break due to unsupported builtin sys._getframe. This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind). If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround. If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use torch.compiler.allow_in_graph.
+  torch._dynamo.utils.warn_once(msg)
+libibverbs: Warning: couldn't load driver 'libvmw_pvrdma-rdmav34.so': libvmw_pvrdma-rdmav34.so: cannot open shared object file: No such file or directory
+⚠️  WARNING: Model collapse in 2 consecutive batches (all class 1). Monitoring...
+✅ Model recovered: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in 2 consecutive batches (all class 1). Monitoring...
+✅ Model recovered: Predictions diverse again (unique: 2)
+  Processed 1000 batches, elapsed: 425.6s
+  Processed 2000 batches, elapsed: 773.5s
+  Processed 3000 batches, elapsed: 1121.2s
+  Processed 4000 batches, elapsed: 1468.1s
+  Processed 5000 batches, elapsed: 1813.7s
+  Validation: 1000 batches, elapsed: 363.3s
+  → Epoch   1/50 | Train Loss: 0.6278 | Val Loss: 0.6051 | Train Acc: 0.5495 | Val Acc: 0.6490 | LR: 0.000010 | Time: 2907.29s
+New best model saved at epoch 1 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 2/50
+  ✅ First batch loaded! (took 7.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 350.1s
+  Processed 2000 batches, elapsed: 697.1s
+  Processed 3000 batches, elapsed: 1044.9s
+  Processed 4000 batches, elapsed: 1391.9s
+  Processed 5000 batches, elapsed: 1738.6s
+  Validation: 1000 batches, elapsed: 269.0s
+  → Epoch   2/50 | Train Loss: 0.5106 | Val Loss: 0.4978 | Train Acc: 0.6934 | Val Acc: 0.7430 | LR: 0.000020 | Time: 2353.34s
+New best model saved at epoch 2 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 3/50
+   🔥 Warmup: LR = 0.000030 (target: 0.000100)
+  ✅ First batch loaded! (took 7.7s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 356.2s
+  Processed 2000 batches, elapsed: 708.0s
+  Processed 3000 batches, elapsed: 1058.7s
+  Processed 4000 batches, elapsed: 1406.9s
+  Processed 5000 batches, elapsed: 1755.2s
+  Validation: 1000 batches, elapsed: 269.1s
+  → Epoch   3/50 | Train Loss: 0.4396 | Val Loss: 0.4528 | Train Acc: 0.7574 | Val Acc: 0.7813 | LR: 0.000030 | Time: 2370.16s
+New best model saved at epoch 3 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 4/50
+  ✅ First batch loaded! (took 11.0s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 348.7s
+  Processed 2000 batches, elapsed: 695.2s
+  Processed 3000 batches, elapsed: 1042.0s
+  Processed 4000 batches, elapsed: 1387.9s
+  Processed 5000 batches, elapsed: 1734.3s
+  Validation: 1000 batches, elapsed: 270.7s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   4/50 | Train Loss: 0.3975 | Val Loss: 0.4392 | Train Acc: 0.7892 | Val Acc: 0.7933 | LR: 0.000040 | Time: 2353.23s
+New best model saved at epoch 4 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 5/50
+  ✅ First batch loaded! (took 9.1s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.2s
+  Processed 2000 batches, elapsed: 696.7s
+  Processed 3000 batches, elapsed: 1044.4s
+  Processed 4000 batches, elapsed: 1391.2s
+  Processed 5000 batches, elapsed: 1738.0s
+  Validation: 1000 batches, elapsed: 270.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   5/50 | Train Loss: 0.3677 | Val Loss: 0.4209 | Train Acc: 0.8090 | Val Acc: 0.8104 | LR: 0.000050 | Time: 2355.44s
+New best model saved at epoch 5 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 6/50
+   🔥 Warmup: LR = 0.000060 (target: 0.000100)
+  ✅ First batch loaded! (took 9.1s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 353.3s
+  Processed 2000 batches, elapsed: 703.8s
+  Processed 3000 batches, elapsed: 1053.4s
+  Processed 4000 batches, elapsed: 1401.8s
+  Processed 5000 batches, elapsed: 1750.1s
+  Validation: 1000 batches, elapsed: 269.2s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   6/50 | Train Loss: 0.3426 | Val Loss: 0.4151 | Train Acc: 0.8236 | Val Acc: 0.8146 | LR: 0.000060 | Time: 2366.95s
+New best model saved at epoch 6 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 7/50
+  ✅ First batch loaded! (took 7.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.8s
+  Processed 2000 batches, elapsed: 696.7s
+  Processed 3000 batches, elapsed: 1044.0s
+  Processed 4000 batches, elapsed: 1391.1s
+  Processed 5000 batches, elapsed: 1737.9s
+  Validation: 1000 batches, elapsed: 269.1s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   7/50 | Train Loss: 0.3214 | Val Loss: 0.4116 | Train Acc: 0.8348 | Val Acc: 0.8166 | LR: 0.000070 | Time: 2351.90s
+New best model saved at epoch 7 in ./final_logs4/checkpoints
+
+🔄 Starting epoch 8/50
+  ✅ First batch loaded! (took 7.5s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.3s
+  Processed 2000 batches, elapsed: 696.4s
+  Processed 3000 batches, elapsed: 1044.2s
+  Processed 4000 batches, elapsed: 1390.5s
+  Processed 5000 batches, elapsed: 1736.2s
+  Validation: 1000 batches, elapsed: 269.2s
+  → Epoch   8/50 | Train Loss: 0.3023 | Val Loss: 0.4215 | Train Acc: 0.8445 | Val Acc: 0.8110 | LR: 0.000080 | Time: 2350.01s
+
+🔄 Starting epoch 9/50
+   🔥 Warmup: LR = 0.000090 (target: 0.000100)
+  ✅ First batch loaded! (took 8.9s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 352.4s
+  Processed 2000 batches, elapsed: 701.7s
+  Processed 3000 batches, elapsed: 1050.1s
+  Processed 4000 batches, elapsed: 1397.1s
+  Processed 5000 batches, elapsed: 1744.0s
+  Validation: 1000 batches, elapsed: 269.2s
+  → Epoch   9/50 | Train Loss: 0.2856 | Val Loss: 0.4207 | Train Acc: 0.8531 | Val Acc: 0.8308 | LR: 0.000090 | Time: 2360.07s
+
+🔄 Starting epoch 10/50
+  ✅ First batch loaded! (took 9.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.5s
+  Processed 2000 batches, elapsed: 697.4s
+  Processed 3000 batches, elapsed: 1045.5s
+  Processed 4000 batches, elapsed: 1393.2s
+  Processed 5000 batches, elapsed: 1740.2s
+  Validation: 1000 batches, elapsed: 271.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch  10/50 | Train Loss: 0.2698 | Val Loss: 0.4594 | Train Acc: 0.8619 | Val Acc: 0.8224 | LR: 0.000100 | Time: 2358.61s
+
+🔄 Starting epoch 11/50
+  ✅ First batch loaded! (took 7.3s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 350.6s
+  Processed 2000 batches, elapsed: 697.9s
+  Processed 3000 batches, elapsed: 1045.7s
+  Processed 4000 batches, elapsed: 1392.8s
+  Processed 5000 batches, elapsed: 1739.5s
+  Validation: 1000 batches, elapsed: 269.3s
+  → Epoch  11/50 | Train Loss: 0.2498 | Val Loss: 0.4490 | Train Acc: 0.8718 | Val Acc: 0.8300 | LR: 0.000100 | Time: 2354.01s
+
+🔄 Starting epoch 12/50
+  ✅ First batch loaded! (took 9.3s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 355.3s
+  Processed 2000 batches, elapsed: 706.8s
+  Processed 3000 batches, elapsed: 1057.9s
+  Processed 4000 batches, elapsed: 1407.5s
+  Processed 5000 batches, elapsed: 1756.4s
+  Validation: 1000 batches, elapsed: 269.2s
+  → Epoch  12/50 | Train Loss: 0.2306 | Val Loss: 0.4887 | Train Acc: 0.8828 | Val Acc: 0.8332 | LR: 0.000100 | Time: 2374.95s
+
+🔄 Starting epoch 13/50
+  ✅ First batch loaded! (took 7.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.3s
+  Processed 2000 batches, elapsed: 696.9s
+  Processed 3000 batches, elapsed: 1043.3s
+  Processed 4000 batches, elapsed: 1389.5s
+  Processed 5000 batches, elapsed: 1735.7s
+  Validation: 1000 batches, elapsed: 270.9s
+  → Epoch  13/50 | Train Loss: 0.2122 | Val Loss: 0.5236 | Train Acc: 0.8921 | Val Acc: 0.8357 | LR: 0.000100 | Time: 2350.99s
+
+🔄 Starting epoch 14/50
+  ✅ First batch loaded! (took 7.3s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 348.9s
+  Processed 2000 batches, elapsed: 695.4s
+  Processed 3000 batches, elapsed: 1042.3s
+  Processed 4000 batches, elapsed: 1387.7s
+  Processed 5000 batches, elapsed: 1733.2s
+  Validation: 1000 batches, elapsed: 270.3s
+  → Epoch  14/50 | Train Loss: 0.1958 | Val Loss: 0.5524 | Train Acc: 0.9015 | Val Acc: 0.8340 | LR: 0.000100 | Time: 2347.30s
+
+🔄 Starting epoch 15/50
+  ✅ First batch loaded! (took 8.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 353.0s
+  Processed 2000 batches, elapsed: 702.6s
+  Processed 3000 batches, elapsed: 1051.6s
+  Processed 4000 batches, elapsed: 1399.5s
+  Processed 5000 batches, elapsed: 1747.0s
+  Validation: 1000 batches, elapsed: 268.8s
+  → Epoch  15/50 | Train Loss: 0.1811 | Val Loss: 0.5600 | Train Acc: 0.9099 | Val Acc: 0.8280 | LR: 0.000100 | Time: 2363.34s
+
+🔄 Starting epoch 16/50
+  ✅ First batch loaded! (took 9.0s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 349.5s
+  Processed 2000 batches, elapsed: 696.7s
+  Processed 3000 batches, elapsed: 1043.6s
+  Processed 4000 batches, elapsed: 1389.6s
+  Processed 5000 batches, elapsed: 1735.1s
+  Validation: 1000 batches, elapsed: 271.1s
+  → Epoch  16/50 | Train Loss: 0.1681 | Val Loss: 0.5980 | Train Acc: 0.9175 | Val Acc: 0.8427 | LR: 0.000100 | Time: 2352.33s
+
+🔄 Starting epoch 17/50
+  ✅ First batch loaded! (took 9.1s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 348.4s
+  Processed 2000 batches, elapsed: 694.9s
+  Processed 3000 batches, elapsed: 1042.7s
+  Processed 4000 batches, elapsed: 1388.8s
+  Processed 5000 batches, elapsed: 1734.7s
+  Validation: 1000 batches, elapsed: 268.8s
+  → Epoch  17/50 | Train Loss: 0.1545 | Val Loss: 0.6125 | Train Acc: 0.9249 | Val Acc: 0.8334 | LR: 0.000100 | Time: 2349.96s
+Early stopping at epoch 17 (patience: 10)
+Last model saved at epoch 17 in ./final_logs4/checkpoints
+
+Training completed in 40627.44s
+Best validation loss: 0.4116 at epoch 7
+✅ Training completed
+   Training metrics saved to: ./final_logs4/gender_resnet50_2s/gender_resnet50_2s_training_metrics.json
+Evaluating gender_resnet50 on gender classification...
+? Loaded checkpoint from ./final_logs4/checkpoints/gender_resnet50_2s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.8037
+   F1-Score: 0.8076
+   Evaluation time: 167.05s
+   Evaluation results saved to: ./final_logs4/gender_resnet50_2s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.8304
+  F1-Score (weighted): 0.8334
+  ROC-AUC: 0.9235
+  Number of samples: 35284
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.7991
+  F1-Score (weighted): 0.8032
+  ROC-AUC: 0.8986
+  Number of samples: 204188
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.8304, F1 = 0.8334
+  PASSIVE: Accuracy = 0.7991, F1 = 0.8032
+   Evaluation results saved to: ./final_logs4/gender_resnet50_2s_task_active
+   Evaluation results saved to: ./final_logs4/gender_resnet50_2s_task_passive
+  ACTIVE tasks: Accuracy = 0.8304, F1-Score = 0.8334
+  PASSIVE tasks: Accuracy = 0.7991, F1-Score = 0.8032
+
+✅ Experiment 'gender_resnet50_2s' completed successfully!
+   Total time: 41166.12s
+   Training time: 40627.45s
+   Evaluation time: 538.67s
+   Accuracy: 0.8037
+   Result saved to: ./final_logs4/gender_resnet50_2s/gender_resnet50_2s_result.json
+✅ Experiment completed: gender_resnet50_2s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     Accuracy   F1-Score   Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+gender_resnet50      gender     0.8037     0.8076     538.67     ResNet50 gender classification with 2s segme...   
+
+Best Model: gender_resnet50 (Accuracy: 0.8037)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: ./final_logs4/experiment_results.csv
+Reports generated in: ./final_logs4
+Reports generated in: ./final_logs4
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: ./final_logs4
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: ./final_logs4/gender_resnet50_2s/
+Reports generated in: ./final_logs4/
+
+Overall Test Set Metrics:
+  Accuracy: 0.8037
+  F1-Score (weighted): 0.8076
+
+Task-Specific Metrics:
+  Active Tasks:
+    Accuracy: 0.8304
+    F1-Score: 0.8334
+  Passive Tasks:
+    Accuracy: 0.7991
+    F1-Score: 0.8032
+================================================================================

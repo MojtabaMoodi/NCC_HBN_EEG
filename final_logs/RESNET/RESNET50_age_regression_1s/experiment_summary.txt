@@ -1,0 +1,18 @@
+EEG CLASSIFICATION EXPERIMENT SUMMARY
+==================================================
+Generated: 2026-05-13 03:18:51
+
+Total Experiments: 1
+Successful: 1
+Failed: 0
+
+SUCCESSFUL EXPERIMENTS:
+------------------------------
+
+Experiment: age_regression_resnet50_1s
+Model: age_regression_resnet50
+Target: age
+MAE: 2.2055 years
+RMSE: 2.9044 years
+R²: 0.3064
+Training Time: 18518.92s

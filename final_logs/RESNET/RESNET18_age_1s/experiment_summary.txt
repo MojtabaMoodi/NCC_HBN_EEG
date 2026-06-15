@@ -1,0 +1,20 @@
+EEG CLASSIFICATION EXPERIMENT SUMMARY
+==================================================
+Generated: 2026-03-06 22:25:32
+
+Total Experiments: 1
+Successful: 1
+Failed: 0
+
+SUCCESSFUL EXPERIMENTS:
+------------------------------
+
+Experiment: age_resnet18_1s
+Model: age_resnet
+Target: age
+Combined Accuracy: 0.4772
+F1-Score: 0.4168
+Active Task Accuracy: 0.4773 (n=69183)
+Passive Task Accuracy: 0.4771 (n=407568)
+  (Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2)
+Training Time: 14350.33s

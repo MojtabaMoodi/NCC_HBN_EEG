@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "name": "gender_resnet",
+      "target_type": "gender",
+      "accuracy": 0.7846779555784885,
+      "f1_weighted": 0.7891535416467688,
+      "evaluation_time": 744.2425215244293,
+      "experiment_name": "gender_resnet18_1s",
+      "description": "ResNet18 gender classification with 1s segments (train on both, evaluate separately on active and passive)"
+    }
+  ],
+  "metrics_comparison": {},
+  "best_model": "gender_resnet",
+  "best_accuracy": 0.7846779555784885
+}

@@ -1,0 +1,322 @@
+================================================================================
+RESNET18 AGE CLASSIFICATION EXPERIMENT
+================================================================================
+Model: ResNet18
+Task: Age Classification (3 classes)
+Mode: 4s (EEG segment length)
+Results directory: ./final_logs14
+Reports directory: ./final_logs14
+Epochs: 50, Learning rate: 0.0001
+Batch size: 128 (auto-selected), Random seed: 42
+Number of GPUs: 4
+Stratified train batches disabled (--no_stratified); using class weights in loss.
+Number of workers: 8
+================================================================================
+
+Starting ResNet18 age classification experiment...
+Experiment name: age_resnet18_4s
+Model type: age_resnet
+Training: Both active and passive tasks
+Evaluation: Separate accuracy reports for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: ./final_logs14
+Generate reports: True
+================================================================================
+
+Progress: 1/1
+Experiment: age_resnet18_4s
+Setting up experiment: age_resnet18_4s
+Creating standard loaders for age classification (train on both task types)
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 4
+Requested GPUs: 4
+Using GPUs: 4
+Device: cuda
+GPU Device IDs: [0, 1, 2, 3]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+  GPU 3: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.9730108330220396, 0.8095099353184546, 1.3569498258066617] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: age_resnet18_4s
+Model: age_resnet | Target: age
+Channels: 60
+================================================================================
+Training age_resnet for age classification...
+Starting training for age_resnet18_4s
+Model: EEGAgeResNet
+Target: age
+Epochs: 50
+Learning rate: 0.0001
+------------------------------------------------------------
+   No existing checkpoint found. Starting fresh training.
+⏳ Loading first batch (batch_size=128, num_workers=8)...
+
+🔄 Starting epoch 1/50
+   🔥 Warmup: LR = 0.000010 (target: 0.000100)
+  ✅ First batch loaded! (took 304.2s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+W0306 19:21:55.166000 2944824 site-packages/torch/_logging/_internal.py:1081] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+/home/mojtabam/miniconda3/envs/eeg_env/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py:725: UserWarning: Graph break due to unsupported builtin sys._getframe. This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind). If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround. If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use torch.compiler.allow_in_graph.
+  torch._dynamo.utils.warn_once(msg)
+libibverbs: Warning: couldn't load driver 'libvmw_pvrdma-rdmav34.so': libvmw_pvrdma-rdmav34.so: cannot open shared object file: No such file or directory
+  Processed 1000 batches, elapsed: 165.2s
+  Processed 2000 batches, elapsed: 321.7s
+  Processed 3000 batches, elapsed: 478.1s
+  Processed 4000 batches, elapsed: 634.8s
+  Validation: 1000 batches, elapsed: 184.3s
+  → Epoch   1/50 | Train Loss: 1.0738 | Val Loss: 1.0701 | Train Acc: 0.3498 | Val Acc: 0.3993 | LR: 0.000010 | Time: 1265.80s
+New best model saved at epoch 1 in ./final_logs14/checkpoints
+
+🔄 Starting epoch 2/50
+  ✅ First batch loaded! (took 10.7s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 156.9s
+  Processed 2000 batches, elapsed: 312.7s
+  Processed 3000 batches, elapsed: 468.9s
+  Processed 4000 batches, elapsed: 624.7s
+  Validation: 1000 batches, elapsed: 124.9s
+  → Epoch   2/50 | Train Loss: 0.9568 | Val Loss: 1.0517 | Train Acc: 0.4500 | Val Acc: 0.4446 | LR: 0.000020 | Time: 902.38s
+New best model saved at epoch 2 in ./final_logs14/checkpoints
+
+🔄 Starting epoch 3/50
+   🔥 Warmup: LR = 0.000030 (target: 0.000100)
+  ✅ First batch loaded! (took 10.9s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 159.8s
+  Processed 2000 batches, elapsed: 317.4s
+  Processed 3000 batches, elapsed: 474.2s
+  Processed 4000 batches, elapsed: 630.8s
+  Validation: 1000 batches, elapsed: 125.4s
+  → Epoch   3/50 | Train Loss: 0.8784 | Val Loss: 0.9893 | Train Acc: 0.5008 | Val Acc: 0.4849 | LR: 0.000030 | Time: 909.71s
+New best model saved at epoch 3 in ./final_logs14/checkpoints
+
+🔄 Starting epoch 4/50
+  ✅ First batch loaded! (took 10.8s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 157.0s
+  Processed 2000 batches, elapsed: 312.7s
+  Processed 3000 batches, elapsed: 468.4s
+  Processed 4000 batches, elapsed: 624.0s
+  Validation: 1000 batches, elapsed: 125.3s
+  → Epoch   4/50 | Train Loss: 0.8197 | Val Loss: 0.9698 | Train Acc: 0.5351 | Val Acc: 0.5046 | LR: 0.000040 | Time: 901.90s
+New best model saved at epoch 4 in ./final_logs14/checkpoints
+
+🔄 Starting epoch 5/50
+  ✅ First batch loaded! (took 7.4s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 159.6s
+  Processed 2000 batches, elapsed: 317.1s
+  Processed 3000 batches, elapsed: 474.1s
+  Processed 4000 batches, elapsed: 630.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 2). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 3)
+  Validation: 1000 batches, elapsed: 124.0s
+  → Epoch   5/50 | Train Loss: 0.7727 | Val Loss: 1.0627 | Train Acc: 0.5616 | Val Acc: 0.4827 | LR: 0.000050 | Time: 904.79s
+
+🔄 Starting epoch 6/50
+   🔥 Warmup: LR = 0.000060 (target: 0.000100)
+  ✅ First batch loaded! (took 11.1s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 160.6s
+  Processed 2000 batches, elapsed: 318.4s
+  Processed 3000 batches, elapsed: 475.7s
+  Processed 4000 batches, elapsed: 632.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 2). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 3)
+  Validation: 1000 batches, elapsed: 124.9s
+  → Epoch   6/50 | Train Loss: 0.7319 | Val Loss: 1.0136 | Train Acc: 0.5855 | Val Acc: 0.5111 | LR: 0.000060 | Time: 911.29s
+
+🔄 Starting epoch 7/50
+  ✅ First batch loaded! (took 11.1s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 157.2s
+  Processed 2000 batches, elapsed: 313.0s
+  Processed 3000 batches, elapsed: 468.7s
+  Processed 4000 batches, elapsed: 624.8s
+  Validation: 1000 batches, elapsed: 124.1s
+  → Epoch   7/50 | Train Loss: 0.6958 | Val Loss: 1.0646 | Train Acc: 0.6069 | Val Acc: 0.5044 | LR: 0.000070 | Time: 901.94s
+
+🔄 Starting epoch 8/50
+  ✅ First batch loaded! (took 15.2s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 160.7s
+  Processed 2000 batches, elapsed: 318.9s
+  Processed 3000 batches, elapsed: 476.3s
+  Processed 4000 batches, elapsed: 633.1s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 2). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 3)
+  Validation: 1000 batches, elapsed: 124.8s
+  → Epoch   8/50 | Train Loss: 0.6645 | Val Loss: 1.1382 | Train Acc: 0.6255 | Val Acc: 0.4969 | LR: 0.000080 | Time: 915.95s
+
+🔄 Starting epoch 9/50
+   🔥 Warmup: LR = 0.000090 (target: 0.000100)
+  ✅ First batch loaded! (took 7.2s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 157.2s
+  Processed 2000 batches, elapsed: 313.0s
+  Processed 3000 batches, elapsed: 468.8s
+  Processed 4000 batches, elapsed: 624.4s
+  Validation: 1000 batches, elapsed: 124.1s
+  → Epoch   9/50 | Train Loss: 0.6374 | Val Loss: 1.0394 | Train Acc: 0.6419 | Val Acc: 0.5390 | LR: 0.000090 | Time: 897.24s
+
+🔄 Starting epoch 10/50
+  ✅ First batch loaded! (took 7.5s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 161.3s
+  Processed 2000 batches, elapsed: 320.1s
+  Processed 3000 batches, elapsed: 478.0s
+  Processed 4000 batches, elapsed: 635.2s
+  Validation: 1000 batches, elapsed: 124.9s
+  → Epoch  10/50 | Train Loss: 0.6131 | Val Loss: 1.0853 | Train Acc: 0.6560 | Val Acc: 0.5296 | LR: 0.000100 | Time: 910.52s
+
+🔄 Starting epoch 11/50
+  ✅ First batch loaded! (took 11.0s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 157.4s
+  Processed 2000 batches, elapsed: 313.3s
+  Processed 3000 batches, elapsed: 469.0s
+  Processed 4000 batches, elapsed: 624.6s
+  Validation: 1000 batches, elapsed: 124.0s
+  → Epoch  11/50 | Train Loss: 0.5770 | Val Loss: 1.1716 | Train Acc: 0.6769 | Val Acc: 0.5280 | LR: 0.000100 | Time: 901.58s
+
+🔄 Starting epoch 12/50
+  ✅ First batch loaded! (took 15.3s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 161.8s
+  Processed 2000 batches, elapsed: 320.4s
+  Processed 3000 batches, elapsed: 478.3s
+  Processed 4000 batches, elapsed: 635.4s
+  Validation: 1000 batches, elapsed: 123.8s
+  → Epoch  12/50 | Train Loss: 0.5376 | Val Loss: 1.3650 | Train Acc: 0.7016 | Val Acc: 0.5411 | LR: 0.000100 | Time: 917.36s
+
+🔄 Starting epoch 13/50
+  ✅ First batch loaded! (took 10.9s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 157.1s
+  Processed 2000 batches, elapsed: 312.8s
+  Processed 3000 batches, elapsed: 468.8s
+  Processed 4000 batches, elapsed: 624.7s
+  Validation: 1000 batches, elapsed: 124.9s
+  → Epoch  13/50 | Train Loss: 0.5010 | Val Loss: 1.3361 | Train Acc: 0.7248 | Val Acc: 0.5405 | LR: 0.000100 | Time: 902.52s
+
+🔄 Starting epoch 14/50
+  ✅ First batch loaded! (took 11.1s)
+  First batch label distribution: class 0: 45, class 1: 58, class 2: 25
+  Processed 1000 batches, elapsed: 160.1s
+  Processed 2000 batches, elapsed: 317.7s
+  Processed 3000 batches, elapsed: 475.0s
+  Processed 4000 batches, elapsed: 631.6s
+  Validation: 1000 batches, elapsed: 124.6s
+  → Epoch  14/50 | Train Loss: 0.4662 | Val Loss: 1.5298 | Train Acc: 0.7456 | Val Acc: 0.5396 | LR: 0.000100 | Time: 909.67s
+Early stopping at epoch 14 (patience: 10)
+Last model saved at epoch 14 in ./final_logs14/checkpoints
+
+Training completed in 13053.98s
+Best validation loss: 0.9698 at epoch 4
+✅ Training completed
+   Training metrics saved to: ./final_logs14/age_resnet18_4s/age_resnet18_4s_training_metrics.json
+Evaluating age_resnet on age classification...
+? Loaded checkpoint from ./final_logs14/checkpoints/age_resnet18_4s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.5113
+   F1-Score: 0.4466
+   Evaluation time: 111.44s
+   Evaluation results saved to: ./final_logs14/age_resnet18_4s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.4990
+  F1-Score (weighted): 0.4272
+  ROC-AUC: 0.7218
+  Number of samples: 20949
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.5136
+  F1-Score (weighted): 0.4504
+  ROC-AUC: 0.7298
+  Number of samples: 113222
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.4990, F1 = 0.4272
+  PASSIVE: Accuracy = 0.5136, F1 = 0.4504
+   Evaluation results saved to: ./final_logs14/age_resnet18_4s_task_active
+   Evaluation results saved to: ./final_logs14/age_resnet18_4s_task_passive
+  ACTIVE tasks: Accuracy = 0.4990, F1-Score = 0.4272
+  PASSIVE tasks: Accuracy = 0.5136, F1-Score = 0.4504
+
+✅ Experiment 'age_resnet18_4s' completed successfully!
+   Total time: 13412.00s
+   Training time: 13053.99s
+   Evaluation time: 358.01s
+   Accuracy: 0.5113
+   Result saved to: ./final_logs14/age_resnet18_4s/age_resnet18_4s_result.json
+✅ Experiment completed: age_resnet18_4s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     Accuracy   F1-Score   Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+age_resnet           age        0.5113     0.4466     358.01     ResNet18 age classification with 4s segments...   
+
+Best Model: age_resnet (Accuracy: 0.5113)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: ./final_logs14/experiment_results.csv
+Reports generated in: ./final_logs14
+Reports generated in: ./final_logs14
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: ./final_logs14
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: ./final_logs14/age_resnet18_4s/
+Reports generated in: ./final_logs14/
+
+Overall Test Set Metrics:
+  Accuracy: 0.5113
+  F1-Score (weighted): 0.4466
+
+Task-Specific Metrics:
+  Active Tasks:
+    Accuracy: 0.4990
+    F1-Score: 0.4272
+  Passive Tasks:
+    Accuracy: 0.5136
+    F1-Score: 0.4504
+================================================================================

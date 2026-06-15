@@ -1,0 +1,2 @@
+experiment_name,model_type,target_type,combined_accuracy,precision_weighted,recall_weighted,f1_weighted,training_time,evaluation_time,active_accuracy,passive_accuracy
+gender_resnet50_2s,gender_resnet50,gender,0.8037474109708024,0.8279803186782897,0.8037474109708024,0.8076121156084735,41166.117010354996,538.670401096344,0.830404716018592,0.7991409877172018

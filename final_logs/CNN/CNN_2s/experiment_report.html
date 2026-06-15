@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EEG Classification Experiment Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { background-color: #f0f0f0; padding: 20px; border-radius: 5px; }
+        .experiment { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { border-left: 5px solid #4CAF50; }
+        .failure { border-left: 5px solid #f44336; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .metric { background-color: #f9f9f9; padding: 10px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EEG Classification Experiment Report</h1>
+        <p>Generated: 2026-02-21 16:34:00</p>
+        <p>Total Experiments: 3 | Successful: 3 | Failed: 0</p>
+    </div>
+
+    <div class="experiment success">
+        <h2>gender_baseline_2s - SUCCESS</h2>
+        <p><strong>Model:</strong> gender_cnn | <strong>Target:</strong> gender</p>
+
+        <div class="metrics">
+            <div class="metric"><strong>Combined Accuracy:</strong> 0.8021</div><div class="metric"><strong>Active Task Accuracy:</strong> 0.8390 (n=35284)</div><div class="metric"><strong>Passive Task Accuracy:</strong> 0.7961 (n=204188)</div><div class="metric" style="font-size: 0.9em; color: #666;"><em>Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2</em></div>
+            <div class="metric"><strong>Precision:</strong> 0.8323</div>
+            <div class="metric"><strong>Recall:</strong> 0.8021</div>
+            <div class="metric"><strong>F1-Score:</strong> 0.8062</div>
+            <div class="metric"><strong>Training Time:</strong> 10482.52s</div>
+        </div>
+    </div>
+
+    <div class="experiment success">
+        <h2>age_classification_2s - SUCCESS</h2>
+        <p><strong>Model:</strong> age_cnn | <strong>Target:</strong> age</p>
+
+        <div class="metrics">
+            <div class="metric"><strong>Combined Accuracy:</strong> 0.5348</div><div class="metric"><strong>Active Task Accuracy:</strong> 0.5334 (n=35284)</div><div class="metric"><strong>Passive Task Accuracy:</strong> 0.5351 (n=204188)</div><div class="metric" style="font-size: 0.9em; color: #666;"><em>Note: Combined accuracy is weighted by sample counts, not (Active + Passive)/2</em></div>
+            <div class="metric"><strong>Precision:</strong> 0.5478</div>
+            <div class="metric"><strong>Recall:</strong> 0.5348</div>
+            <div class="metric"><strong>F1-Score:</strong> 0.4810</div>
+            <div class="metric"><strong>Training Time:</strong> 19258.18s</div>
+        </div>
+    </div>
+
+    <div class="experiment success">
+        <h2>age_regression_2s - SUCCESS</h2>
+        <p><strong>Model:</strong> age_regression_cnn | <strong>Target:</strong> age</p>
+
+        <div class="metrics">
+            <div class="metric"><strong>MAE:</strong> 2.0010 years</div>
+            <div class="metric"><strong>RMSE:</strong> 2.6866 years</div>
+            <div class="metric"><strong>R²:</strong> 0.4065</div>
+            <div class="metric"><strong>Training Time:</strong> 30886.94s</div>
+        </div>
+    </div>
+
+    <h2>Model Comparison</h2>
+    <table>
+        <tr>
+            <th>Experiment</th>
+            <th>Model</th>
+            <th>Target</th>
+            <th>Combined Accuracy</th>
+            <th>Active Accuracy</th>
+            <th>Passive Accuracy</th>
+            <th>F1-Score</th>
+            <th>Training Time (s)</th>
+        </tr>
+
+        <tr>
+            <td>gender_baseline_2s</td>
+            <td>gender_cnn</td>
+            <td>gender</td>
+            <td>0.8021</td>
+            <td>0.8390</td>
+            <td>0.7961</td>
+            <td>0.8062</td>
+            <td>10482.52</td>
+        </tr>
+
+        <tr>
+            <td>age_classification_2s</td>
+            <td>age_cnn</td>
+            <td>age</td>
+            <td>0.5348</td>
+            <td>0.5334</td>
+            <td>0.5351</td>
+            <td>0.4810</td>
+            <td>19258.18</td>
+        </tr>
+
+        <tr>
+            <td>age_regression_2s</td>
+            <td>age_regression_cnn</td>
+            <td>age</td>
+            <td>2.0010 years</td>
+            <td>0.4065</td>
+            <td>30886.94</td>
+        </tr>
+    </table>
+
+</body>
+</html>

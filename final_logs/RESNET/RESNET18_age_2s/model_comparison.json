@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "name": "age_resnet",
+      "target_type": "age",
+      "accuracy": 0.5274478853477651,
+      "f1_weighted": 0.5096025022178226,
+      "evaluation_time": 544.5458781719208,
+      "experiment_name": "age_resnet18_2s",
+      "description": "ResNet18 age classification with 2s segments (train on both, evaluate separately on active and passive)"
+    }
+  ],
+  "metrics_comparison": {},
+  "best_model": "age_resnet",
+  "best_accuracy": 0.5274478853477651
+}

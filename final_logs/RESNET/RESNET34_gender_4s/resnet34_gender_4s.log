@@ -1,0 +1,473 @@
+================================================================================
+RESNET34 GENDER CLASSIFICATION EXPERIMENT
+================================================================================
+Model: ResNet34
+Task: Gender Classification (2 classes)
+Mode: 4s (EEG segment length)
+Results directory: ./final_logs2
+Reports directory: ./final_logs2
+Epochs: 50, Learning rate: 0.0001
+Batch size: 128 (auto-selected), Random seed: 42
+Number of GPUs: 4
+Stratified train batches disabled (--no_stratified); using class weights in loss.
+Number of workers: 8
+================================================================================
+
+Starting ResNet34 gender classification experiment...
+Experiment name: gender_resnet34_4s
+Model type: gender_resnet34
+Training: Both active and passive tasks
+Evaluation: Separate accuracy reports for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: ./final_logs2
+Generate reports: True
+================================================================================
+
+Progress: 1/1
+Experiment: gender_resnet34_4s
+Setting up experiment: gender_resnet34_4s
+Creating standard loaders for gender classification (train on both task types)
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 4
+Requested GPUs: 4
+Using GPUs: 4
+Device: cuda
+GPU Device IDs: [0, 1, 2, 3]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+  GPU 3: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.7714920399851907, 1.420837310786854] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: gender_resnet34_4s
+Model: gender_resnet34 | Target: gender
+Channels: 60
+================================================================================
+Training gender_resnet34 for gender classification...
+Starting training for gender_resnet34_4s
+Model: EEGGenderResNet34
+Target: gender
+Epochs: 50
+Learning rate: 0.0001
+------------------------------------------------------------
+   No existing checkpoint found. Starting fresh training.
+⏳ Loading first batch (batch_size=128, num_workers=8)...
+
+🔄 Starting epoch 1/50
+   🔥 Warmup: LR = 0.000010 (target: 0.000100)
+  ✅ First batch loaded! (took 294.1s)
+  First batch label distribution: class 0: 81, class 1: 47
+W0305 11:32:37.788000 2294799 site-packages/torch/_logging/_internal.py:1081] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+/home/mojtabam/miniconda3/envs/eeg_env/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py:725: UserWarning: Graph break due to unsupported builtin sys._getframe. This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind). If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround. If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use torch.compiler.allow_in_graph.
+  torch._dynamo.utils.warn_once(msg)
+libibverbs: Warning: couldn't load driver 'libvmw_pvrdma-rdmav34.so': libvmw_pvrdma-rdmav34.so: cannot open shared object file: No such file or directory
+  Processed 1000 batches, elapsed: 233.1s
+  Processed 2000 batches, elapsed: 458.3s
+  Processed 3000 batches, elapsed: 683.2s
+  Processed 4000 batches, elapsed: 907.1s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 228.3s
+  → Epoch   1/50 | Train Loss: 0.5565 | Val Loss: 0.5350 | Train Acc: 0.6408 | Val Acc: 0.7165 | LR: 0.000010 | Time: 1634.31s
+New best model saved at epoch 1 in ./final_logs2/checkpoints
+
+🔄 Starting epoch 2/50
+  ✅ First batch loaded! (took 10.3s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 225.0s
+  Processed 2000 batches, elapsed: 450.0s
+  Processed 3000 batches, elapsed: 673.8s
+  Processed 4000 batches, elapsed: 897.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 170.0s
+  → Epoch   2/50 | Train Loss: 0.4531 | Val Loss: 0.4671 | Train Acc: 0.7449 | Val Acc: 0.7705 | LR: 0.000020 | Time: 1282.25s
+New best model saved at epoch 2 in ./final_logs2/checkpoints
+
+🔄 Starting epoch 3/50
+   🔥 Warmup: LR = 0.000030 (target: 0.000100)
+  ✅ First batch loaded! (took 10.7s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 227.2s
+  Processed 2000 batches, elapsed: 453.1s
+  Processed 3000 batches, elapsed: 677.7s
+  Processed 4000 batches, elapsed: 902.5s
+  Validation: 1000 batches, elapsed: 172.4s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch   3/50 | Train Loss: 0.4014 | Val Loss: 0.4466 | Train Acc: 0.7870 | Val Acc: 0.7908 | LR: 0.000030 | Time: 1290.55s
+New best model saved at epoch 3 in ./final_logs2/checkpoints
+
+🔄 Starting epoch 4/50
+  ✅ First batch loaded! (took 10.5s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 226.4s
+  Processed 2000 batches, elapsed: 452.0s
+  Processed 3000 batches, elapsed: 676.7s
+  Processed 4000 batches, elapsed: 902.2s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 170.0s
+  → Epoch   4/50 | Train Loss: 0.3680 | Val Loss: 0.4318 | Train Acc: 0.8094 | Val Acc: 0.8025 | LR: 0.000040 | Time: 1287.80s
+New best model saved at epoch 4 in ./final_logs2/checkpoints
+
+🔄 Starting epoch 5/50
+  ✅ First batch loaded! (took 7.5s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 231.1s
+  Processed 2000 batches, elapsed: 459.8s
+  Processed 3000 batches, elapsed: 686.5s
+  Processed 4000 batches, elapsed: 913.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 170.4s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch   5/50 | Train Loss: 0.3425 | Val Loss: 0.4513 | Train Acc: 0.8255 | Val Acc: 0.8039 | LR: 0.000050 | Time: 1298.04s
+
+🔄 Starting epoch 6/50
+   🔥 Warmup: LR = 0.000060 (target: 0.000100)
+  ✅ First batch loaded! (took 10.7s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 226.4s
+  Processed 2000 batches, elapsed: 451.7s
+  Processed 3000 batches, elapsed: 676.1s
+  Processed 4000 batches, elapsed: 900.4s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.2s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch   6/50 | Train Loss: 0.3222 | Val Loss: 0.4479 | Train Acc: 0.8380 | Val Acc: 0.8106 | LR: 0.000060 | Time: 1287.38s
+
+🔄 Starting epoch 7/50
+  ✅ First batch loaded! (took 10.7s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 230.3s
+  Processed 2000 batches, elapsed: 458.2s
+  Processed 3000 batches, elapsed: 684.3s
+  Processed 4000 batches, elapsed: 910.7s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 170.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   7/50 | Train Loss: 0.3042 | Val Loss: 0.4351 | Train Acc: 0.8481 | Val Acc: 0.8162 | LR: 0.000070 | Time: 1297.75s
+
+🔄 Starting epoch 8/50
+  ✅ First batch loaded! (took 14.4s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 226.3s
+  Processed 2000 batches, elapsed: 451.9s
+  Processed 3000 batches, elapsed: 676.2s
+  Processed 4000 batches, elapsed: 901.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch   8/50 | Train Loss: 0.2873 | Val Loss: 0.4530 | Train Acc: 0.8576 | Val Acc: 0.8140 | LR: 0.000080 | Time: 1292.60s
+
+🔄 Starting epoch 9/50
+   🔥 Warmup: LR = 0.000090 (target: 0.000100)
+  ✅ First batch loaded! (took 7.1s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 229.6s
+  Processed 2000 batches, elapsed: 457.1s
+  Processed 3000 batches, elapsed: 682.9s
+  Processed 4000 batches, elapsed: 909.0s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.9s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch   9/50 | Train Loss: 0.2733 | Val Loss: 0.4564 | Train Acc: 0.8653 | Val Acc: 0.8214 | LR: 0.000090 | Time: 1293.78s
+
+🔄 Starting epoch 10/50
+  ✅ First batch loaded! (took 7.8s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 229.0s
+  Processed 2000 batches, elapsed: 456.0s
+  Processed 3000 batches, elapsed: 682.1s
+  Processed 4000 batches, elapsed: 908.1s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 172.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch  10/50 | Train Loss: 0.2602 | Val Loss: 0.4562 | Train Acc: 0.8722 | Val Acc: 0.8223 | LR: 0.000100 | Time: 1294.61s
+
+🔄 Starting epoch 11/50
+  ✅ First batch loaded! (took 10.2s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 225.4s
+  Processed 2000 batches, elapsed: 449.9s
+  Processed 3000 batches, elapsed: 672.9s
+  Processed 4000 batches, elapsed: 897.1s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.7s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+  → Epoch  11/50 | Train Loss: 0.2421 | Val Loss: 0.5140 | Train Acc: 0.8820 | Val Acc: 0.8002 | LR: 0.000100 | Time: 1282.84s
+
+🔄 Starting epoch 12/50
+  ✅ First batch loaded! (took 14.6s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 229.1s
+  Processed 2000 batches, elapsed: 456.3s
+  Processed 3000 batches, elapsed: 682.1s
+  Processed 4000 batches, elapsed: 908.2s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.8s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch  12/50 | Train Loss: 0.2223 | Val Loss: 0.5492 | Train Acc: 0.8928 | Val Acc: 0.8341 | LR: 0.000100 | Time: 1300.48s
+
+🔄 Starting epoch 13/50
+  ✅ First batch loaded! (took 10.8s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 227.0s
+  Processed 2000 batches, elapsed: 452.5s
+  Processed 3000 batches, elapsed: 676.9s
+  Processed 4000 batches, elapsed: 901.9s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 172.5s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch  13/50 | Train Loss: 0.2040 | Val Loss: 0.5139 | Train Acc: 0.9028 | Val Acc: 0.8374 | LR: 0.000100 | Time: 1290.67s
+
+🔄 Starting epoch 14/50
+  ✅ First batch loaded! (took 10.3s)
+  First batch label distribution: class 0: 81, class 1: 47
+  Processed 1000 batches, elapsed: 226.2s
+  Processed 2000 batches, elapsed: 451.3s
+  Processed 3000 batches, elapsed: 675.6s
+  Processed 4000 batches, elapsed: 900.4s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 0). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  Validation: 1000 batches, elapsed: 171.0s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch  14/50 | Train Loss: 0.1863 | Val Loss: 0.5452 | Train Acc: 0.9120 | Val Acc: 0.8169 | LR: 0.000100 | Time: 1286.94s
+Early stopping at epoch 14 (patience: 10)
+Last model saved at epoch 14 in ./final_logs2/checkpoints
+
+Training completed in 18422.27s
+Best validation loss: 0.4318 at epoch 4
+✅ Training completed
+   Training metrics saved to: ./final_logs2/gender_resnet34_4s/gender_resnet34_4s_training_metrics.json
+Evaluating gender_resnet34 on gender classification...
+? Loaded checkpoint from ./final_logs2/checkpoints/gender_resnet34_4s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.7884
+   F1-Score: 0.7927
+   Evaluation time: 115.73s
+   Evaluation results saved to: ./final_logs2/gender_resnet34_4s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.8094
+  F1-Score (weighted): 0.8130
+  ROC-AUC: 0.9102
+  Number of samples: 20949
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.7845
+  F1-Score (weighted): 0.7889
+  ROC-AUC: 0.8881
+  Number of samples: 113222
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.8094, F1 = 0.8130
+  PASSIVE: Accuracy = 0.7845, F1 = 0.7889
+   Evaluation results saved to: ./final_logs2/gender_resnet34_4s_task_active
+   Evaluation results saved to: ./final_logs2/gender_resnet34_4s_task_passive
+  ACTIVE tasks: Accuracy = 0.8094, F1-Score = 0.8130
+  PASSIVE tasks: Accuracy = 0.7845, F1-Score = 0.7889
+
+✅ Experiment 'gender_resnet34_4s' completed successfully!
+   Total time: 18776.49s
+   Training time: 18422.28s
+   Evaluation time: 354.21s
+   Accuracy: 0.7884
+   Result saved to: ./final_logs2/gender_resnet34_4s/gender_resnet34_4s_result.json
+✅ Experiment completed: gender_resnet34_4s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     Accuracy   F1-Score   Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+gender_resnet34      gender     0.7884     0.7927     354.21     ResNet34 gender classification with 4s segme...   
+
+Best Model: gender_resnet34 (Accuracy: 0.7884)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: ./final_logs2/experiment_results.csv
+Reports generated in: ./final_logs2
+Reports generated in: ./final_logs2
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: ./final_logs2
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: ./final_logs2/gender_resnet34_4s/
+Reports generated in: ./final_logs2/
+
+Overall Test Set Metrics:
+  Accuracy: 0.7884
+  F1-Score (weighted): 0.7927
+
+Task-Specific Metrics:
+  Active Tasks:
+    Accuracy: 0.8094
+    F1-Score: 0.8130
+  Passive Tasks:
+    Accuracy: 0.7845
+    F1-Score: 0.7889
+================================================================================

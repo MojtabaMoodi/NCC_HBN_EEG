@@ -1,0 +1,1084 @@
+LaBraM fine-tuning starting...
+Loading dataset configuration (this may take a moment)...
+Gender baseline dataset loaded
+  HDF5 directory: /home/mojtabam/scratch/processed_eeg_data_hdf5
+  Segment length: 4s
+  Task type: both
+  Random seed: 42
+  Note: Using pre-split HDF5 files (train/val/test splits from preprocessing)
+  Note: IterableDataset size is unknown until iteration
+Namespace(batch_size=64, epochs=30, update_freq=1, save_ckpt_freq=5, robust_test=None, model='labram_base_patch200_200', qkv_bias=True, rel_pos_bias=True, abs_pos_emb=True, layer_scale_init_value=0.1, input_size=200, drop=0.0, attn_drop_rate=0.0, drop_path=0.1, disable_eval_during_finetuning=False, model_ema=False, model_ema_decay=0.9999, model_ema_force_cpu=False, opt='adamw', opt_eps=1e-08, opt_betas=None, clip_grad=None, momentum=0.9, weight_decay=0.05, weight_decay_end=None, lr=0.0005, layer_decay=0.9, warmup_lr=1e-06, min_lr=1e-06, warmup_epochs=5, warmup_steps=-1, smoothing=0.1, reprob=0.25, remode='pixel', recount=1, resplit=False, finetune='/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth', model_key='model|module', model_prefix='', model_filter_name='gzp', init_scale=0.001, use_mean_pooling=True, disable_weight_decay_on_rel_pos_bias=False, nb_classes=1, output_dir='/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/LaBraM/labram_gender_4s/output', log_dir=None, device='cuda', seed=0, resume='/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/LaBraM/labram_gender_4s/output/gender_labram_4s_best.pth', auto_resume=True, save_ckpt=True, start_epoch=0, eval=True, dist_eval=False, num_workers=10, pin_mem=True, aggregate_by_participant=None, early_stopping_patience=0, early_stopping_min_delta=0.0, world_size=1, local_rank=-1, dist_on_itp=False, dist_url='env://', enable_deepspeed=False, dataset='gender_baseline', segment_length='4s', data_path='/home/mojtabam/scratch/processed_eeg_data_hdf5', class_weight_power=1.0, is_cross_validation=False, cv_folds=None, distributed=False, rank=0, gpu=0)
+Using device: cuda (2 GPU(s): ['NVIDIA L40S', 'NVIDIA L40S'])
+Gender baseline dataset loaded
+  HDF5 directory: /home/mojtabam/scratch/processed_eeg_data_hdf5
+  Segment length: 4s
+  Task type: both
+  Random seed: 42
+  Note: Using pre-split HDF5 files (train/val/test splits from preprocessing)
+  Note: IterableDataset size is unknown until iteration
+Using IterableDataset - DataLoader will iterate directly (no sampler)
+Distributed training: 1 tasks, rank 0
+DataLoader num_workers: 4 (segment_length=4s, num_gpus=2)
+Patch size = 200
+Load ckpt from /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM/checkpoints/labram-base.pth
+Load state_dict by model_key = model
+Weights of NeuralTransformer not initialized from pretrained model: ['blocks.0.attn.q_bias', 'blocks.0.attn.v_bias', 'blocks.1.attn.q_bias', 'blocks.1.attn.v_bias', 'blocks.2.attn.q_bias', 'blocks.2.attn.v_bias', 'blocks.3.attn.q_bias', 'blocks.3.attn.v_bias', 'blocks.4.attn.q_bias', 'blocks.4.attn.v_bias', 'blocks.5.attn.q_bias', 'blocks.5.attn.v_bias', 'blocks.6.attn.q_bias', 'blocks.6.attn.v_bias', 'blocks.7.attn.q_bias', 'blocks.7.attn.v_bias', 'blocks.8.attn.q_bias', 'blocks.8.attn.v_bias', 'blocks.9.attn.q_bias', 'blocks.9.attn.v_bias', 'blocks.10.attn.q_bias', 'blocks.10.attn.v_bias', 'blocks.11.attn.q_bias', 'blocks.11.attn.v_bias', 'fc_norm.weight', 'fc_norm.bias', 'head.weight', 'head.bias']
+Weights from pretrained model not used in NeuralTransformer: ['mask_token', 'lm_head.weight', 'lm_head.bias', 'norm.weight', 'norm.bias']
+Wrapped model in DataParallel across 2 GPU(s).
+Model = NeuralTransformer(
+  (patch_embed): TemporalConv(
+    (conv1): Conv2d(1, 8, kernel_size=(1, 15), stride=(1, 8), padding=(0, 7))
+    (gelu1): GELU(approximate='none')
+    (norm1): GroupNorm(4, 8, eps=1e-05, affine=True)
+    (conv2): Conv2d(8, 8, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
+    (gelu2): GELU(approximate='none')
+    (norm2): GroupNorm(4, 8, eps=1e-05, affine=True)
+    (conv3): Conv2d(8, 8, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
+    (norm3): GroupNorm(4, 8, eps=1e-05, affine=True)
+    (gelu3): GELU(approximate='none')
+  )
+  (pos_drop): Dropout(p=0.0, inplace=False)
+  (blocks): ModuleList(
+    (0): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): Identity()
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (1): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.00909090880304575)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (2): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.0181818176060915)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (3): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.027272727340459824)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (4): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.036363635212183)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (5): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.045454543083906174)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (6): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.054545458406209946)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (7): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.06363636255264282)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (8): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.0727272778749466)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (9): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.08181818574666977)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (10): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.09090909361839294)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (11): Block(
+      (norm1): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=200, out_features=600, bias=False)
+        (q_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (k_norm): LayerNorm((20,), eps=1e-06, elementwise_affine=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=200, out_features=200, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(p=0.10000000149011612)
+      (norm2): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=200, out_features=800, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=800, out_features=200, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+  )
+  (norm): Identity()
+  (fc_norm): LayerNorm((200,), eps=1e-06, elementwise_affine=True)
+  (head): Linear(in_features=200, out_features=1, bias=True)
+)
+number of params: 5824937
+LR = 0.00050000
+Batch size = 64
+Update frequent = 1
+Number of training examples = Unknown (IterableDataset)
+Number of training steps per epoch = Determined during training (IterableDataset)
+Note: LR schedule uses placeholder value - actual steps determined by iterator exhaustion
+Assigned values = [0.2541865828329001, 0.2824295364810001, 0.31381059609000006, 0.3486784401000001, 0.3874204890000001, 0.4304672100000001, 0.4782969000000001, 0.531441, 0.5904900000000001, 0.6561, 0.7290000000000001, 0.81, 0.9, 1.0]
+Skip weight decay name marked in model: {'time_embed', 'cls_token', 'pos_embed'}
+Param groups = {
+  "layer_0_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "cls_token",
+      "pos_embed",
+      "patch_embed.conv1.bias",
+      "patch_embed.norm1.weight",
+      "patch_embed.norm1.bias",
+      "patch_embed.conv2.bias",
+      "patch_embed.norm2.weight",
+      "patch_embed.norm2.bias",
+      "patch_embed.conv3.bias",
+      "patch_embed.norm3.weight",
+      "patch_embed.norm3.bias"
+    ],
+    "lr_scale": 0.2541865828329001
+  },
+  "layer_13_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "time_embed",
+      "fc_norm.weight",
+      "fc_norm.bias",
+      "head.bias"
+    ],
+    "lr_scale": 1.0
+  },
+  "layer_0_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "patch_embed.conv1.weight",
+      "patch_embed.conv2.weight",
+      "patch_embed.conv3.weight"
+    ],
+    "lr_scale": 0.2541865828329001
+  },
+  "layer_1_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.0.gamma_1",
+      "blocks.0.gamma_2",
+      "blocks.0.norm1.weight",
+      "blocks.0.norm1.bias",
+      "blocks.0.attn.q_bias",
+      "blocks.0.attn.v_bias",
+      "blocks.0.attn.q_norm.weight",
+      "blocks.0.attn.q_norm.bias",
+      "blocks.0.attn.k_norm.weight",
+      "blocks.0.attn.k_norm.bias",
+      "blocks.0.attn.proj.bias",
+      "blocks.0.norm2.weight",
+      "blocks.0.norm2.bias",
+      "blocks.0.mlp.fc1.bias",
+      "blocks.0.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.2824295364810001
+  },
+  "layer_1_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.0.attn.qkv.weight",
+      "blocks.0.attn.proj.weight",
+      "blocks.0.mlp.fc1.weight",
+      "blocks.0.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.2824295364810001
+  },
+  "layer_2_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.1.gamma_1",
+      "blocks.1.gamma_2",
+      "blocks.1.norm1.weight",
+      "blocks.1.norm1.bias",
+      "blocks.1.attn.q_bias",
+      "blocks.1.attn.v_bias",
+      "blocks.1.attn.q_norm.weight",
+      "blocks.1.attn.q_norm.bias",
+      "blocks.1.attn.k_norm.weight",
+      "blocks.1.attn.k_norm.bias",
+      "blocks.1.attn.proj.bias",
+      "blocks.1.norm2.weight",
+      "blocks.1.norm2.bias",
+      "blocks.1.mlp.fc1.bias",
+      "blocks.1.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.31381059609000006
+  },
+  "layer_2_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.1.attn.qkv.weight",
+      "blocks.1.attn.proj.weight",
+      "blocks.1.mlp.fc1.weight",
+      "blocks.1.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.31381059609000006
+  },
+  "layer_3_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.2.gamma_1",
+      "blocks.2.gamma_2",
+      "blocks.2.norm1.weight",
+      "blocks.2.norm1.bias",
+      "blocks.2.attn.q_bias",
+      "blocks.2.attn.v_bias",
+      "blocks.2.attn.q_norm.weight",
+      "blocks.2.attn.q_norm.bias",
+      "blocks.2.attn.k_norm.weight",
+      "blocks.2.attn.k_norm.bias",
+      "blocks.2.attn.proj.bias",
+      "blocks.2.norm2.weight",
+      "blocks.2.norm2.bias",
+      "blocks.2.mlp.fc1.bias",
+      "blocks.2.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.3486784401000001
+  },
+  "layer_3_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.2.attn.qkv.weight",
+      "blocks.2.attn.proj.weight",
+      "blocks.2.mlp.fc1.weight",
+      "blocks.2.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.3486784401000001
+  },
+  "layer_4_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.3.gamma_1",
+      "blocks.3.gamma_2",
+      "blocks.3.norm1.weight",
+      "blocks.3.norm1.bias",
+      "blocks.3.attn.q_bias",
+      "blocks.3.attn.v_bias",
+      "blocks.3.attn.q_norm.weight",
+      "blocks.3.attn.q_norm.bias",
+      "blocks.3.attn.k_norm.weight",
+      "blocks.3.attn.k_norm.bias",
+      "blocks.3.attn.proj.bias",
+      "blocks.3.norm2.weight",
+      "blocks.3.norm2.bias",
+      "blocks.3.mlp.fc1.bias",
+      "blocks.3.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.3874204890000001
+  },
+  "layer_4_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.3.attn.qkv.weight",
+      "blocks.3.attn.proj.weight",
+      "blocks.3.mlp.fc1.weight",
+      "blocks.3.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.3874204890000001
+  },
+  "layer_5_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.4.gamma_1",
+      "blocks.4.gamma_2",
+      "blocks.4.norm1.weight",
+      "blocks.4.norm1.bias",
+      "blocks.4.attn.q_bias",
+      "blocks.4.attn.v_bias",
+      "blocks.4.attn.q_norm.weight",
+      "blocks.4.attn.q_norm.bias",
+      "blocks.4.attn.k_norm.weight",
+      "blocks.4.attn.k_norm.bias",
+      "blocks.4.attn.proj.bias",
+      "blocks.4.norm2.weight",
+      "blocks.4.norm2.bias",
+      "blocks.4.mlp.fc1.bias",
+      "blocks.4.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.4304672100000001
+  },
+  "layer_5_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.4.attn.qkv.weight",
+      "blocks.4.attn.proj.weight",
+      "blocks.4.mlp.fc1.weight",
+      "blocks.4.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.4304672100000001
+  },
+  "layer_6_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.5.gamma_1",
+      "blocks.5.gamma_2",
+      "blocks.5.norm1.weight",
+      "blocks.5.norm1.bias",
+      "blocks.5.attn.q_bias",
+      "blocks.5.attn.v_bias",
+      "blocks.5.attn.q_norm.weight",
+      "blocks.5.attn.q_norm.bias",
+      "blocks.5.attn.k_norm.weight",
+      "blocks.5.attn.k_norm.bias",
+      "blocks.5.attn.proj.bias",
+      "blocks.5.norm2.weight",
+      "blocks.5.norm2.bias",
+      "blocks.5.mlp.fc1.bias",
+      "blocks.5.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.4782969000000001
+  },
+  "layer_6_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.5.attn.qkv.weight",
+      "blocks.5.attn.proj.weight",
+      "blocks.5.mlp.fc1.weight",
+      "blocks.5.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.4782969000000001
+  },
+  "layer_7_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.6.gamma_1",
+      "blocks.6.gamma_2",
+      "blocks.6.norm1.weight",
+      "blocks.6.norm1.bias",
+      "blocks.6.attn.q_bias",
+      "blocks.6.attn.v_bias",
+      "blocks.6.attn.q_norm.weight",
+      "blocks.6.attn.q_norm.bias",
+      "blocks.6.attn.k_norm.weight",
+      "blocks.6.attn.k_norm.bias",
+      "blocks.6.attn.proj.bias",
+      "blocks.6.norm2.weight",
+      "blocks.6.norm2.bias",
+      "blocks.6.mlp.fc1.bias",
+      "blocks.6.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.531441
+  },
+  "layer_7_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.6.attn.qkv.weight",
+      "blocks.6.attn.proj.weight",
+      "blocks.6.mlp.fc1.weight",
+      "blocks.6.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.531441
+  },
+  "layer_8_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.7.gamma_1",
+      "blocks.7.gamma_2",
+      "blocks.7.norm1.weight",
+      "blocks.7.norm1.bias",
+      "blocks.7.attn.q_bias",
+      "blocks.7.attn.v_bias",
+      "blocks.7.attn.q_norm.weight",
+      "blocks.7.attn.q_norm.bias",
+      "blocks.7.attn.k_norm.weight",
+      "blocks.7.attn.k_norm.bias",
+      "blocks.7.attn.proj.bias",
+      "blocks.7.norm2.weight",
+      "blocks.7.norm2.bias",
+      "blocks.7.mlp.fc1.bias",
+      "blocks.7.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.5904900000000001
+  },
+  "layer_8_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.7.attn.qkv.weight",
+      "blocks.7.attn.proj.weight",
+      "blocks.7.mlp.fc1.weight",
+      "blocks.7.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.5904900000000001
+  },
+  "layer_9_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.8.gamma_1",
+      "blocks.8.gamma_2",
+      "blocks.8.norm1.weight",
+      "blocks.8.norm1.bias",
+      "blocks.8.attn.q_bias",
+      "blocks.8.attn.v_bias",
+      "blocks.8.attn.q_norm.weight",
+      "blocks.8.attn.q_norm.bias",
+      "blocks.8.attn.k_norm.weight",
+      "blocks.8.attn.k_norm.bias",
+      "blocks.8.attn.proj.bias",
+      "blocks.8.norm2.weight",
+      "blocks.8.norm2.bias",
+      "blocks.8.mlp.fc1.bias",
+      "blocks.8.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.6561
+  },
+  "layer_9_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.8.attn.qkv.weight",
+      "blocks.8.attn.proj.weight",
+      "blocks.8.mlp.fc1.weight",
+      "blocks.8.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.6561
+  },
+  "layer_10_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.9.gamma_1",
+      "blocks.9.gamma_2",
+      "blocks.9.norm1.weight",
+      "blocks.9.norm1.bias",
+      "blocks.9.attn.q_bias",
+      "blocks.9.attn.v_bias",
+      "blocks.9.attn.q_norm.weight",
+      "blocks.9.attn.q_norm.bias",
+      "blocks.9.attn.k_norm.weight",
+      "blocks.9.attn.k_norm.bias",
+      "blocks.9.attn.proj.bias",
+      "blocks.9.norm2.weight",
+      "blocks.9.norm2.bias",
+      "blocks.9.mlp.fc1.bias",
+      "blocks.9.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.7290000000000001
+  },
+  "layer_10_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.9.attn.qkv.weight",
+      "blocks.9.attn.proj.weight",
+      "blocks.9.mlp.fc1.weight",
+      "blocks.9.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.7290000000000001
+  },
+  "layer_11_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.10.gamma_1",
+      "blocks.10.gamma_2",
+      "blocks.10.norm1.weight",
+      "blocks.10.norm1.bias",
+      "blocks.10.attn.q_bias",
+      "blocks.10.attn.v_bias",
+      "blocks.10.attn.q_norm.weight",
+      "blocks.10.attn.q_norm.bias",
+      "blocks.10.attn.k_norm.weight",
+      "blocks.10.attn.k_norm.bias",
+      "blocks.10.attn.proj.bias",
+      "blocks.10.norm2.weight",
+      "blocks.10.norm2.bias",
+      "blocks.10.mlp.fc1.bias",
+      "blocks.10.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.81
+  },
+  "layer_11_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.10.attn.qkv.weight",
+      "blocks.10.attn.proj.weight",
+      "blocks.10.mlp.fc1.weight",
+      "blocks.10.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.81
+  },
+  "layer_12_no_decay": {
+    "weight_decay": 0.0,
+    "params": [
+      "blocks.11.gamma_1",
+      "blocks.11.gamma_2",
+      "blocks.11.norm1.weight",
+      "blocks.11.norm1.bias",
+      "blocks.11.attn.q_bias",
+      "blocks.11.attn.v_bias",
+      "blocks.11.attn.q_norm.weight",
+      "blocks.11.attn.q_norm.bias",
+      "blocks.11.attn.k_norm.weight",
+      "blocks.11.attn.k_norm.bias",
+      "blocks.11.attn.proj.bias",
+      "blocks.11.norm2.weight",
+      "blocks.11.norm2.bias",
+      "blocks.11.mlp.fc1.bias",
+      "blocks.11.mlp.fc2.bias"
+    ],
+    "lr_scale": 0.9
+  },
+  "layer_12_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "blocks.11.attn.qkv.weight",
+      "blocks.11.attn.proj.weight",
+      "blocks.11.mlp.fc1.weight",
+      "blocks.11.mlp.fc2.weight"
+    ],
+    "lr_scale": 0.9
+  },
+  "layer_13_decay": {
+    "weight_decay": 0.05,
+    "params": [
+      "head.weight"
+    ],
+    "lr_scale": 1.0
+  }
+}
+Optimizer config: {'lr': 0.0005, 'weight_decay': 0.0, 'eps': 1e-08}
+Binary class weights from train data (gender): [0.7715, 1.4208] -> BCE pos_weight=1.8417
+Using BCEWithLogitsLoss(pos_weight=...) to reduce majority-class collapse
+criterion = BCEWithLogitsLoss()
+Resume checkpoint /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/LaBraM/labram_gender_4s/output/gender_labram_4s_best.pth
+libibverbs: Warning: couldn't load driver 'libvmw_pvrdma-rdmav34.so': libvmw_pvrdma-rdmav34.so: cannot open shared object file: No such file or directory
+Test:  [     0/?]  eta: ?  loss: 0.6874 (0.6874)  accuracy: 0.8125 (0.8125)  time: 52.0492  data: 50.8099  max mem: 378
+Test:  [    10/?]  eta: ?  loss: 0.6553 (0.6318)  accuracy: 0.9688 (0.8494)  balanced_accuracy: 0.9688 (0.7214)  pr_auc: 1.0000 (0.8619)  roc_auc: 1.0000 (0.6894)  f1_weighted: 0.9677 (0.8431)  time: 4.8308  data: 4.6193  max mem: 378
+Test:  [    20/?]  eta: ?  loss: 0.6048 (0.6239)  accuracy: 0.9479 (0.8393)  balanced_accuracy: 0.8611 (0.7576)  pr_auc: 0.9928 (0.9328)  roc_auc: 0.9918 (0.8444)  f1_weighted: 0.8387 (0.8297)  time: 0.0954  data: 0.0003  max mem: 378
+Test:  [    30/?]  eta: ?  loss: 0.6231 (0.6281)  accuracy: 0.9271 (0.8175)  balanced_accuracy: 0.9062 (0.7794)  pr_auc: 0.9968 (0.9392)  roc_auc: 0.9965 (0.8827)  f1_weighted: 0.9109 (0.8231)  time: 0.0904  data: 0.0003  max mem: 378
+Test:  [    40/?]  eta: ?  loss: 0.6190 (0.6230)  accuracy: 0.9271 (0.8117)  balanced_accuracy: 0.9062 (0.8069)  pr_auc: 0.9931 (0.9207)  roc_auc: 0.9931 (0.8918)  f1_weighted: 0.8387 (0.8259)  time: 0.1007  data: 0.0003  max mem: 378
+Test:  [    50/?]  eta: ?  loss: 0.5822 (0.6114)  accuracy: 0.9792 (0.8456)  balanced_accuracy: 0.9583 (0.8396)  pr_auc: 0.9977 (0.9285)  roc_auc: 0.9983 (0.9096)  f1_weighted: 0.9505 (0.8535)  time: 0.1052  data: 0.0002  max mem: 378
+Test:  [    60/?]  eta: ?  loss: 0.5819 (0.6075)  accuracy: 0.9792 (0.8564)  balanced_accuracy: 0.9773 (0.8509)  pr_auc: 1.0000 (0.9349)  roc_auc: 1.0000 (0.9197)  f1_weighted: 0.9767 (0.8478)  time: 0.1032  data: 0.0002  max mem: 378
+Test:  [    70/?]  eta: ?  loss: 0.5801 (0.6019)  accuracy: 0.9896 (0.8756)  balanced_accuracy: 0.9792 (0.8676)  pr_auc: 1.0000 (0.9429)  roc_auc: 1.0000 (0.9297)  f1_weighted: 0.9787 (0.8648)  time: 0.0993  data: 0.0002  max mem: 378
+Test:  [    80/?]  eta: ?  loss: 0.5884 (0.6031)  accuracy: 0.9896 (0.8773)  balanced_accuracy: 0.9688 (0.8670)  pr_auc: 1.0000 (0.9516)  roc_auc: 1.0000 (0.9405)  f1_weighted: 0.9620 (0.8559)  time: 0.0885  data: 0.0002  max mem: 378
+Test:  [    90/?]  eta: ?  loss: 0.5965 (0.6047)  accuracy: 0.8958 (0.8743)  balanced_accuracy: 0.8958 (0.8645)  pr_auc: 1.0000 (0.9580)  roc_auc: 1.0000 (0.9486)  f1_weighted: 0.8837 (0.8457)  time: 0.0781  data: 0.0002  max mem: 378
+Test:  [   100/?]  eta: ?  loss: 0.6114 (0.6060)  accuracy: 0.8229 (0.8677)  balanced_accuracy: 0.8229 (0.8563)  pr_auc: 0.9947 (0.9612)  roc_auc: 0.9937 (0.9535)  f1_weighted: 0.8000 (0.8292)  time: 0.0871  data: 0.0003  max mem: 378
+Test:  [   110/?]  eta: ?  loss: 0.6248 (0.6090)  accuracy: 0.7708 (0.8596)  balanced_accuracy: 0.8229 (0.8537)  pr_auc: 0.9927 (0.9633)  roc_auc: 0.9913 (0.9557)  f1_weighted: 0.8434 (0.8260)  time: 0.0909  data: 0.0002  max mem: 378
+Test:  [   120/?]  eta: ?  loss: 0.6109 (0.6074)  accuracy: 0.7188 (0.8528)  balanced_accuracy: 0.7292 (0.8438)  pr_auc: 0.9877 (0.9580)  roc_auc: 0.9908 (0.9490)  f1_weighted: 0.7360 (0.8174)  time: 0.0808  data: 0.0002  max mem: 378
+Test:  [   130/?]  eta: ?  loss: 0.5262 (0.6019)  accuracy: 0.9896 (0.8616)  balanced_accuracy: 0.7292 (0.8454)  pr_auc: 0.9927 (0.9564)  roc_auc: 0.9913 (0.9496)  f1_weighted: 0.7360 (0.8182)  time: 0.0861  data: 0.0002  max mem: 378
+Test:  [   140/?]  eta: ?  loss: 0.5262 (0.6000)  accuracy: 1.0000 (0.8644)  balanced_accuracy: 0.7396 (0.8450)  pr_auc: 0.9927 (0.9520)  roc_auc: 0.9913 (0.9440)  f1_weighted: 0.7863 (0.8200)  time: 0.0848  data: 0.0002  max mem: 378
+Test:  [   150/?]  eta: ?  loss: 0.5546 (0.5983)  accuracy: 0.9583 (0.8651)  balanced_accuracy: 0.7410 (0.8455)  pr_auc: 0.9869 (0.9512)  roc_auc: 0.9814 (0.9440)  f1_weighted: 0.7863 (0.8204)  time: 0.0692  data: 0.0002  max mem: 378
+Test:  [   160/?]  eta: ?  loss: 0.5653 (0.5976)  accuracy: 0.9792 (0.8703)  balanced_accuracy: 0.7500 (0.8452)  pr_auc: 0.9805 (0.9488)  roc_auc: 0.9720 (0.9427)  f1_weighted: 0.7863 (0.8208)  time: 0.0756  data: 0.0002  max mem: 378
+Test:  [   170/?]  eta: ?  loss: 0.5497 (0.5962)  accuracy: 0.9896 (0.8735)  balanced_accuracy: 0.7500 (0.8440)  pr_auc: 0.9700 (0.9487)  roc_auc: 0.9066 (0.9417)  f1_weighted: 0.7863 (0.8201)  time: 0.0885  data: 0.0002  max mem: 378
+Test:  [   180/?]  eta: ?  loss: 0.5715 (0.5964)  accuracy: 0.9792 (0.8779)  balanced_accuracy: 0.7812 (0.8444)  pr_auc: 0.9577 (0.9485)  roc_auc: 0.9066 (0.9421)  f1_weighted: 0.8039 (0.8205)  time: 0.0859  data: 0.0002  max mem: 378
+Test:  [   190/?]  eta: ?  loss: 0.6194 (0.5962)  accuracy: 0.9583 (0.8778)  balanced_accuracy: 0.7812 (0.8424)  pr_auc: 0.9577 (0.9482)  roc_auc: 0.9066 (0.9425)  f1_weighted: 0.8039 (0.8172)  time: 0.0901  data: 0.0002  max mem: 378
+Test:  [   200/?]  eta: ?  loss: 0.5519 (0.5954)  accuracy: 0.9271 (0.8790)  balanced_accuracy: 0.7812 (0.8375)  pr_auc: 0.9577 (0.9392)  roc_auc: 0.9774 (0.9377)  f1_weighted: 0.7788 (0.8082)  time: 0.0927  data: 0.0003  max mem: 378
+Test:  [   210/?]  eta: ?  loss: 0.5519 (0.5963)  accuracy: 0.8854 (0.8761)  balanced_accuracy: 0.8024 (0.8315)  pr_auc: 0.9760 (0.9375)  roc_auc: 0.9774 (0.9325)  f1_weighted: 0.8039 (0.8065)  time: 0.0940  data: 0.0003  max mem: 378
+Test:  [   220/?]  eta: ?  loss: 0.6005 (0.5963)  accuracy: 0.8646 (0.8753)  balanced_accuracy: 0.7292 (0.8280)  pr_auc: 0.9038 (0.9347)  roc_auc: 0.8722 (0.9282)  f1_weighted: 0.8052 (0.8059)  time: 0.0902  data: 0.0002  max mem: 378
+Test:  [   230/?]  eta: ?  loss: 0.5831 (0.5963)  accuracy: 0.8646 (0.8763)  balanced_accuracy: 0.7628 (0.8292)  pr_auc: 0.9038 (0.9296)  roc_auc: 0.9130 (0.9288)  f1_weighted: 0.7788 (0.8014)  time: 0.0773  data: 0.0002  max mem: 378
+Test:  [   240/?]  eta: ?  loss: 0.5779 (0.5959)  accuracy: 0.9062 (0.8766)  balanced_accuracy: 0.8370 (0.8286)  pr_auc: 0.9038 (0.9247)  roc_auc: 0.9592 (0.9270)  f1_weighted: 0.8060 (0.7971)  time: 0.0766  data: 0.0003  max mem: 378
+Test:  [   250/?]  eta: ?  loss: 0.5831 (0.5958)  accuracy: 0.9062 (0.8774)  balanced_accuracy: 0.8854 (0.8315)  pr_auc: 0.9851 (0.9245)  roc_auc: 0.9659 (0.9277)  f1_weighted: 0.8364 (0.8000)  time: 0.0860  data: 0.0002  max mem: 378
+Test:  [   260/?]  eta: ?  loss: 0.5831 (0.5952)  accuracy: 0.9896 (0.8782)  balanced_accuracy: 0.9194 (0.8317)  pr_auc: 1.0000 (0.9273)  roc_auc: 1.0000 (0.9305)  f1_weighted: 0.8972 (0.7980)  time: 0.0869  data: 0.0002  max mem: 378
+Test:  [   270/?]  eta: ?  loss: 0.5837 (0.5950)  accuracy: 0.9792 (0.8785)  balanced_accuracy: 0.9455 (0.8334)  pr_auc: 1.0000 (0.9268)  roc_auc: 1.0000 (0.9302)  f1_weighted: 0.9423 (0.8003)  time: 0.0826  data: 0.0003  max mem: 378
+Test:  [   280/?]  eta: ?  loss: 0.5863 (0.5955)  accuracy: 0.9479 (0.8789)  balanced_accuracy: 0.9167 (0.8375)  pr_auc: 1.0000 (0.9298)  roc_auc: 1.0000 (0.9321)  f1_weighted: 0.9057 (0.8051)  time: 0.0945  data: 0.0003  max mem: 378
+Test:  [   290/?]  eta: ?  loss: 0.5935 (0.5949)  accuracy: 0.9688 (0.8812)  balanced_accuracy: 0.9688 (0.8411)  pr_auc: 1.0000 (0.9327)  roc_auc: 1.0000 (0.9349)  f1_weighted: 0.9684 (0.8083)  time: 0.0906  data: 0.0003  max mem: 378
+Test:  [   300/?]  eta: ?  loss: 0.5935 (0.5952)  accuracy: 0.9688 (0.8818)  balanced_accuracy: 0.9300 (0.8392)  pr_auc: 1.0000 (0.9304)  roc_auc: 1.0000 (0.9361)  f1_weighted: 0.9213 (0.8027)  time: 0.0796  data: 0.0003  max mem: 378
+Test:  [   310/?]  eta: ?  loss: 0.6234 (0.5962)  accuracy: 0.8750 (0.8765)  balanced_accuracy: 0.9271 (0.8373)  pr_auc: 0.9992 (0.9296)  roc_auc: 0.9974 (0.9364)  f1_weighted: 0.9213 (0.7972)  time: 0.0910  data: 0.0002  max mem: 378
+Test:  [   320/?]  eta: ?  loss: 0.5897 (0.5961)  accuracy: 0.7604 (0.8746)  balanced_accuracy: 0.9375 (0.8380)  pr_auc: 0.9992 (0.9304)  roc_auc: 0.9974 (0.9368)  f1_weighted: 0.9684 (0.7982)  time: 0.0866  data: 0.0002  max mem: 378
+Test:  [   330/?]  eta: ?  loss: 0.5540 (0.5950)  accuracy: 0.9688 (0.8757)  balanced_accuracy: 0.9792 (0.8414)  pr_auc: 0.9992 (0.9319)  roc_auc: 0.9991 (0.9382)  f1_weighted: 0.9792 (0.8020)  time: 0.0770  data: 0.0002  max mem: 378
+Test:  [   340/?]  eta: ?  loss: 0.5862 (0.5956)  accuracy: 0.8854 (0.8731)  balanced_accuracy: 0.9792 (0.8358)  pr_auc: 0.9992 (0.9255)  roc_auc: 0.9991 (0.9361)  f1_weighted: 0.9091 (0.7907)  time: 0.0944  data: 0.0002  max mem: 378
+Test:  [   350/?]  eta: ?  loss: 0.6423 (0.5974)  accuracy: 0.7083 (0.8663)  balanced_accuracy: 0.6667 (0.8252)  pr_auc: 0.9950 (0.9209)  roc_auc: 0.9967 (0.9307)  f1_weighted: 0.5000 (0.7704)  time: 0.0914  data: 0.0002  max mem: 378
+Test:  [   360/?]  eta: ?  loss: 0.6598 (0.5984)  accuracy: 0.6667 (0.8636)  balanced_accuracy: 0.5417 (0.8231)  pr_auc: 0.9560 (0.9181)  roc_auc: 0.9588 (0.9271)  f1_weighted: 0.3421 (0.7657)  time: 0.0771  data: 0.0002  max mem: 378
+Test:  [   370/?]  eta: ?  loss: 0.6292 (0.5990)  accuracy: 0.8542 (0.8644)  balanced_accuracy: 0.5417 (0.8242)  pr_auc: 0.9560 (0.9189)  roc_auc: 0.9588 (0.9277)  f1_weighted: 0.3421 (0.7673)  time: 0.0958  data: 0.0003  max mem: 378
+Test:  [   380/?]  eta: ?  loss: 0.6428 (0.5996)  accuracy: 0.9583 (0.8658)  balanced_accuracy: 0.6176 (0.8239)  pr_auc: 0.9560 (0.9160)  roc_auc: 0.9588 (0.9271)  f1_weighted: 0.3810 (0.7660)  time: 0.0939  data: 0.0003  max mem: 378
+Test:  [   390/?]  eta: ?  loss: 0.6124 (0.5993)  accuracy: 0.9896 (0.8681)  balanced_accuracy: 0.8320 (0.8281)  pr_auc: 0.9950 (0.9184)  roc_auc: 0.9949 (0.9291)  f1_weighted: 0.8381 (0.7717)  time: 0.0820  data: 0.0002  max mem: 378
+Test:  [   400/?]  eta: ?  loss: 0.5886 (0.5989)  accuracy: 0.9792 (0.8697)  balanced_accuracy: 0.9375 (0.8308)  pr_auc: 0.9988 (0.9208)  roc_auc: 0.9982 (0.9312)  f1_weighted: 0.9348 (0.7756)  time: 0.1068  data: 0.0003  max mem: 378
+Test:  [   410/?]  eta: ?  loss: 0.5960 (0.5984)  accuracy: 0.9583 (0.8701)  balanced_accuracy: 0.9375 (0.8317)  pr_auc: 0.9944 (0.9216)  roc_auc: 0.9944 (0.9317)  f1_weighted: 0.9348 (0.7779)  time: 0.1131  data: 0.0003  max mem: 378
+Test:  [   420/?]  eta: ?  loss: 0.6048 (0.5985)  accuracy: 0.9375 (0.8713)  balanced_accuracy: 0.9286 (0.8340)  pr_auc: 0.9877 (0.9220)  roc_auc: 0.9881 (0.9322)  f1_weighted: 0.9231 (0.7810)  time: 0.0901  data: 0.0003  max mem: 378
+Test:  [   430/?]  eta: ?  loss: 0.6265 (0.5995)  accuracy: 0.8854 (0.8711)  balanced_accuracy: 0.9167 (0.8365)  pr_auc: 0.9877 (0.9241)  roc_auc: 0.9881 (0.9341)  f1_weighted: 0.9091 (0.7849)  time: 0.0873  data: 0.0003  max mem: 378
+Test:  [   440/?]  eta: ?  loss: 0.5990 (0.5989)  accuracy: 0.9167 (0.8726)  balanced_accuracy: 0.9321 (0.8401)  pr_auc: 1.0000 (0.9266)  roc_auc: 1.0000 (0.9362)  f1_weighted: 0.9272 (0.7876)  time: 0.0946  data: 0.0003  max mem: 378
+Test:  [   450/?]  eta: ?  loss: 0.5637 (0.5979)  accuracy: 0.9896 (0.8747)  balanced_accuracy: 0.9653 (0.8424)  pr_auc: 1.0000 (0.9277)  roc_auc: 1.0000 (0.9372)  f1_weighted: 0.9474 (0.7904)  time: 0.0839  data: 0.0002  max mem: 378
+Test:  [   460/?]  eta: ?  loss: 0.5563 (0.5976)  accuracy: 0.9479 (0.8749)  balanced_accuracy: 0.9653 (0.8433)  pr_auc: 1.0000 (0.9284)  roc_auc: 1.0000 (0.9379)  f1_weighted: 0.9272 (0.7906)  time: 0.0824  data: 0.0002  max mem: 378
+Test:  [   470/?]  eta: ?  loss: 0.5438 (0.5963)  accuracy: 0.9479 (0.8771)  balanced_accuracy: 0.9765 (0.8444)  pr_auc: 1.0000 (0.9290)  roc_auc: 1.0000 (0.9384)  f1_weighted: 0.9759 (0.7922)  time: 0.0923  data: 0.0002  max mem: 378
+Test:  [   480/?]  eta: ?  loss: 0.5300 (0.5960)  accuracy: 0.9792 (0.8757)  balanced_accuracy: 0.9679 (0.8412)  pr_auc: 1.0000 (0.9271)  roc_auc: 1.0000 (0.9370)  f1_weighted: 0.9091 (0.7885)  time: 0.0848  data: 0.0002  max mem: 378
+Test:  [   490/?]  eta: ?  loss: 0.5234 (0.5953)  accuracy: 0.9896 (0.8777)  balanced_accuracy: 0.9679 (0.8424)  pr_auc: 1.0000 (0.9277)  roc_auc: 1.0000 (0.9375)  f1_weighted: 0.9091 (0.7901)  time: 0.0753  data: 0.0002  max mem: 378
+Test:  [   500/?]  eta: ?  loss: 0.5810 (0.5956)  accuracy: 0.9896 (0.8761)  balanced_accuracy: 0.9679 (0.8446)  pr_auc: 1.0000 (0.9290)  roc_auc: 1.0000 (0.9387)  f1_weighted: 0.9600 (0.7933)  time: 0.0773  data: 0.0003  max mem: 378
+Test:  [   510/?]  eta: ?  loss: 0.5995 (0.5955)  accuracy: 0.8854 (0.8743)  balanced_accuracy: 0.9583 (0.8452)  pr_auc: 1.0000 (0.9286)  roc_auc: 1.0000 (0.9386)  f1_weighted: 0.9209 (0.7945)  time: 0.0857  data: 0.0002  max mem: 378
+Test:  [   520/?]  eta: ?  loss: 0.6074 (0.5956)  accuracy: 0.8854 (0.8733)  balanced_accuracy: 0.9267 (0.8457)  pr_auc: 1.0000 (0.9274)  roc_auc: 1.0000 (0.9389)  f1_weighted: 0.9209 (0.7949)  time: 0.0922  data: 0.0003  max mem: 378
+Test:  [   530/?]  eta: ?  loss: 0.6074 (0.5958)  accuracy: 0.9479 (0.8743)  balanced_accuracy: 0.9271 (0.8465)  pr_auc: 1.0000 (0.9278)  roc_auc: 1.0000 (0.9388)  f1_weighted: 0.9213 (0.7969)  time: 0.0852  data: 0.0003  max mem: 378
+Test:  [   540/?]  eta: ?  loss: 0.5801 (0.5951)  accuracy: 0.9896 (0.8764)  balanced_accuracy: 0.9625 (0.8494)  pr_auc: 0.9984 (0.9292)  roc_auc: 0.9980 (0.9400)  f1_weighted: 0.9787 (0.8009)  time: 0.0773  data: 0.0002  max mem: 378
+Test:  [   550/?]  eta: ?  loss: 0.5801 (0.5951)  accuracy: 0.9792 (0.8768)  balanced_accuracy: 0.9625 (0.8507)  pr_auc: 0.9984 (0.9301)  roc_auc: 0.9992 (0.9407)  f1_weighted: 0.9796 (0.8031)  time: 0.0862  data: 0.0002  max mem: 378
+Test:  [   560/?]  eta: ?  loss: 0.5949 (0.5951)  accuracy: 0.9167 (0.8779)  balanced_accuracy: 0.9286 (0.8532)  pr_auc: 0.9975 (0.9319)  roc_auc: 0.9984 (0.9423)  f1_weighted: 0.9231 (0.8069)  time: 0.0888  data: 0.0002  max mem: 378
+Test:  [   570/?]  eta: ?  loss: 0.6109 (0.5956)  accuracy: 0.8854 (0.8758)  balanced_accuracy: 0.8854 (0.8532)  pr_auc: 0.9960 (0.9319)  roc_auc: 0.9975 (0.9425)  f1_weighted: 0.8736 (0.8069)  time: 0.0780  data: 0.0002  max mem: 378
+Test:  [   580/?]  eta: ?  loss: 0.6095 (0.5954)  accuracy: 0.8333 (0.8756)  balanced_accuracy: 0.9127 (0.8539)  pr_auc: 0.9978 (0.9324)  roc_auc: 0.9978 (0.9431)  f1_weighted: 0.8605 (0.8058)  time: 0.0760  data: 0.0002  max mem: 378
+Test:  [   590/?]  eta: ?  loss: 0.5834 (0.5951)  accuracy: 0.9062 (0.8755)  balanced_accuracy: 0.9127 (0.8538)  pr_auc: 0.9978 (0.9335)  roc_auc: 0.9984 (0.9439)  f1_weighted: 0.8333 (0.8052)  time: 0.0730  data: 0.0002  max mem: 378
+Test:  [   600/?]  eta: ?  loss: 0.5840 (0.5950)  accuracy: 0.9479 (0.8761)  balanced_accuracy: 0.9583 (0.8555)  pr_auc: 1.0000 (0.9352)  roc_auc: 1.0000 (0.9454)  f1_weighted: 0.9231 (0.8061)  time: 0.0835  data: 0.0002  max mem: 378
+Test:  [   610/?]  eta: ?  loss: 0.5847 (0.5951)  accuracy: 0.9688 (0.8766)  balanced_accuracy: 0.9167 (0.8553)  pr_auc: 1.0000 (0.9366)  roc_auc: 1.0000 (0.9466)  f1_weighted: 0.8936 (0.8051)  time: 0.0842  data: 0.0002  max mem: 378
+Test:  [   620/?]  eta: ?  loss: 0.5970 (0.5948)  accuracy: 0.9688 (0.8772)  balanced_accuracy: 0.8768 (0.8556)  pr_auc: 1.0000 (0.9367)  roc_auc: 1.0000 (0.9465)  f1_weighted: 0.8593 (0.8063)  time: 0.0768  data: 0.0002  max mem: 379
+Test:  [   630/?]  eta: ?  loss: 0.5284 (0.5938)  accuracy: 0.9792 (0.8788)  balanced_accuracy: 0.8768 (0.8565)  pr_auc: 1.0000 (0.9371)  roc_auc: 1.0000 (0.9468)  f1_weighted: 0.8593 (0.8074)  time: 0.0766  data: 0.0002  max mem: 379
+Test:  [   640/?]  eta: ?  loss: 0.5257 (0.5931)  accuracy: 1.0000 (0.8804)  balanced_accuracy: 0.9062 (0.8581)  pr_auc: 1.0000 (0.9379)  roc_auc: 1.0000 (0.9475)  f1_weighted: 0.8989 (0.8098)  time: 0.0872  data: 0.0002  max mem: 379
+Test:  [   650/?]  eta: ?  loss: 0.5366 (0.5928)  accuracy: 1.0000 (0.8807)  balanced_accuracy: 0.9167 (0.8576)  pr_auc: 1.0000 (0.9381)  roc_auc: 1.0000 (0.9477)  f1_weighted: 0.9091 (0.8105)  time: 0.0935  data: 0.0002  max mem: 379
+Test:  [   660/?]  eta: ?  loss: 0.5752 (0.5928)  accuracy: 0.9792 (0.8808)  balanced_accuracy: 0.9792 (0.8579)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9486)  f1_weighted: 0.9796 (0.8108)  time: 0.0818  data: 0.0002  max mem: 379
+Test:  [   670/?]  eta: ?  loss: 0.5752 (0.5927)  accuracy: 0.9792 (0.8809)  balanced_accuracy: 0.8750 (0.8581)  pr_auc: 0.9996 (0.9398)  roc_auc: 0.9998 (0.9491)  f1_weighted: 0.8706 (0.8112)  time: 0.0898  data: 0.0002  max mem: 379
+Test:  [   680/?]  eta: ?  loss: 0.5932 (0.5927)  accuracy: 0.9375 (0.8809)  balanced_accuracy: 0.8854 (0.8587)  pr_auc: 0.9956 (0.9393)  roc_auc: 0.9950 (0.9497)  f1_weighted: 0.8706 (0.8111)  time: 0.0931  data: 0.0003  max mem: 379
+Test:  [   690/?]  eta: ?  loss: 0.5997 (0.5933)  accuracy: 0.8646 (0.8795)  balanced_accuracy: 0.8000 (0.8581)  pr_auc: 0.9890 (0.9383)  roc_auc: 0.9933 (0.9494)  f1_weighted: 0.7429 (0.8101)  time: 0.0821  data: 0.0003  max mem: 379
+Test:  [   700/?]  eta: ?  loss: 0.6206 (0.5934)  accuracy: 0.8438 (0.8794)  balanced_accuracy: 0.9015 (0.8572)  pr_auc: 0.9991 (0.9368)  roc_auc: 0.9980 (0.9486)  f1_weighted: 0.8908 (0.8077)  time: 0.0751  data: 0.0002  max mem: 379
+Test:  [   710/?]  eta: ?  loss: 0.6398 (0.5948)  accuracy: 0.9583 (0.8769)  balanced_accuracy: 0.9194 (0.8564)  pr_auc: 1.0000 (0.9371)  roc_auc: 1.0000 (0.9467)  f1_weighted: 0.9123 (0.8075)  time: 0.0907  data: 0.0003  max mem: 379
+Test:  [   720/?]  eta: ?  loss: 0.6398 (0.5950)  accuracy: 0.9896 (0.8754)  balanced_accuracy: 0.9692 (0.8575)  pr_auc: 1.0000 (0.9378)  roc_auc: 1.0000 (0.9472)  f1_weighted: 0.9683 (0.8090)  time: 0.1035  data: 0.0003  max mem: 379
+Test:  [   730/?]  eta: ?  loss: 0.5684 (0.5948)  accuracy: 1.0000 (0.8768)  balanced_accuracy: 0.9933 (0.8586)  pr_auc: 1.0000 (0.9382)  roc_auc: 1.0000 (0.9476)  f1_weighted: 0.9933 (0.8105)  time: 0.0966  data: 0.0003  max mem: 379
+Test:  [   740/?]  eta: ?  loss: 0.5813 (0.5946)  accuracy: 1.0000 (0.8782)  balanced_accuracy: 0.9933 (0.8591)  pr_auc: 1.0000 (0.9373)  roc_auc: 1.0000 (0.9477)  f1_weighted: 0.9933 (0.8110)  time: 0.1203  data: 0.0003  max mem: 379
+Test:  [   750/?]  eta: ?  loss: 0.5459 (0.5941)  accuracy: 1.0000 (0.8793)  balanced_accuracy: 0.9939 (0.8597)  pr_auc: 1.0000 (0.9378)  roc_auc: 1.0000 (0.9480)  f1_weighted: 0.9939 (0.8119)  time: 0.1165  data: 0.0004  max mem: 379
+Test:  [   760/?]  eta: ?  loss: 0.5626 (0.5943)  accuracy: 0.9688 (0.8802)  balanced_accuracy: 0.9939 (0.8610)  pr_auc: 1.0000 (0.9385)  roc_auc: 1.0000 (0.9487)  f1_weighted: 0.9939 (0.8134)  time: 0.0962  data: 0.0003  max mem: 379
+Test:  [   770/?]  eta: ?  loss: 0.5626 (0.5938)  accuracy: 0.9792 (0.8813)  balanced_accuracy: 0.9918 (0.8619)  pr_auc: 1.0000 (0.9389)  roc_auc: 1.0000 (0.9490)  f1_weighted: 0.9917 (0.8142)  time: 0.0908  data: 0.0002  max mem: 379
+Test:  [   780/?]  eta: ?  loss: 0.5376 (0.5934)  accuracy: 0.9896 (0.8823)  balanced_accuracy: 0.9918 (0.8631)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9495)  f1_weighted: 0.9831 (0.8157)  time: 0.0783  data: 0.0002  max mem: 379
+Test:  [   790/?]  eta: ?  loss: 0.5611 (0.5935)  accuracy: 0.9583 (0.8824)  balanced_accuracy: 0.9918 (0.8639)  pr_auc: 1.0000 (0.9399)  roc_auc: 1.0000 (0.9499)  f1_weighted: 0.9831 (0.8168)  time: 0.0783  data: 0.0003  max mem: 379
+Test:  [   800/?]  eta: ?  loss: 0.5323 (0.5929)  accuracy: 0.9792 (0.8837)  balanced_accuracy: 0.9925 (0.8645)  pr_auc: 1.0000 (0.9402)  roc_auc: 1.0000 (0.9501)  f1_weighted: 0.9917 (0.8177)  time: 0.0813  data: 0.0003  max mem: 379
+Test:  [   810/?]  eta: ?  loss: 0.5262 (0.5928)  accuracy: 0.9896 (0.8834)  balanced_accuracy: 0.9918 (0.8637)  pr_auc: 1.0000 (0.9403)  roc_auc: 1.0000 (0.9502)  f1_weighted: 0.9831 (0.8169)  time: 0.0923  data: 0.0002  max mem: 379
+Test:  [   820/?]  eta: ?  loss: 0.6073 (0.5930)  accuracy: 0.9792 (0.8842)  balanced_accuracy: 0.9925 (0.8647)  pr_auc: 1.0000 (0.9409)  roc_auc: 1.0000 (0.9507)  f1_weighted: 0.9917 (0.8183)  time: 0.0896  data: 0.0003  max mem: 379
+Test:  [   830/?]  eta: ?  loss: 0.5990 (0.5928)  accuracy: 0.9792 (0.8842)  balanced_accuracy: 1.0000 (0.8643)  pr_auc: 1.0000 (0.9400)  roc_auc: 1.0000 (0.9496)  f1_weighted: 1.0000 (0.8172)  time: 0.0794  data: 0.0003  max mem: 379
+Test:  [   840/?]  eta: ?  loss: 0.5668 (0.5931)  accuracy: 0.9896 (0.8850)  balanced_accuracy: 0.9926 (0.8652)  pr_auc: 1.0000 (0.9404)  roc_auc: 1.0000 (0.9499)  f1_weighted: 0.9892 (0.8184)  time: 0.0893  data: 0.0002  max mem: 379
+Test:  [   850/?]  eta: ?  loss: 0.6306 (0.5935)  accuracy: 0.9792 (0.8849)  balanced_accuracy: 0.9925 (0.8656)  pr_auc: 1.0000 (0.9406)  roc_auc: 1.0000 (0.9501)  f1_weighted: 0.9892 (0.8191)  time: 0.0896  data: 0.0002  max mem: 379
+Test:  [   860/?]  eta: ?  loss: 0.6439 (0.5939)  accuracy: 0.9896 (0.8854)  balanced_accuracy: 0.9926 (0.8655)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9496)  f1_weighted: 0.9892 (0.8185)  time: 0.0795  data: 0.0003  max mem: 379
+Test:  [   870/?]  eta: ?  loss: 0.6155 (0.5937)  accuracy: 1.0000 (0.8861)  balanced_accuracy: 0.9926 (0.8662)  pr_auc: 1.0000 (0.9398)  roc_auc: 1.0000 (0.9498)  f1_weighted: 0.9892 (0.8196)  time: 0.0809  data: 0.0003  max mem: 379
+Test:  [   880/?]  eta: ?  loss: 0.5219 (0.5932)  accuracy: 1.0000 (0.8872)  balanced_accuracy: 0.9926 (0.8662)  pr_auc: 1.0000 (0.9398)  roc_auc: 1.0000 (0.9498)  f1_weighted: 0.9892 (0.8196)  time: 0.0847  data: 0.0002  max mem: 379
+Test:  [   890/?]  eta: ?  loss: 0.5377 (0.5934)  accuracy: 0.9896 (0.8880)  balanced_accuracy: 0.9926 (0.8667)  pr_auc: 1.0000 (0.9402)  roc_auc: 1.0000 (0.9501)  f1_weighted: 0.9811 (0.8204)  time: 0.0822  data: 0.0002  max mem: 379
+Test:  [   900/?]  eta: ?  loss: 0.5626 (0.5932)  accuracy: 0.9896 (0.8891)  balanced_accuracy: 0.9931 (0.8678)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9505)  f1_weighted: 0.9939 (0.8219)  time: 0.0772  data: 0.0002  max mem: 379
+Test:  [   910/?]  eta: ?  loss: 0.5294 (0.5927)  accuracy: 1.0000 (0.8898)  balanced_accuracy: 0.9929 (0.8680)  pr_auc: 1.0000 (0.9408)  roc_auc: 1.0000 (0.9506)  f1_weighted: 0.9811 (0.8223)  time: 0.0803  data: 0.0003  max mem: 379
+Test:  [   920/?]  eta: ?  loss: 0.5254 (0.5921)  accuracy: 0.9896 (0.8907)  balanced_accuracy: 0.9929 (0.8683)  pr_auc: 1.0000 (0.9409)  roc_auc: 1.0000 (0.9507)  f1_weighted: 0.9811 (0.8227)  time: 0.0927  data: 0.0003  max mem: 379
+Test:  [   930/?]  eta: ?  loss: 0.5220 (0.5914)  accuracy: 0.9896 (0.8915)  balanced_accuracy: 0.9929 (0.8683)  pr_auc: 1.0000 (0.9409)  roc_auc: 1.0000 (0.9507)  f1_weighted: 0.9811 (0.8227)  time: 0.0884  data: 0.0003  max mem: 379
+Test:  [   940/?]  eta: ?  loss: 0.5188 (0.5908)  accuracy: 0.9896 (0.8923)  balanced_accuracy: 0.9929 (0.8682)  pr_auc: 1.0000 (0.9411)  roc_auc: 1.0000 (0.9508)  f1_weighted: 0.9796 (0.8230)  time: 0.0776  data: 0.0003  max mem: 379
+Test:  [   950/?]  eta: ?  loss: 0.5163 (0.5903)  accuracy: 1.0000 (0.8934)  balanced_accuracy: 0.9929 (0.8685)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9509)  f1_weighted: 0.9796 (0.8234)  time: 0.0770  data: 0.0003  max mem: 379
+Test:  [   960/?]  eta: ?  loss: 0.5256 (0.5906)  accuracy: 0.9896 (0.8934)  balanced_accuracy: 0.9731 (0.8680)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9491)  f1_weighted: 0.9655 (0.8223)  time: 0.0880  data: 0.0002  max mem: 379
+Test:  [   970/?]  eta: ?  loss: 0.5452 (0.5905)  accuracy: 0.9792 (0.8933)  balanced_accuracy: 0.9731 (0.8682)  pr_auc: 1.0000 (0.9408)  roc_auc: 1.0000 (0.9492)  f1_weighted: 0.9655 (0.8226)  time: 0.0882  data: 0.0003  max mem: 379
+Test:  [   980/?]  eta: ?  loss: 0.5452 (0.5908)  accuracy: 0.9688 (0.8931)  balanced_accuracy: 0.9731 (0.8686)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9490)  f1_weighted: 0.9655 (0.8233)  time: 0.0762  data: 0.0003  max mem: 379
+Test:  [   990/?]  eta: ?  loss: 0.6321 (0.5911)  accuracy: 0.9792 (0.8932)  balanced_accuracy: 0.9855 (0.8689)  pr_auc: 1.0000 (0.9414)  roc_auc: 1.0000 (0.9491)  f1_weighted: 0.9655 (0.8237)  time: 0.0741  data: 0.0002  max mem: 379
+Test:  [  1000/?]  eta: ?  loss: 0.6041 (0.5913)  accuracy: 0.9792 (0.8930)  balanced_accuracy: 0.9947 (0.8692)  pr_auc: 1.0000 (0.9415)  roc_auc: 1.0000 (0.9492)  f1_weighted: 0.9947 (0.8241)  time: 0.0824  data: 0.0002  max mem: 379
+Test:  [  1010/?]  eta: ?  loss: 0.5777 (0.5917)  accuracy: 0.8438 (0.8914)  balanced_accuracy: 0.9667 (0.8681)  pr_auc: 1.0000 (0.9415)  roc_auc: 1.0000 (0.9483)  f1_weighted: 0.9643 (0.8221)  time: 0.0863  data: 0.0002  max mem: 379
+Test:  [  1020/?]  eta: ?  loss: 0.6710 (0.5930)  accuracy: 0.7083 (0.8878)  balanced_accuracy: 0.9667 (0.8683)  pr_auc: 1.0000 (0.9417)  roc_auc: 1.0000 (0.9485)  f1_weighted: 0.9643 (0.8210)  time: 0.0814  data: 0.0003  max mem: 379
+Test:  [  1030/?]  eta: ?  loss: 0.6490 (0.5933)  accuracy: 0.7708 (0.8875)  balanced_accuracy: 0.9667 (0.8667)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9476)  f1_weighted: 0.9630 (0.8192)  time: 0.0832  data: 0.0003  max mem: 379
+Test:  [  1040/?]  eta: ?  loss: 0.6484 (0.5938)  accuracy: 0.9375 (0.8856)  balanced_accuracy: 0.8830 (0.8663)  pr_auc: 0.9993 (0.9399)  roc_auc: 0.9995 (0.9461)  f1_weighted: 0.8101 (0.8192)  time: 0.0894  data: 0.0002  max mem: 379
+Test:  [  1050/?]  eta: ?  loss: 0.6158 (0.5937)  accuracy: 0.9896 (0.8861)  balanced_accuracy: 0.8830 (0.8661)  pr_auc: 0.9993 (0.9402)  roc_auc: 0.9995 (0.9464)  f1_weighted: 0.8101 (0.8185)  time: 0.0825  data: 0.0002  max mem: 379
+Test:  [  1060/?]  eta: ?  loss: 0.5843 (0.5939)  accuracy: 1.0000 (0.8863)  balanced_accuracy: 0.8830 (0.8662)  pr_auc: 0.9993 (0.9404)  roc_auc: 0.9995 (0.9466)  f1_weighted: 0.8101 (0.8186)  time: 0.0734  data: 0.0002  max mem: 379
+Test:  [  1070/?]  eta: ?  loss: 0.5322 (0.5932)  accuracy: 1.0000 (0.8871)  balanced_accuracy: 0.8830 (0.8664)  pr_auc: 0.9993 (0.9406)  roc_auc: 0.9995 (0.9467)  f1_weighted: 0.8101 (0.8190)  time: 0.0914  data: 0.0002  max mem: 379
+Test:  [  1080/?]  eta: ?  loss: 0.5322 (0.5932)  accuracy: 1.0000 (0.8882)  balanced_accuracy: 0.8830 (0.8673)  pr_auc: 0.9993 (0.9409)  roc_auc: 0.9995 (0.9470)  f1_weighted: 0.8101 (0.8201)  time: 0.0977  data: 0.0003  max mem: 379
+Test:  [  1090/?]  eta: ?  loss: 0.6374 (0.5937)  accuracy: 1.0000 (0.8872)  balanced_accuracy: 0.9848 (0.8676)  pr_auc: 1.0000 (0.9413)  roc_auc: 1.0000 (0.9473)  f1_weighted: 0.9714 (0.8205)  time: 0.1119  data: 0.0003  max mem: 379
+Test:  [  1100/?]  eta: ?  loss: 0.6305 (0.5937)  accuracy: 0.9688 (0.8874)  balanced_accuracy: 0.9848 (0.8676)  pr_auc: 1.0000 (0.9413)  roc_auc: 1.0000 (0.9473)  f1_weighted: 0.9714 (0.8205)  time: 0.1066  data: 0.0003  max mem: 379
+Test:  [  1110/?]  eta: ?  loss: 0.5202 (0.5936)  accuracy: 0.9896 (0.8880)  balanced_accuracy: 0.9848 (0.8676)  pr_auc: 1.0000 (0.9413)  roc_auc: 1.0000 (0.9473)  f1_weighted: 0.9714 (0.8205)  time: 0.0873  data: 0.0002  max mem: 379
+Test:  [  1120/?]  eta: ?  loss: 0.5192 (0.5932)  accuracy: 1.0000 (0.8885)  balanced_accuracy: 0.9857 (0.8673)  pr_auc: 1.0000 (0.9415)  roc_auc: 1.0000 (0.9475)  f1_weighted: 0.9846 (0.8200)  time: 0.0835  data: 0.0003  max mem: 379
+Test:  [  1130/?]  eta: ?  loss: 0.5178 (0.5932)  accuracy: 1.0000 (0.8877)  balanced_accuracy: 0.9857 (0.8673)  pr_auc: 1.0000 (0.9415)  roc_auc: 1.0000 (0.9475)  f1_weighted: 0.9846 (0.8200)  time: 0.0709  data: 0.0002  max mem: 379
+Test:  [  1140/?]  eta: ?  loss: 0.5157 (0.5930)  accuracy: 1.0000 (0.8881)  balanced_accuracy: 0.9857 (0.8673)  pr_auc: 1.0000 (0.9415)  roc_auc: 1.0000 (0.9475)  f1_weighted: 0.9846 (0.8200)  time: 0.0697  data: 0.0002  max mem: 379
+Test:  [  1150/?]  eta: ?  loss: 0.5805 (0.5936)  accuracy: 0.9583 (0.8869)  balanced_accuracy: 0.9857 (0.8670)  pr_auc: 1.0000 (0.9411)  roc_auc: 1.0000 (0.9474)  f1_weighted: 0.9846 (0.8196)  time: 0.0868  data: 0.0003  max mem: 379
+Test:  [  1160/?]  eta: ?  loss: 0.5782 (0.5934)  accuracy: 0.9583 (0.8872)  balanced_accuracy: 0.9785 (0.8661)  pr_auc: 1.0000 (0.9385)  roc_auc: 1.0000 (0.9470)  f1_weighted: 0.9780 (0.8171)  time: 0.0930  data: 0.0003  max mem: 379
+Test:  [  1170/?]  eta: ?  loss: 0.5171 (0.5934)  accuracy: 1.0000 (0.8868)  balanced_accuracy: 0.9785 (0.8661)  pr_auc: 1.0000 (0.9385)  roc_auc: 1.0000 (0.9470)  f1_weighted: 0.9780 (0.8171)  time: 0.0764  data: 0.0002  max mem: 379
+Test:  [  1180/?]  eta: ?  loss: 0.5425 (0.5937)  accuracy: 1.0000 (0.8852)  balanced_accuracy: 1.0000 (0.8663)  pr_auc: 1.0000 (0.9386)  roc_auc: 1.0000 (0.9471)  f1_weighted: 1.0000 (0.8175)  time: 0.0815  data: 0.0002  max mem: 379
+Test:  [  1190/?]  eta: ?  loss: 0.6324 (0.5938)  accuracy: 0.9896 (0.8845)  balanced_accuracy: 1.0000 (0.8656)  pr_auc: 1.0000 (0.9379)  roc_auc: 1.0000 (0.9469)  f1_weighted: 1.0000 (0.8164)  time: 0.0825  data: 0.0002  max mem: 379
+Test:  [  1200/?]  eta: ?  loss: 0.5327 (0.5938)  accuracy: 0.9896 (0.8837)  balanced_accuracy: 0.9785 (0.8642)  pr_auc: 1.0000 (0.9365)  roc_auc: 1.0000 (0.9451)  f1_weighted: 0.9780 (0.8152)  time: 0.0741  data: 0.0002  max mem: 379
+Test:  [  1210/?]  eta: ?  loss: 0.5268 (0.5939)  accuracy: 1.0000 (0.8831)  balanced_accuracy: 0.8605 (0.8635)  pr_auc: 1.0000 (0.9357)  roc_auc: 1.0000 (0.9441)  f1_weighted: 0.8378 (0.8136)  time: 0.0774  data: 0.0003  max mem: 379
+Test:  [  1220/?]  eta: ?  loss: 0.5164 (0.5942)  accuracy: 1.0000 (0.8817)  balanced_accuracy: 0.7500 (0.8628)  pr_auc: 1.0000 (0.9359)  roc_auc: 1.0000 (0.9442)  f1_weighted: 0.6667 (0.8120)  time: 0.0874  data: 0.0002  max mem: 379
+Test:  [  1230/?]  eta: ?  loss: 0.6499 (0.5951)  accuracy: 0.6562 (0.8789)  balanced_accuracy: 0.7302 (0.8623)  pr_auc: 1.0000 (0.9359)  roc_auc: 1.0000 (0.9442)  f1_weighted: 0.4510 (0.8111)  time: 0.0957  data: 0.0002  max mem: 379
+Test:  [  1240/?]  eta: ?  loss: 0.6501 (0.5953)  accuracy: 0.8021 (0.8784)  balanced_accuracy: 0.6667 (0.8619)  pr_auc: 1.0000 (0.9354)  roc_auc: 1.0000 (0.9442)  f1_weighted: 0.4510 (0.8105)  time: 0.0873  data: 0.0003  max mem: 379
+Test:  [  1250/?]  eta: ?  loss: 0.5546 (0.5952)  accuracy: 0.9688 (0.8786)  balanced_accuracy: 0.6667 (0.8618)  pr_auc: 0.9923 (0.9350)  roc_auc: 0.9698 (0.9440)  f1_weighted: 0.4510 (0.8101)  time: 0.0808  data: 0.0003  max mem: 379
+Test:  [  1260/?]  eta: ?  loss: 0.6113 (0.5958)  accuracy: 0.9583 (0.8776)  balanced_accuracy: 0.7302 (0.8613)  pr_auc: 0.9949 (0.9339)  roc_auc: 0.9815 (0.9427)  f1_weighted: 0.5000 (0.8089)  time: 0.0899  data: 0.0002  max mem: 379
+Test:  [  1270/?]  eta: ?  loss: 0.5417 (0.5955)  accuracy: 0.9896 (0.8777)  balanced_accuracy: 0.8605 (0.8611)  pr_auc: 0.9996 (0.9327)  roc_auc: 0.9996 (0.9414)  f1_weighted: 0.8378 (0.8088)  time: 0.0922  data: 0.0003  max mem: 379
+Test:  [  1280/?]  eta: ?  loss: 0.5265 (0.5954)  accuracy: 0.9896 (0.8774)  balanced_accuracy: 0.8605 (0.8611)  pr_auc: 0.9996 (0.9327)  roc_auc: 0.9996 (0.9414)  f1_weighted: 0.8378 (0.8088)  time: 0.0803  data: 0.0003  max mem: 379
+Test:  [  1290/?]  eta: ?  loss: 0.5395 (0.5958)  accuracy: 0.8646 (0.8758)  balanced_accuracy: 0.7143 (0.8593)  pr_auc: 0.9949 (0.9298)  roc_auc: 0.9815 (0.9387)  f1_weighted: 0.6000 (0.8059)  time: 0.0715  data: 0.0002  max mem: 379
+Test:  [  1300/?]  eta: ?  loss: 0.6122 (0.5962)  accuracy: 0.6562 (0.8741)  balanced_accuracy: 0.7143 (0.8580)  pr_auc: 0.9885 (0.9287)  roc_auc: 0.9698 (0.9361)  f1_weighted: 0.6131 (0.8047)  time: 0.0804  data: 0.0002  max mem: 379
+Test:  [  1310/?]  eta: ?  loss: 0.5332 (0.5959)  accuracy: 1.0000 (0.8748)  balanced_accuracy: 0.9118 (0.8585)  pr_auc: 0.9996 (0.9289)  roc_auc: 0.9996 (0.9364)  f1_weighted: 0.9032 (0.8054)  time: 0.0858  data: 0.0002  max mem: 379
+Test:  [  1320/?]  eta: ?  loss: 0.5163 (0.5953)  accuracy: 1.0000 (0.8756)  balanced_accuracy: 0.9316 (0.8588)  pr_auc: 1.0000 (0.9291)  roc_auc: 1.0000 (0.9365)  f1_weighted: 0.9630 (0.8057)  time: 0.0728  data: 0.0002  max mem: 379
+Test:  [  1330/?]  eta: ?  loss: 0.5218 (0.5951)  accuracy: 0.9792 (0.8758)  balanced_accuracy: 0.9316 (0.8588)  pr_auc: 1.0000 (0.9281)  roc_auc: 1.0000 (0.9364)  f1_weighted: 0.9630 (0.8054)  time: 0.0719  data: 0.0002  max mem: 379
+Test:  [  1340/?]  eta: ?  loss: 0.5526 (0.5951)  accuracy: 0.9688 (0.8761)  balanced_accuracy: 0.9722 (0.8593)  pr_auc: 1.0000 (0.9283)  roc_auc: 1.0000 (0.9366)  f1_weighted: 0.9630 (0.8061)  time: 0.0746  data: 0.0002  max mem: 379
+Test:  [  1350/?]  eta: ?  loss: 0.5526 (0.5949)  accuracy: 0.9896 (0.8766)  balanced_accuracy: 0.9722 (0.8593)  pr_auc: 1.0000 (0.9283)  roc_auc: 1.0000 (0.9366)  f1_weighted: 0.9630 (0.8061)  time: 0.0844  data: 0.0002  max mem: 379
+Test:  [  1360/?]  eta: ?  loss: 0.5271 (0.5945)  accuracy: 0.9896 (0.8770)  balanced_accuracy: 0.9722 (0.8589)  pr_auc: 1.0000 (0.9276)  roc_auc: 1.0000 (0.9366)  f1_weighted: 0.9630 (0.8053)  time: 0.0884  data: 0.0003  max mem: 379
+Test:  [  1370/?]  eta: ?  loss: 0.5252 (0.5943)  accuracy: 0.9792 (0.8764)  balanced_accuracy: 0.9722 (0.8589)  pr_auc: 1.0000 (0.9276)  roc_auc: 1.0000 (0.9366)  f1_weighted: 0.9630 (0.8053)  time: 0.0776  data: 0.0003  max mem: 379
+Test:  [  1380/?]  eta: ?  loss: 0.5248 (0.5940)  accuracy: 0.9896 (0.8772)  balanced_accuracy: 0.9530 (0.8594)  pr_auc: 1.0000 (0.9278)  roc_auc: 1.0000 (0.9368)  f1_weighted: 0.9630 (0.8060)  time: 0.0772  data: 0.0003  max mem: 379
+Test: Total time: 0:02:51 (0.1238 s / it)
+* loss 0.594
+======Test accuracy: 0.8772 ± 0.0000, balanced accuracy: 0.8608 ± 0.0000, F1 (weighted): 0.8258
+
+================================================================================
+Eval by task type (active/passive)
+================================================================================
+
+============================================================
+Counting samples by task type...
+============================================================
+
+============================================================
+Evaluating on active tasks (20,949 samples)...
+============================================================
+Active Test:  [     0/?]  eta: ?  loss: 0.7085 (0.7085)  accuracy: 0.5000 (0.5000)  balanced_accuracy: 0.5000 (0.5000)  pr_auc: 0.9231 (0.9231)  roc_auc: 0.9150 (0.9150)  f1_weighted: 0.0000 (0.0000)  time: 2.8328  data: 2.6250  max mem: 379
+Active Test:  [    10/?]  eta: ?  loss: 0.5805 (0.6078)  accuracy: 0.8438 (0.8153)  balanced_accuracy: 0.6719 (0.7773)  pr_auc: 0.9798 (0.8769)  roc_auc: 0.9888 (0.9206)  f1_weighted: 0.7529 (0.6170)  time: 0.3460  data: 0.2389  max mem: 379
+Active Test:  [    20/?]  eta: ?  loss: 0.5779 (0.5936)  accuracy: 0.9219 (0.8631)  balanced_accuracy: 0.9444 (0.8338)  pr_auc: 0.9973 (0.9092)  roc_auc: 0.9976 (0.9461)  f1_weighted: 0.9412 (0.7271)  time: 0.0902  data: 0.0003  max mem: 379
+Active Test:  [    30/?]  eta: ?  loss: 0.5620 (0.5828)  accuracy: 0.9531 (0.8876)  balanced_accuracy: 0.9444 (0.8462)  pr_auc: 1.0000 (0.9289)  roc_auc: 1.0000 (0.9590)  f1_weighted: 0.9412 (0.7575)  time: 0.0822  data: 0.0004  max mem: 379
+Active Test:  [    40/?]  eta: ?  loss: 0.5404 (0.5778)  accuracy: 0.9688 (0.8929)  balanced_accuracy: 0.9175 (0.8496)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9646)  f1_weighted: 0.8837 (0.7717)  time: 0.0803  data: 0.0003  max mem: 379
+Active Test:  [    50/?]  eta: ?  loss: 0.5598 (0.5757)  accuracy: 0.9844 (0.9056)  balanced_accuracy: 0.9364 (0.8688)  pr_auc: 1.0000 (0.9511)  roc_auc: 1.0000 (0.9715)  f1_weighted: 0.8966 (0.7985)  time: 0.0902  data: 0.0003  max mem: 379
+Active Test:  [    60/?]  eta: ?  loss: 0.5740 (0.5770)  accuracy: 1.0000 (0.9060)  balanced_accuracy: 0.9844 (0.8718)  pr_auc: 1.0000 (0.9583)  roc_auc: 1.0000 (0.9767)  f1_weighted: 0.9796 (0.8046)  time: 0.0909  data: 0.0003  max mem: 379
+Active Test:  [    70/?]  eta: ?  loss: 0.5795 (0.5782)  accuracy: 1.0000 (0.9085)  balanced_accuracy: 1.0000 (0.8743)  pr_auc: 1.0000 (0.9510)  roc_auc: 1.0000 (0.9739)  f1_weighted: 1.0000 (0.8052)  time: 0.0901  data: 0.0003  max mem: 379
+Active Test:  [    80/?]  eta: ?  loss: 0.5825 (0.5779)  accuracy: 0.9531 (0.9080)  balanced_accuracy: 0.9531 (0.8744)  pr_auc: 1.0000 (0.9505)  roc_auc: 1.0000 (0.9739)  f1_weighted: 0.9524 (0.8034)  time: 0.1037  data: 0.0003  max mem: 379
+Active Test:  [    90/?]  eta: ?  loss: 0.5834 (0.5773)  accuracy: 0.9062 (0.9025)  balanced_accuracy: 0.9070 (0.8743)  pr_auc: 0.9838 (0.9424)  roc_auc: 0.9944 (0.9710)  f1_weighted: 0.9091 (0.8045)  time: 0.1184  data: 0.0003  max mem: 379
+Active Test:  [   100/?]  eta: ?  loss: 0.5895 (0.5788)  accuracy: 0.8750 (0.8977)  balanced_accuracy: 0.9070 (0.8760)  pr_auc: 0.9946 (0.9463)  roc_auc: 0.9950 (0.9728)  f1_weighted: 0.8400 (0.8042)  time: 0.1065  data: 0.0003  max mem: 379
+Active Test:  [   110/?]  eta: ?  loss: 0.5906 (0.5790)  accuracy: 0.9531 (0.9032)  balanced_accuracy: 0.9479 (0.8840)  pr_auc: 0.9962 (0.9487)  roc_auc: 0.9961 (0.9747)  f1_weighted: 0.8400 (0.8148)  time: 0.0829  data: 0.0003  max mem: 379
+Active Test:  [   120/?]  eta: ?  loss: 0.5548 (0.5773)  accuracy: 0.9531 (0.9026)  balanced_accuracy: 0.9375 (0.8686)  pr_auc: 0.9814 (0.9371)  roc_auc: 0.9945 (0.9709)  f1_weighted: 0.8000 (0.7838)  time: 0.0768  data: 0.0003  max mem: 379
+Active Test:  [   130/?]  eta: ?  loss: 0.5558 (0.5776)  accuracy: 0.9062 (0.8995)  balanced_accuracy: 0.9062 (0.8628)  pr_auc: 0.9641 (0.9289)  roc_auc: 0.9829 (0.9691)  f1_weighted: 0.8000 (0.7722)  time: 0.0799  data: 0.0002  max mem: 379
+Active Test:  [   140/?]  eta: ?  loss: 0.5813 (0.5807)  accuracy: 0.8438 (0.8932)  balanced_accuracy: 0.7917 (0.8619)  pr_auc: 0.9447 (0.9178)  roc_auc: 0.9740 (0.9628)  f1_weighted: 0.6316 (0.7704)  time: 0.0884  data: 0.0002  max mem: 379
+Active Test:  [   150/?]  eta: ?  loss: 0.5858 (0.5810)  accuracy: 0.9531 (0.8983)  balanced_accuracy: 0.9531 (0.8701)  pr_auc: 1.0000 (0.9252)  roc_auc: 1.0000 (0.9661)  f1_weighted: 0.9524 (0.7863)  time: 0.0865  data: 0.0003  max mem: 379
+Active Test:  [   160/?]  eta: ?  loss: 0.5865 (0.5818)  accuracy: 0.9844 (0.9000)  balanced_accuracy: 0.9844 (0.8748)  pr_auc: 1.0000 (0.9307)  roc_auc: 1.0000 (0.9684)  f1_weighted: 0.9846 (0.7976)  time: 0.0798  data: 0.0003  max mem: 379
+Active Test:  [   170/?]  eta: ?  loss: 0.5865 (0.5819)  accuracy: 0.9844 (0.9039)  balanced_accuracy: 0.9844 (0.8815)  pr_auc: 1.0000 (0.9356)  roc_auc: 1.0000 (0.9705)  f1_weighted: 0.9846 (0.8084)  time: 0.0760  data: 0.0003  max mem: 379
+Active Test:  [   180/?]  eta: ?  loss: 0.5753 (0.5818)  accuracy: 0.9844 (0.9069)  balanced_accuracy: 0.9844 (0.8874)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9717)  f1_weighted: 0.9859 (0.8198)  time: 0.0875  data: 0.0004  max mem: 379
+Active Test:  [   190/?]  eta: ?  loss: 0.5798 (0.5842)  accuracy: 0.9688 (0.8982)  balanced_accuracy: 0.9706 (0.8817)  pr_auc: 1.0000 (0.9408)  roc_auc: 1.0000 (0.9702)  f1_weighted: 0.9846 (0.8171)  time: 0.0833  data: 0.0004  max mem: 379
+Active Test:  [   200/?]  eta: ?  loss: 0.5902 (0.5845)  accuracy: 0.9531 (0.8986)  balanced_accuracy: 0.9744 (0.8833)  pr_auc: 1.0000 (0.9425)  roc_auc: 1.0000 (0.9710)  f1_weighted: 0.9737 (0.8203)  time: 0.0711  data: 0.0002  max mem: 379
+Active Test:  [   210/?]  eta: ?  loss: 0.5902 (0.5862)  accuracy: 0.9531 (0.8972)  balanced_accuracy: 0.9571 (0.8851)  pr_auc: 1.0000 (0.9442)  roc_auc: 1.0000 (0.9717)  f1_weighted: 0.9565 (0.8240)  time: 0.0764  data: 0.0003  max mem: 379
+Active Test:  [   220/?]  eta: ?  loss: 0.5920 (0.5877)  accuracy: 0.9531 (0.8976)  balanced_accuracy: 0.9683 (0.8878)  pr_auc: 1.0000 (0.9456)  roc_auc: 1.0000 (0.9724)  f1_weighted: 0.9630 (0.8283)  time: 0.0877  data: 0.0003  max mem: 379
+Active Test:  [   230/?]  eta: ?  loss: 0.5794 (0.5877)  accuracy: 0.9844 (0.8972)  balanced_accuracy: 0.9683 (0.8890)  pr_auc: 1.0000 (0.9465)  roc_auc: 1.0000 (0.9725)  f1_weighted: 0.9672 (0.8311)  time: 0.0899  data: 0.0002  max mem: 379
+Active Test:  [   240/?]  eta: ?  loss: 0.5955 (0.5885)  accuracy: 0.9375 (0.8991)  balanced_accuracy: 0.9750 (0.8916)  pr_auc: 1.0000 (0.9487)  roc_auc: 1.0000 (0.9736)  f1_weighted: 0.9744 (0.8357)  time: 0.0824  data: 0.0002  max mem: 379
+Active Test:  [   250/?]  eta: ?  loss: 0.5955 (0.5888)  accuracy: 0.9688 (0.8985)  balanced_accuracy: 0.9714 (0.8922)  pr_auc: 1.0000 (0.9487)  roc_auc: 1.0000 (0.9726)  f1_weighted: 0.9667 (0.8390)  time: 0.0820  data: 0.0003  max mem: 379
+Active Test:  [   260/?]  eta: ?  loss: 0.5966 (0.5893)  accuracy: 0.9844 (0.9000)  balanced_accuracy: 0.9917 (0.8936)  pr_auc: 1.0000 (0.9499)  roc_auc: 1.0000 (0.9732)  f1_weighted: 0.9916 (0.8412)  time: 0.0794  data: 0.0003  max mem: 379
+Active Test:  [   270/?]  eta: ?  loss: 0.5418 (0.5882)  accuracy: 1.0000 (0.9012)  balanced_accuracy: 0.9625 (0.8923)  pr_auc: 1.0000 (0.9475)  roc_auc: 1.0000 (0.9711)  f1_weighted: 0.9610 (0.8390)  time: 0.0829  data: 0.0002  max mem: 379
+Active Test:  [   280/?]  eta: ?  loss: 0.5304 (0.5876)  accuracy: 1.0000 (0.9033)  balanced_accuracy: 0.9625 (0.8920)  pr_auc: 1.0000 (0.9469)  roc_auc: 1.0000 (0.9707)  f1_weighted: 0.9610 (0.8389)  time: 0.0836  data: 0.0003  max mem: 379
+Active Test:  [   290/?]  eta: ?  loss: 0.5247 (0.5862)  accuracy: 1.0000 (0.9034)  balanced_accuracy: 0.9625 (0.8928)  pr_auc: 1.0000 (0.9474)  roc_auc: 1.0000 (0.9710)  f1_weighted: 0.9610 (0.8403)  time: 0.0757  data: 0.0003  max mem: 379
+Active Test:  [   300/?]  eta: ?  loss: 0.5344 (0.5867)  accuracy: 1.0000 (0.9048)  balanced_accuracy: 0.9917 (0.8942)  pr_auc: 1.0000 (0.9490)  roc_auc: 1.0000 (0.9718)  f1_weighted: 0.9916 (0.8429)  time: 0.0769  data: 0.0003  max mem: 379
+Active Test:  [   310/?]  eta: ?  loss: 0.6116 (0.5871)  accuracy: 1.0000 (0.9039)  balanced_accuracy: 0.9625 (0.8911)  pr_auc: 1.0000 (0.9463)  roc_auc: 1.0000 (0.9693)  f1_weighted: 0.9610 (0.8385)  time: 0.0898  data: 0.0003  max mem: 379
+Active Test:  [   320/?]  eta: ?  loss: 0.6192 (0.5901)  accuracy: 0.8594 (0.8939)  balanced_accuracy: 0.8929 (0.8803)  pr_auc: 0.9925 (0.9416)  roc_auc: 0.9957 (0.9586)  f1_weighted: 0.8302 (0.8254)  time: 0.0843  data: 0.0002  max mem: 379
+Active Test: Total time: 0:00:30 (0.0943 s / it)
+* loss 0.590
+
+============================================================
+Evaluating on passive tasks (113,222 samples)...
+============================================================
+Passive Test:  [     0/?]  eta: ?  loss: 0.5157 (0.5157)  accuracy: 1.0000 (1.0000)  time: 0.8822  data: 0.8169  max mem: 379
+Passive Test:  [    10/?]  eta: ?  loss: 0.5344 (0.6007)  accuracy: 0.9844 (0.8111)  balanced_accuracy: 1.0000 (1.0000)  pr_auc: 1.0000 (1.0000)  roc_auc: 1.0000 (1.0000)  f1_weighted: 1.0000 (1.0000)  time: 0.1418  data: 0.0744  max mem: 379
+Passive Test:  [    20/?]  eta: ?  loss: 0.5344 (0.5832)  accuracy: 0.9688 (0.8668)  balanced_accuracy: 0.9375 (0.8638)  pr_auc: 1.0000 (0.8913)  roc_auc: 1.0000 (0.8785)  f1_weighted: 0.9333 (0.8041)  time: 0.0661  data: 0.0002  max mem: 379
+Passive Test:  [    30/?]  eta: ?  loss: 0.5435 (0.5739)  accuracy: 0.9688 (0.8931)  balanced_accuracy: 0.9375 (0.8934)  pr_auc: 1.0000 (0.9321)  roc_auc: 1.0000 (0.9241)  f1_weighted: 0.9333 (0.8544)  time: 0.0777  data: 0.0002  max mem: 379
+Passive Test:  [    40/?]  eta: ?  loss: 0.5435 (0.5709)  accuracy: 0.9688 (0.9036)  balanced_accuracy: 0.9375 (0.8951)  pr_auc: 1.0000 (0.9535)  roc_auc: 1.0000 (0.9483)  f1_weighted: 0.9333 (0.8597)  time: 0.0780  data: 0.0002  max mem: 379
+Passive Test:  [    50/?]  eta: ?  loss: 0.5511 (0.5726)  accuracy: 0.9688 (0.9127)  balanced_accuracy: 0.9375 (0.9096)  pr_auc: 1.0000 (0.9671)  roc_auc: 1.0000 (0.9634)  f1_weighted: 0.9333 (0.8852)  time: 0.0691  data: 0.0003  max mem: 379
+Passive Test:  [    60/?]  eta: ?  loss: 0.5935 (0.5774)  accuracy: 0.9375 (0.9078)  balanced_accuracy: 0.9375 (0.8767)  pr_auc: 1.0000 (0.9562)  roc_auc: 1.0000 (0.9602)  f1_weighted: 0.9333 (0.8322)  time: 0.0731  data: 0.0004  max mem: 379
+Passive Test:  [    70/?]  eta: ?  loss: 0.6005 (0.5820)  accuracy: 0.9375 (0.9082)  balanced_accuracy: 0.9259 (0.8729)  pr_auc: 1.0000 (0.9595)  roc_auc: 1.0000 (0.9632)  f1_weighted: 0.9200 (0.8285)  time: 0.0843  data: 0.0003  max mem: 379
+Passive Test:  [    80/?]  eta: ?  loss: 0.6275 (0.5851)  accuracy: 0.9062 (0.9012)  balanced_accuracy: 0.8438 (0.8523)  pr_auc: 0.9933 (0.9615)  roc_auc: 0.9932 (0.9627)  f1_weighted: 0.8148 (0.8005)  time: 0.0858  data: 0.0003  max mem: 379
+Passive Test:  [    90/?]  eta: ?  loss: 0.6017 (0.5860)  accuracy: 0.8750 (0.8927)  balanced_accuracy: 0.8438 (0.8507)  pr_auc: 0.9947 (0.9561)  roc_auc: 0.9837 (0.9663)  f1_weighted: 0.7692 (0.7783)  time: 0.0843  data: 0.0003  max mem: 379
+Passive Test:  [   100/?]  eta: ?  loss: 0.5894 (0.5890)  accuracy: 0.8750 (0.8835)  balanced_accuracy: 0.8565 (0.8440)  pr_auc: 0.9963 (0.9456)  roc_auc: 0.9961 (0.9510)  f1_weighted: 0.8571 (0.7682)  time: 0.0847  data: 0.0003  max mem: 379
+Passive Test:  [   110/?]  eta: ?  loss: 0.5903 (0.5932)  accuracy: 0.6875 (0.8657)  balanced_accuracy: 0.7188 (0.8241)  pr_auc: 1.0000 (0.9378)  roc_auc: 1.0000 (0.9368)  f1_weighted: 0.7033 (0.7480)  time: 0.0882  data: 0.0002  max mem: 379
+Passive Test:  [   120/?]  eta: ?  loss: 0.5933 (0.5957)  accuracy: 0.7188 (0.8589)  balanced_accuracy: 0.7188 (0.8191)  pr_auc: 1.0000 (0.9403)  roc_auc: 1.0000 (0.9358)  f1_weighted: 0.6957 (0.7557)  time: 0.1058  data: 0.0002  max mem: 379
+Passive Test:  [   130/?]  eta: ?  loss: 0.5929 (0.5952)  accuracy: 0.9688 (0.8610)  balanced_accuracy: 0.9531 (0.8303)  pr_auc: 1.0000 (0.9458)  roc_auc: 1.0000 (0.9416)  f1_weighted: 0.9552 (0.7698)  time: 0.0894  data: 0.0002  max mem: 379
+Passive Test:  [   140/?]  eta: ?  loss: 0.5929 (0.5951)  accuracy: 0.9844 (0.8619)  balanced_accuracy: 0.9688 (0.8299)  pr_auc: 1.0000 (0.9452)  roc_auc: 1.0000 (0.9429)  f1_weighted: 0.9677 (0.7682)  time: 0.0672  data: 0.0002  max mem: 379
+Passive Test:  [   150/?]  eta: ?  loss: 0.5808 (0.5932)  accuracy: 0.9844 (0.8680)  balanced_accuracy: 1.0000 (0.8372)  pr_auc: 1.0000 (0.9492)  roc_auc: 1.0000 (0.9471)  f1_weighted: 1.0000 (0.7786)  time: 0.0710  data: 0.0002  max mem: 379
+Passive Test:  [   160/?]  eta: ?  loss: 0.5695 (0.5920)  accuracy: 0.9844 (0.8682)  balanced_accuracy: 0.9844 (0.8351)  pr_auc: 1.0000 (0.9521)  roc_auc: 1.0000 (0.9501)  f1_weighted: 0.9841 (0.7726)  time: 0.0838  data: 0.0002  max mem: 379
+Passive Test:  [   170/?]  eta: ?  loss: 0.5260 (0.5890)  accuracy: 0.9844 (0.8750)  balanced_accuracy: 0.9844 (0.8392)  pr_auc: 1.0000 (0.9537)  roc_auc: 1.0000 (0.9518)  f1_weighted: 0.9841 (0.7787)  time: 0.0820  data: 0.0002  max mem: 379
+Passive Test:  [   180/?]  eta: ?  loss: 0.5260 (0.5866)  accuracy: 1.0000 (0.8804)  balanced_accuracy: 1.0000 (0.8461)  pr_auc: 1.0000 (0.9557)  roc_auc: 1.0000 (0.9538)  f1_weighted: 1.0000 (0.7881)  time: 0.0674  data: 0.0002  max mem: 379
+Passive Test:  [   190/?]  eta: ?  loss: 0.5381 (0.5850)  accuracy: 0.9844 (0.8844)  balanced_accuracy: 0.9688 (0.8500)  pr_auc: 1.0000 (0.9575)  roc_auc: 1.0000 (0.9557)  f1_weighted: 0.9677 (0.7941)  time: 0.0639  data: 0.0002  max mem: 379
+Passive Test:  [   200/?]  eta: ?  loss: 0.5462 (0.5859)  accuracy: 0.9688 (0.8837)  balanced_accuracy: 0.9844 (0.8537)  pr_auc: 1.0000 (0.9587)  roc_auc: 1.0000 (0.9570)  f1_weighted: 0.9841 (0.7995)  time: 0.0656  data: 0.0002  max mem: 379
+Passive Test:  [   210/?]  eta: ?  loss: 0.5320 (0.5854)  accuracy: 0.9688 (0.8840)  balanced_accuracy: 0.9844 (0.8537)  pr_auc: 1.0000 (0.9587)  roc_auc: 1.0000 (0.9570)  f1_weighted: 0.9841 (0.7995)  time: 0.0674  data: 0.0002  max mem: 379
+Passive Test:  [   220/?]  eta: ?  loss: 0.5320 (0.5857)  accuracy: 0.9688 (0.8834)  balanced_accuracy: 0.9688 (0.8548)  pr_auc: 1.0000 (0.9607)  roc_auc: 1.0000 (0.9590)  f1_weighted: 0.9677 (0.8013)  time: 0.0819  data: 0.0002  max mem: 379
+Passive Test:  [   230/?]  eta: ?  loss: 0.5828 (0.5858)  accuracy: 0.9375 (0.8853)  balanced_accuracy: 0.9231 (0.8580)  pr_auc: 0.9994 (0.9622)  roc_auc: 0.9990 (0.9615)  f1_weighted: 0.9167 (0.8080)  time: 0.0852  data: 0.0002  max mem: 379
+Passive Test:  [   240/?]  eta: ?  loss: 0.5816 (0.5852)  accuracy: 1.0000 (0.8890)  balanced_accuracy: 0.8906 (0.8641)  pr_auc: 0.9981 (0.9641)  roc_auc: 0.9980 (0.9635)  f1_weighted: 0.9014 (0.8171)  time: 0.0756  data: 0.0002  max mem: 379
+Passive Test:  [   250/?]  eta: ?  loss: 0.5809 (0.5845)  accuracy: 1.0000 (0.8908)  balanced_accuracy: 0.9844 (0.8696)  pr_auc: 1.0000 (0.9657)  roc_auc: 1.0000 (0.9652)  f1_weighted: 0.9841 (0.8248)  time: 0.0736  data: 0.0002  max mem: 379
+Passive Test:  [   260/?]  eta: ?  loss: 0.5814 (0.5842)  accuracy: 1.0000 (0.8937)  balanced_accuracy: 1.0000 (0.8755)  pr_auc: 1.0000 (0.9644)  roc_auc: 1.0000 (0.9663)  f1_weighted: 1.0000 (0.8314)  time: 0.0826  data: 0.0004  max mem: 379
+Passive Test:  [   270/?]  eta: ?  loss: 0.5840 (0.5844)  accuracy: 1.0000 (0.8947)  balanced_accuracy: 1.0000 (0.8768)  pr_auc: 1.0000 (0.9629)  roc_auc: 1.0000 (0.9648)  f1_weighted: 1.0000 (0.8339)  time: 0.0856  data: 0.0004  max mem: 379
+Passive Test:  [   280/?]  eta: ?  loss: 0.5950 (0.5861)  accuracy: 0.9219 (0.8931)  balanced_accuracy: 0.9531 (0.8764)  pr_auc: 0.9981 (0.9614)  roc_auc: 0.9980 (0.9636)  f1_weighted: 0.9552 (0.8339)  time: 0.0722  data: 0.0002  max mem: 379
+Passive Test:  [   290/?]  eta: ?  loss: 0.6247 (0.5878)  accuracy: 0.8750 (0.8908)  balanced_accuracy: 0.9062 (0.8724)  pr_auc: 0.9943 (0.9542)  roc_auc: 0.9955 (0.9559)  f1_weighted: 0.8966 (0.8284)  time: 0.0730  data: 0.0002  max mem: 379
+Passive Test:  [   300/?]  eta: ?  loss: 0.6057 (0.5884)  accuracy: 0.9062 (0.8903)  balanced_accuracy: 0.9369 (0.8769)  pr_auc: 0.9963 (0.9558)  roc_auc: 0.9961 (0.9576)  f1_weighted: 0.9153 (0.8333)  time: 0.0762  data: 0.0002  max mem: 379
+Passive Test:  [   310/?]  eta: ?  loss: 0.5917 (0.5886)  accuracy: 0.9531 (0.8884)  balanced_accuracy: 0.9750 (0.8800)  pr_auc: 0.9981 (0.9571)  roc_auc: 0.9990 (0.9588)  f1_weighted: 0.9538 (0.8376)  time: 0.0851  data: 0.0002  max mem: 379
+Passive Test:  [   320/?]  eta: ?  loss: 0.5825 (0.5877)  accuracy: 1.0000 (0.8884)  balanced_accuracy: 0.9844 (0.8820)  pr_auc: 1.0000 (0.9578)  roc_auc: 1.0000 (0.9595)  f1_weighted: 0.9846 (0.8404)  time: 0.0832  data: 0.0003  max mem: 379
+Passive Test:  [   330/?]  eta: ?  loss: 0.5394 (0.5866)  accuracy: 1.0000 (0.8895)  balanced_accuracy: 0.9844 (0.8834)  pr_auc: 1.0000 (0.9585)  roc_auc: 1.0000 (0.9602)  f1_weighted: 0.9846 (0.8424)  time: 0.0773  data: 0.0002  max mem: 379
+Passive Test:  [   340/?]  eta: ?  loss: 0.5394 (0.5855)  accuracy: 0.9844 (0.8908)  balanced_accuracy: 1.0000 (0.8847)  pr_auc: 1.0000 (0.9590)  roc_auc: 1.0000 (0.9606)  f1_weighted: 1.0000 (0.8441)  time: 0.0753  data: 0.0002  max mem: 379
+Passive Test:  [   350/?]  eta: ?  loss: 0.5593 (0.5848)  accuracy: 0.9844 (0.8908)  balanced_accuracy: 1.0000 (0.8865)  pr_auc: 1.0000 (0.9596)  roc_auc: 1.0000 (0.9613)  f1_weighted: 1.0000 (0.8466)  time: 0.0699  data: 0.0005  max mem: 379
+Passive Test:  [   360/?]  eta: ?  loss: 0.5696 (0.5844)  accuracy: 0.9844 (0.8911)  balanced_accuracy: 1.0000 (0.8844)  pr_auc: 1.0000 (0.9604)  roc_auc: 1.0000 (0.9621)  f1_weighted: 1.0000 (0.8409)  time: 0.0765  data: 0.0004  max mem: 379
+Passive Test:  [   370/?]  eta: ?  loss: 0.5789 (0.5849)  accuracy: 0.9844 (0.8913)  balanced_accuracy: 1.0000 (0.8866)  pr_auc: 1.0000 (0.9616)  roc_auc: 1.0000 (0.9632)  f1_weighted: 1.0000 (0.8442)  time: 0.0739  data: 0.0002  max mem: 379
+Passive Test:  [   380/?]  eta: ?  loss: 0.5834 (0.5859)  accuracy: 0.9688 (0.8892)  balanced_accuracy: 1.0000 (0.8891)  pr_auc: 1.0000 (0.9626)  roc_auc: 1.0000 (0.9641)  f1_weighted: 1.0000 (0.8477)  time: 0.0696  data: 0.0002  max mem: 379
+Passive Test:  [   390/?]  eta: ?  loss: 0.5940 (0.5875)  accuracy: 0.7656 (0.8850)  balanced_accuracy: 0.9844 (0.8887)  pr_auc: 1.0000 (0.9622)  roc_auc: 1.0000 (0.9620)  f1_weighted: 0.9846 (0.8477)  time: 0.0715  data: 0.0002  max mem: 379
+Passive Test:  [   400/?]  eta: ?  loss: 0.6185 (0.5886)  accuracy: 0.7500 (0.8814)  balanced_accuracy: 0.8906 (0.8825)  pr_auc: 1.0000 (0.9541)  roc_auc: 1.0000 (0.9555)  f1_weighted: 0.9014 (0.8373)  time: 0.0747  data: 0.0002  max mem: 379
+Passive Test:  [   410/?]  eta: ?  loss: 0.5901 (0.5887)  accuracy: 0.8750 (0.8815)  balanced_accuracy: 0.8750 (0.8815)  pr_auc: 1.0000 (0.9545)  roc_auc: 1.0000 (0.9559)  f1_weighted: 0.8649 (0.8333)  time: 0.0879  data: 0.0003  max mem: 379
+Passive Test:  [   420/?]  eta: ?  loss: 0.5852 (0.5891)  accuracy: 0.9688 (0.8807)  balanced_accuracy: 0.9219 (0.8794)  pr_auc: 1.0000 (0.9560)  roc_auc: 1.0000 (0.9574)  f1_weighted: 0.9180 (0.8282)  time: 0.0829  data: 0.0002  max mem: 379
+Passive Test:  [   430/?]  eta: ?  loss: 0.5877 (0.5894)  accuracy: 0.9531 (0.8802)  balanced_accuracy: 0.9219 (0.8781)  pr_auc: 1.0000 (0.9548)  roc_auc: 1.0000 (0.9580)  f1_weighted: 0.9180 (0.8253)  time: 0.0751  data: 0.0002  max mem: 379
+Passive Test:  [   440/?]  eta: ?  loss: 0.5887 (0.5895)  accuracy: 0.9375 (0.8808)  balanced_accuracy: 0.9219 (0.8775)  pr_auc: 1.0000 (0.9538)  roc_auc: 1.0000 (0.9585)  f1_weighted: 0.9254 (0.8233)  time: 0.0765  data: 0.0002  max mem: 379
+Passive Test:  [   450/?]  eta: ?  loss: 0.5887 (0.5894)  accuracy: 0.9688 (0.8824)  balanced_accuracy: 0.9375 (0.8795)  pr_auc: 0.9972 (0.9551)  roc_auc: 0.9980 (0.9597)  f1_weighted: 0.9412 (0.8272)  time: 0.0685  data: 0.0002  max mem: 379
+Passive Test:  [   460/?]  eta: ?  loss: 0.5860 (0.5894)  accuracy: 0.9844 (0.8836)  balanced_accuracy: 0.9688 (0.8794)  pr_auc: 0.9991 (0.9548)  roc_auc: 0.9990 (0.9600)  f1_weighted: 0.9756 (0.8282)  time: 0.0802  data: 0.0002  max mem: 379
+Passive Test:  [   470/?]  eta: ?  loss: 0.5909 (0.5898)  accuracy: 0.9844 (0.8838)  balanced_accuracy: 0.9844 (0.8799)  pr_auc: 1.0000 (0.9562)  roc_auc: 1.0000 (0.9613)  f1_weighted: 0.9841 (0.8279)  time: 0.0813  data: 0.0002  max mem: 379
+Passive Test:  [   480/?]  eta: ?  loss: 0.5919 (0.5901)  accuracy: 0.9844 (0.8830)  balanced_accuracy: 0.9531 (0.8774)  pr_auc: 1.0000 (0.9566)  roc_auc: 1.0000 (0.9616)  f1_weighted: 0.9508 (0.8217)  time: 0.0767  data: 0.0002  max mem: 379
+Passive Test:  [   490/?]  eta: ?  loss: 0.5913 (0.5902)  accuracy: 0.9844 (0.8833)  balanced_accuracy: 0.9844 (0.8778)  pr_auc: 1.0000 (0.9577)  roc_auc: 1.0000 (0.9625)  f1_weighted: 0.9841 (0.8226)  time: 0.0819  data: 0.0003  max mem: 379
+Passive Test:  [   500/?]  eta: ?  loss: 0.5842 (0.5901)  accuracy: 0.9844 (0.8834)  balanced_accuracy: 0.9844 (0.8777)  pr_auc: 1.0000 (0.9565)  roc_auc: 1.0000 (0.9621)  f1_weighted: 0.9841 (0.8222)  time: 0.0949  data: 0.0003  max mem: 379
+Passive Test:  [   510/?]  eta: ?  loss: 0.5833 (0.5901)  accuracy: 0.9844 (0.8837)  balanced_accuracy: 0.9531 (0.8776)  pr_auc: 1.0000 (0.9569)  roc_auc: 1.0000 (0.9610)  f1_weighted: 0.9508 (0.8227)  time: 0.1052  data: 0.0003  max mem: 379
+Passive Test:  [   520/?]  eta: ?  loss: 0.5343 (0.5895)  accuracy: 1.0000 (0.8844)  balanced_accuracy: 0.9844 (0.8768)  pr_auc: 1.0000 (0.9550)  roc_auc: 1.0000 (0.9594)  f1_weighted: 0.9841 (0.8224)  time: 0.0869  data: 0.0003  max mem: 379
+Passive Test:  [   530/?]  eta: ?  loss: 0.5308 (0.5890)  accuracy: 0.9844 (0.8833)  balanced_accuracy: 0.9844 (0.8768)  pr_auc: 1.0000 (0.9550)  roc_auc: 1.0000 (0.9594)  f1_weighted: 0.9841 (0.8224)  time: 0.0738  data: 0.0003  max mem: 379
+Passive Test:  [   540/?]  eta: ?  loss: 0.5308 (0.5884)  accuracy: 0.9688 (0.8829)  balanced_accuracy: 0.9688 (0.8772)  pr_auc: 1.0000 (0.9553)  roc_auc: 1.0000 (0.9597)  f1_weighted: 0.9697 (0.8219)  time: 0.0713  data: 0.0002  max mem: 379
+Passive Test:  [   550/?]  eta: ?  loss: 0.5301 (0.5878)  accuracy: 0.9844 (0.8829)  balanced_accuracy: 0.9688 (0.8780)  pr_auc: 1.0000 (0.9556)  roc_auc: 1.0000 (0.9599)  f1_weighted: 0.9697 (0.8231)  time: 0.0744  data: 0.0002  max mem: 379
+Passive Test:  [   560/?]  eta: ?  loss: 0.5215 (0.5874)  accuracy: 1.0000 (0.8833)  balanced_accuracy: 0.9844 (0.8765)  pr_auc: 1.0000 (0.9542)  roc_auc: 1.0000 (0.9595)  f1_weighted: 0.9841 (0.8205)  time: 0.0764  data: 0.0002  max mem: 379
+Passive Test:  [   570/?]  eta: ?  loss: 0.5424 (0.5874)  accuracy: 1.0000 (0.8830)  balanced_accuracy: 0.9688 (0.8745)  pr_auc: 1.0000 (0.9543)  roc_auc: 1.0000 (0.9598)  f1_weighted: 0.9697 (0.8165)  time: 0.0752  data: 0.0003  max mem: 379
+Passive Test:  [   580/?]  eta: ?  loss: 0.5424 (0.5871)  accuracy: 0.9844 (0.8833)  balanced_accuracy: 0.9844 (0.8732)  pr_auc: 1.0000 (0.9530)  roc_auc: 1.0000 (0.9591)  f1_weighted: 0.9846 (0.8141)  time: 0.0751  data: 0.0003  max mem: 379
+Passive Test:  [   590/?]  eta: ?  loss: 0.5288 (0.5862)  accuracy: 0.9844 (0.8852)  balanced_accuracy: 0.9844 (0.8740)  pr_auc: 1.0000 (0.9533)  roc_auc: 1.0000 (0.9594)  f1_weighted: 0.9846 (0.8152)  time: 0.0722  data: 0.0003  max mem: 379
+Passive Test:  [   600/?]  eta: ?  loss: 0.5200 (0.5856)  accuracy: 1.0000 (0.8865)  balanced_accuracy: 0.9844 (0.8746)  pr_auc: 1.0000 (0.9536)  roc_auc: 1.0000 (0.9596)  f1_weighted: 0.9846 (0.8162)  time: 0.0859  data: 0.0002  max mem: 379
+Passive Test:  [   610/?]  eta: ?  loss: 0.5177 (0.5850)  accuracy: 1.0000 (0.8881)  balanced_accuracy: 0.9844 (0.8746)  pr_auc: 1.0000 (0.9536)  roc_auc: 1.0000 (0.9596)  f1_weighted: 0.9846 (0.8162)  time: 0.0868  data: 0.0002  max mem: 379
+Passive Test:  [   620/?]  eta: ?  loss: 0.5203 (0.5851)  accuracy: 0.9688 (0.8882)  balanced_accuracy: 0.9634 (0.8742)  pr_auc: 1.0000 (0.9535)  roc_auc: 1.0000 (0.9596)  f1_weighted: 0.9620 (0.8159)  time: 0.0715  data: 0.0003  max mem: 379
+Passive Test:  [   630/?]  eta: ?  loss: 0.6097 (0.5860)  accuracy: 0.8281 (0.8856)  balanced_accuracy: 0.8750 (0.8730)  pr_auc: 1.0000 (0.9531)  roc_auc: 1.0000 (0.9591)  f1_weighted: 0.8710 (0.8148)  time: 0.0735  data: 0.0003  max mem: 379
+Passive Test:  [   640/?]  eta: ?  loss: 0.6209 (0.5865)  accuracy: 0.8750 (0.8866)  balanced_accuracy: 0.9634 (0.8732)  pr_auc: 1.0000 (0.9537)  roc_auc: 1.0000 (0.9598)  f1_weighted: 0.9302 (0.8170)  time: 0.0815  data: 0.0002  max mem: 379
+Passive Test:  [   650/?]  eta: ?  loss: 0.6151 (0.5867)  accuracy: 1.0000 (0.8879)  balanced_accuracy: 0.9659 (0.8739)  pr_auc: 1.0000 (0.9539)  roc_auc: 1.0000 (0.9600)  f1_weighted: 0.9620 (0.8180)  time: 0.0821  data: 0.0002  max mem: 379
+Passive Test:  [   660/?]  eta: ?  loss: 0.6124 (0.5870)  accuracy: 0.9844 (0.8882)  balanced_accuracy: 0.9659 (0.8739)  pr_auc: 1.0000 (0.9539)  roc_auc: 1.0000 (0.9600)  f1_weighted: 0.9620 (0.8180)  time: 0.0774  data: 0.0003  max mem: 379
+Passive Test:  [   670/?]  eta: ?  loss: 0.6070 (0.5874)  accuracy: 0.9531 (0.8880)  balanced_accuracy: 0.9659 (0.8751)  pr_auc: 1.0000 (0.9544)  roc_auc: 1.0000 (0.9605)  f1_weighted: 0.9302 (0.8186)  time: 0.0765  data: 0.0003  max mem: 379
+Passive Test:  [   680/?]  eta: ?  loss: 0.5802 (0.5868)  accuracy: 1.0000 (0.8895)  balanced_accuracy: 1.0000 (0.8759)  pr_auc: 1.0000 (0.9549)  roc_auc: 1.0000 (0.9610)  f1_weighted: 1.0000 (0.8199)  time: 0.0750  data: 0.0003  max mem: 379
+Passive Test:  [   690/?]  eta: ?  loss: 0.5492 (0.5864)  accuracy: 1.0000 (0.8911)  balanced_accuracy: 1.0000 (0.8780)  pr_auc: 1.0000 (0.9557)  roc_auc: 1.0000 (0.9617)  f1_weighted: 1.0000 (0.8229)  time: 0.0822  data: 0.0003  max mem: 379
+Passive Test:  [   700/?]  eta: ?  loss: 0.5794 (0.5861)  accuracy: 1.0000 (0.8915)  balanced_accuracy: 1.0000 (0.8783)  pr_auc: 1.0000 (0.9561)  roc_auc: 1.0000 (0.9620)  f1_weighted: 1.0000 (0.8237)  time: 0.0820  data: 0.0002  max mem: 379
+Passive Test:  [   710/?]  eta: ?  loss: 0.5843 (0.5863)  accuracy: 0.8906 (0.8903)  balanced_accuracy: 0.9844 (0.8762)  pr_auc: 1.0000 (0.9535)  roc_auc: 1.0000 (0.9590)  f1_weighted: 0.9841 (0.8230)  time: 0.0725  data: 0.0002  max mem: 379
+Passive Test:  [   720/?]  eta: ?  loss: 0.5843 (0.5868)  accuracy: 0.8438 (0.8872)  balanced_accuracy: 0.8594 (0.8701)  pr_auc: 1.0000 (0.9480)  roc_auc: 1.0000 (0.9516)  f1_weighted: 0.8649 (0.8171)  time: 0.0716  data: 0.0002  max mem: 379
+Passive Test:  [   730/?]  eta: ?  loss: 0.5921 (0.5874)  accuracy: 0.8438 (0.8844)  balanced_accuracy: 0.8438 (0.8653)  pr_auc: 0.9650 (0.9436)  roc_auc: 0.9653 (0.9453)  f1_weighted: 0.8148 (0.8137)  time: 0.0707  data: 0.0002  max mem: 379
+Passive Test:  [   740/?]  eta: ?  loss: 0.5673 (0.5872)  accuracy: 0.8750 (0.8840)  balanced_accuracy: 0.5938 (0.8644)  pr_auc: 0.4880 (0.9411)  roc_auc: 0.6274 (0.9432)  f1_weighted: 0.6286 (0.8123)  time: 0.0862  data: 0.0002  max mem: 379
+Passive Test:  [   750/?]  eta: ?  loss: 0.5465 (0.5872)  accuracy: 0.9375 (0.8837)  balanced_accuracy: 0.5156 (0.8629)  pr_auc: 0.4136 (0.9384)  roc_auc: 0.4863 (0.9398)  f1_weighted: 0.6593 (0.8119)  time: 0.0830  data: 0.0002  max mem: 379
+Passive Test:  [   760/?]  eta: ?  loss: 0.5356 (0.5876)  accuracy: 0.9688 (0.8828)  balanced_accuracy: 0.5156 (0.8601)  pr_auc: 0.4631 (0.9353)  roc_auc: 0.6274 (0.9364)  f1_weighted: 0.6667 (0.8108)  time: 0.0674  data: 0.0002  max mem: 379
+Passive Test:  [   770/?]  eta: ?  loss: 0.5840 (0.5875)  accuracy: 0.9844 (0.8827)  balanced_accuracy: 0.5312 (0.8588)  pr_auc: 0.4631 (0.9342)  roc_auc: 0.6307 (0.9352)  f1_weighted: 0.6737 (0.8109)  time: 0.0704  data: 0.0002  max mem: 379
+Passive Test:  [   780/?]  eta: ?  loss: 0.5830 (0.5876)  accuracy: 0.9688 (0.8827)  balanced_accuracy: 0.6795 (0.8594)  pr_auc: 0.9244 (0.9351)  roc_auc: 0.9204 (0.9360)  f1_weighted: 0.7576 (0.8127)  time: 0.0712  data: 0.0002  max mem: 379
+Passive Test:  [   790/?]  eta: ?  loss: 0.5896 (0.5881)  accuracy: 0.8438 (0.8810)  balanced_accuracy: 0.8721 (0.8595)  pr_auc: 0.9874 (0.9359)  roc_auc: 0.9946 (0.9365)  f1_weighted: 0.8533 (0.8139)  time: 0.0834  data: 0.0002  max mem: 379
+Passive Test:  [   800/?]  eta: ?  loss: 0.6018 (0.5888)  accuracy: 0.7812 (0.8793)  balanced_accuracy: 0.9688 (0.8593)  pr_auc: 0.9982 (0.9354)  roc_auc: 0.9990 (0.9369)  f1_weighted: 0.9677 (0.8140)  time: 0.0886  data: 0.0002  max mem: 379
+Passive Test:  [   810/?]  eta: ?  loss: 0.6054 (0.5900)  accuracy: 0.7969 (0.8774)  balanced_accuracy: 0.9219 (0.8595)  pr_auc: 0.9981 (0.9360)  roc_auc: 0.9985 (0.9374)  f1_weighted: 0.9275 (0.8155)  time: 0.0784  data: 0.0002  max mem: 379
+Passive Test:  [   820/?]  eta: ?  loss: 0.6166 (0.5910)  accuracy: 0.8906 (0.8752)  balanced_accuracy: 0.9219 (0.8593)  pr_auc: 0.9823 (0.9363)  roc_auc: 0.9839 (0.9378)  f1_weighted: 0.9153 (0.8149)  time: 0.0788  data: 0.0003  max mem: 379
+Passive Test:  [   830/?]  eta: ?  loss: 0.6292 (0.5916)  accuracy: 0.8594 (0.8741)  balanced_accuracy: 0.8906 (0.8578)  pr_auc: 0.9817 (0.9359)  roc_auc: 0.9795 (0.9378)  f1_weighted: 0.8814 (0.8120)  time: 0.0858  data: 0.0003  max mem: 379
+Passive Test:  [   840/?]  eta: ?  loss: 0.6119 (0.5919)  accuracy: 0.8750 (0.8741)  balanced_accuracy: 0.8594 (0.8578)  pr_auc: 0.9495 (0.9352)  roc_auc: 0.9722 (0.9367)  f1_weighted: 0.8364 (0.8116)  time: 0.0832  data: 0.0002  max mem: 379
+Passive Test:  [   850/?]  eta: ?  loss: 0.5994 (0.5920)  accuracy: 0.9531 (0.8747)  balanced_accuracy: 0.8906 (0.8576)  pr_auc: 0.9925 (0.9351)  roc_auc: 0.9932 (0.9367)  f1_weighted: 0.8571 (0.8111)  time: 0.0755  data: 0.0002  max mem: 379
+Passive Test:  [   860/?]  eta: ?  loss: 0.5834 (0.5920)  accuracy: 1.0000 (0.8759)  balanced_accuracy: 0.9625 (0.8598)  pr_auc: 1.0000 (0.9363)  roc_auc: 1.0000 (0.9378)  f1_weighted: 0.9610 (0.8141)  time: 0.0824  data: 0.0003  max mem: 379
+Passive Test:  [   870/?]  eta: ?  loss: 0.5917 (0.5923)  accuracy: 1.0000 (0.8765)  balanced_accuracy: 1.0000 (0.8608)  pr_auc: 1.0000 (0.9373)  roc_auc: 1.0000 (0.9388)  f1_weighted: 1.0000 (0.8153)  time: 0.0829  data: 0.0003  max mem: 379
+Passive Test:  [   880/?]  eta: ?  loss: 0.5921 (0.5923)  accuracy: 0.9844 (0.8774)  balanced_accuracy: 1.0000 (0.8625)  pr_auc: 1.0000 (0.9384)  roc_auc: 1.0000 (0.9399)  f1_weighted: 1.0000 (0.8179)  time: 0.1054  data: 0.0002  max mem: 379
+Passive Test:  [   890/?]  eta: ?  loss: 0.5823 (0.5921)  accuracy: 0.9688 (0.8778)  balanced_accuracy: 0.9762 (0.8626)  pr_auc: 1.0000 (0.9386)  roc_auc: 1.0000 (0.9401)  f1_weighted: 0.9677 (0.8181)  time: 0.1041  data: 0.0002  max mem: 379
+Passive Test:  [   900/?]  eta: ?  loss: 0.5338 (0.5917)  accuracy: 0.9688 (0.8783)  balanced_accuracy: 0.9762 (0.8625)  pr_auc: 1.0000 (0.9387)  roc_auc: 1.0000 (0.9398)  f1_weighted: 0.9677 (0.8185)  time: 0.0716  data: 0.0002  max mem: 379
+Passive Test:  [   910/?]  eta: ?  loss: 0.5259 (0.5920)  accuracy: 0.9844 (0.8774)  balanced_accuracy: 0.9762 (0.8628)  pr_auc: 1.0000 (0.9388)  roc_auc: 1.0000 (0.9400)  f1_weighted: 0.9677 (0.8189)  time: 0.0750  data: 0.0003  max mem: 379
+Passive Test:  [   920/?]  eta: ?  loss: 0.5231 (0.5919)  accuracy: 0.9844 (0.8777)  balanced_accuracy: 0.9688 (0.8629)  pr_auc: 1.0000 (0.9389)  roc_auc: 1.0000 (0.9401)  f1_weighted: 0.9565 (0.8190)  time: 0.0753  data: 0.0003  max mem: 379
+Passive Test:  [   930/?]  eta: ?  loss: 0.5216 (0.5916)  accuracy: 1.0000 (0.8786)  balanced_accuracy: 0.9762 (0.8633)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9403)  f1_weighted: 0.9677 (0.8196)  time: 0.0845  data: 0.0003  max mem: 379
+Passive Test:  [   940/?]  eta: ?  loss: 0.5231 (0.5914)  accuracy: 1.0000 (0.8795)  balanced_accuracy: 0.9762 (0.8633)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9403)  f1_weighted: 0.9677 (0.8196)  time: 0.0850  data: 0.0003  max mem: 379
+Passive Test:  [   950/?]  eta: ?  loss: 0.5182 (0.5911)  accuracy: 1.0000 (0.8804)  balanced_accuracy: 0.9844 (0.8638)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9406)  f1_weighted: 0.9846 (0.8204)  time: 0.0744  data: 0.0003  max mem: 379
+Passive Test:  [   960/?]  eta: ?  loss: 0.5203 (0.5908)  accuracy: 1.0000 (0.8807)  balanced_accuracy: 0.9844 (0.8638)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9406)  f1_weighted: 0.9846 (0.8204)  time: 0.0701  data: 0.0002  max mem: 379
+Passive Test:  [   970/?]  eta: ?  loss: 0.5433 (0.5909)  accuracy: 1.0000 (0.8796)  balanced_accuracy: 0.9844 (0.8638)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9406)  f1_weighted: 0.9846 (0.8204)  time: 0.0744  data: 0.0002  max mem: 379
+Passive Test:  [   980/?]  eta: ?  loss: 0.5715 (0.5907)  accuracy: 0.9062 (0.8781)  balanced_accuracy: 0.9844 (0.8638)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9406)  f1_weighted: 0.9846 (0.8204)  time: 0.0812  data: 0.0002  max mem: 379
+Passive Test:  [   990/?]  eta: ?  loss: 0.5390 (0.5910)  accuracy: 0.8594 (0.8758)  balanced_accuracy: 0.9762 (0.8632)  pr_auc: 1.0000 (0.9396)  roc_auc: 1.0000 (0.9407)  f1_weighted: 0.9677 (0.8191)  time: 0.0746  data: 0.0002  max mem: 379
+Passive Test:  [  1000/?]  eta: ?  loss: 0.5187 (0.5909)  accuracy: 0.9844 (0.8756)  balanced_accuracy: 0.9762 (0.8632)  pr_auc: 1.0000 (0.9396)  roc_auc: 1.0000 (0.9407)  f1_weighted: 0.9677 (0.8191)  time: 0.0702  data: 0.0002  max mem: 379
+Passive Test:  [  1010/?]  eta: ?  loss: 0.5209 (0.5907)  accuracy: 0.9844 (0.8755)  balanced_accuracy: 0.9762 (0.8620)  pr_auc: 1.0000 (0.9396)  roc_auc: 1.0000 (0.9403)  f1_weighted: 0.9677 (0.8168)  time: 0.0684  data: 0.0002  max mem: 379
+Passive Test:  [  1020/?]  eta: ?  loss: 0.5283 (0.5915)  accuracy: 0.9688 (0.8725)  balanced_accuracy: 0.9762 (0.8623)  pr_auc: 1.0000 (0.9397)  roc_auc: 1.0000 (0.9404)  f1_weighted: 0.9677 (0.8171)  time: 0.0743  data: 0.0002  max mem: 379
+Passive Test:  [  1030/?]  eta: ?  loss: 0.7119 (0.5921)  accuracy: 0.6250 (0.8710)  balanced_accuracy: 0.9444 (0.8611)  pr_auc: 1.0000 (0.9388)  roc_auc: 1.0000 (0.9399)  f1_weighted: 0.9412 (0.8156)  time: 0.0878  data: 0.0003  max mem: 379
+Passive Test:  [  1040/?]  eta: ?  loss: 0.5505 (0.5920)  accuracy: 0.9531 (0.8714)  balanced_accuracy: 0.9333 (0.8612)  pr_auc: 1.0000 (0.9389)  roc_auc: 1.0000 (0.9400)  f1_weighted: 0.9286 (0.8157)  time: 0.0825  data: 0.0002  max mem: 379
+Passive Test:  [  1050/?]  eta: ?  loss: 0.5543 (0.5926)  accuracy: 0.9531 (0.8697)  balanced_accuracy: 0.9286 (0.8611)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9399)  f1_weighted: 0.9286 (0.8163)  time: 0.0738  data: 0.0002  max mem: 379
+Passive Test:  [  1060/?]  eta: ?  loss: 0.5645 (0.5932)  accuracy: 0.8906 (0.8677)  balanced_accuracy: 0.9286 (0.8612)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9400)  f1_weighted: 0.9286 (0.8166)  time: 0.0746  data: 0.0003  max mem: 379
+Passive Test:  [  1070/?]  eta: ?  loss: 0.5737 (0.5930)  accuracy: 0.8438 (0.8677)  balanced_accuracy: 0.9286 (0.8606)  pr_auc: 1.0000 (0.9377)  roc_auc: 1.0000 (0.9392)  f1_weighted: 0.9286 (0.8152)  time: 0.0826  data: 0.0002  max mem: 379
+Passive Test:  [  1080/?]  eta: ?  loss: 0.5598 (0.5929)  accuracy: 1.0000 (0.8675)  balanced_accuracy: 0.9286 (0.8612)  pr_auc: 1.0000 (0.9379)  roc_auc: 1.0000 (0.9395)  f1_weighted: 0.9286 (0.8160)  time: 0.0827  data: 0.0002  max mem: 379
+Passive Test:  [  1090/?]  eta: ?  loss: 0.5248 (0.5930)  accuracy: 1.0000 (0.8659)  balanced_accuracy: 0.9286 (0.8612)  pr_auc: 1.0000 (0.9379)  roc_auc: 1.0000 (0.9395)  f1_weighted: 0.9286 (0.8160)  time: 0.0704  data: 0.0002  max mem: 379
+Passive Test:  [  1100/?]  eta: ?  loss: 0.5255 (0.5930)  accuracy: 1.0000 (0.8661)  balanced_accuracy: 0.9286 (0.8604)  pr_auc: 1.0000 (0.9376)  roc_auc: 1.0000 (0.9382)  f1_weighted: 0.9286 (0.8161)  time: 0.0706  data: 0.0002  max mem: 379
+Passive Test:  [  1110/?]  eta: ?  loss: 0.5190 (0.5929)  accuracy: 1.0000 (0.8665)  balanced_accuracy: 0.9333 (0.8605)  pr_auc: 1.0000 (0.9377)  roc_auc: 1.0000 (0.9383)  f1_weighted: 0.9333 (0.8163)  time: 0.0772  data: 0.0003  max mem: 379
+Passive Test:  [  1120/?]  eta: ?  loss: 0.5190 (0.5925)  accuracy: 1.0000 (0.8676)  balanced_accuracy: 0.9333 (0.8608)  pr_auc: 1.0000 (0.9378)  roc_auc: 1.0000 (0.9384)  f1_weighted: 0.9333 (0.8167)  time: 0.0888  data: 0.0003  max mem: 379
+Passive Test:  [  1130/?]  eta: ?  loss: 0.5212 (0.5921)  accuracy: 1.0000 (0.8686)  balanced_accuracy: 0.9444 (0.8611)  pr_auc: 1.0000 (0.9379)  roc_auc: 1.0000 (0.9385)  f1_weighted: 0.9412 (0.8170)  time: 0.0887  data: 0.0003  max mem: 379
+Passive Test:  [  1140/?]  eta: ?  loss: 0.5887 (0.5924)  accuracy: 1.0000 (0.8694)  balanced_accuracy: 0.9508 (0.8619)  pr_auc: 1.0000 (0.9383)  roc_auc: 1.0000 (0.9389)  f1_weighted: 0.9483 (0.8181)  time: 0.0806  data: 0.0003  max mem: 379
+Passive Test:  [  1150/?]  eta: ?  loss: 0.6384 (0.5925)  accuracy: 1.0000 (0.8700)  balanced_accuracy: 0.9808 (0.8624)  pr_auc: 1.0000 (0.9386)  roc_auc: 1.0000 (0.9391)  f1_weighted: 0.9870 (0.8188)  time: 0.0771  data: 0.0003  max mem: 379
+Passive Test:  [  1160/?]  eta: ?  loss: 0.6441 (0.5927)  accuracy: 1.0000 (0.8706)  balanced_accuracy: 0.9898 (0.8624)  pr_auc: 1.0000 (0.9389)  roc_auc: 1.0000 (0.9395)  f1_weighted: 0.9897 (0.8186)  time: 0.0841  data: 0.0002  max mem: 379
+Passive Test:  [  1170/?]  eta: ?  loss: 0.5627 (0.5927)  accuracy: 1.0000 (0.8698)  balanced_accuracy: 0.9898 (0.8612)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9397)  f1_weighted: 0.9897 (0.8177)  time: 0.0864  data: 0.0002  max mem: 379
+Passive Test:  [  1180/?]  eta: ?  loss: 0.5252 (0.5926)  accuracy: 1.0000 (0.8682)  balanced_accuracy: 0.9898 (0.8612)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9397)  f1_weighted: 0.9897 (0.8177)  time: 0.0752  data: 0.0002  max mem: 379
+Passive Test:  [  1190/?]  eta: ?  loss: 0.6418 (0.5935)  accuracy: 0.7969 (0.8662)  balanced_accuracy: 0.9898 (0.8602)  pr_auc: 1.0000 (0.9390)  roc_auc: 1.0000 (0.9392)  f1_weighted: 0.9897 (0.8171)  time: 0.0755  data: 0.0003  max mem: 379
+Passive Test:  [  1200/?]  eta: ?  loss: 0.6897 (0.5943)  accuracy: 0.7500 (0.8654)  balanced_accuracy: 0.9898 (0.8606)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9394)  f1_weighted: 0.9897 (0.8176)  time: 0.0759  data: 0.0003  max mem: 379
+Passive Test:  [  1210/?]  eta: ?  loss: 0.6462 (0.5942)  accuracy: 0.9844 (0.8658)  balanced_accuracy: 0.9898 (0.8603)  pr_auc: 1.0000 (0.9393)  roc_auc: 1.0000 (0.9396)  f1_weighted: 0.9897 (0.8169)  time: 0.0835  data: 0.0002  max mem: 379
+Passive Test:  [  1220/?]  eta: ?  loss: 0.5276 (0.5939)  accuracy: 0.9844 (0.8660)  balanced_accuracy: 0.9825 (0.8605)  pr_auc: 1.0000 (0.9395)  roc_auc: 1.0000 (0.9397)  f1_weighted: 0.9870 (0.8172)  time: 0.0865  data: 0.0003  max mem: 379
+Passive Test:  [  1230/?]  eta: ?  loss: 0.5477 (0.5940)  accuracy: 0.9844 (0.8653)  balanced_accuracy: 0.9917 (0.8611)  pr_auc: 1.0000 (0.9397)  roc_auc: 1.0000 (0.9400)  f1_weighted: 0.9916 (0.8179)  time: 0.0845  data: 0.0003  max mem: 379
+Passive Test:  [  1240/?]  eta: ?  loss: 0.5492 (0.5939)  accuracy: 0.9844 (0.8660)  balanced_accuracy: 0.9828 (0.8613)  pr_auc: 1.0000 (0.9395)  roc_auc: 1.0000 (0.9400)  f1_weighted: 0.9821 (0.8180)  time: 0.0830  data: 0.0003  max mem: 379
+Passive Test:  [  1250/?]  eta: ?  loss: 0.5395 (0.5942)  accuracy: 0.9688 (0.8654)  balanced_accuracy: 0.9825 (0.8613)  pr_auc: 1.0000 (0.9396)  roc_auc: 1.0000 (0.9402)  f1_weighted: 0.9400 (0.8181)  time: 0.0939  data: 0.0002  max mem: 379
+Passive Test:  [  1260/?]  eta: ?  loss: 0.5330 (0.5939)  accuracy: 0.9688 (0.8657)  balanced_accuracy: 0.9434 (0.8606)  pr_auc: 1.0000 (0.9395)  roc_auc: 1.0000 (0.9402)  f1_weighted: 0.8870 (0.8165)  time: 0.1008  data: 0.0002  max mem: 379
+Passive Test:  [  1270/?]  eta: ?  loss: 0.5249 (0.5936)  accuracy: 1.0000 (0.8666)  balanced_accuracy: 0.9434 (0.8611)  pr_auc: 1.0000 (0.9398)  roc_auc: 1.0000 (0.9405)  f1_weighted: 0.8870 (0.8171)  time: 0.0790  data: 0.0002  max mem: 379
+Passive Test:  [  1280/?]  eta: ?  loss: 0.5543 (0.5938)  accuracy: 0.9844 (0.8668)  balanced_accuracy: 0.9434 (0.8611)  pr_auc: 1.0000 (0.9398)  roc_auc: 1.0000 (0.9405)  f1_weighted: 0.8870 (0.8171)  time: 0.0674  data: 0.0002  max mem: 379
+Passive Test:  [  1290/?]  eta: ?  loss: 0.5714 (0.5940)  accuracy: 0.9531 (0.8658)  balanced_accuracy: 0.9434 (0.8601)  pr_auc: 0.9996 (0.9393)  roc_auc: 0.9992 (0.9389)  f1_weighted: 0.8870 (0.8161)  time: 0.0715  data: 0.0002  max mem: 379
+Passive Test:  [  1300/?]  eta: ?  loss: 0.6076 (0.5946)  accuracy: 0.8906 (0.8648)  balanced_accuracy: 0.9825 (0.8604)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9391)  f1_weighted: 0.9400 (0.8165)  time: 0.0837  data: 0.0003  max mem: 379
+Passive Test:  [  1310/?]  eta: ?  loss: 0.6515 (0.5952)  accuracy: 0.9062 (0.8637)  balanced_accuracy: 0.9825 (0.8604)  pr_auc: 1.0000 (0.9394)  roc_auc: 1.0000 (0.9391)  f1_weighted: 0.9400 (0.8165)  time: 0.0776  data: 0.0002  max mem: 379
+Passive Test:  [  1320/?]  eta: ?  loss: 0.6515 (0.5955)  accuracy: 0.9688 (0.8637)  balanced_accuracy: 0.9825 (0.8598)  pr_auc: 1.0000 (0.9389)  roc_auc: 1.0000 (0.9382)  f1_weighted: 0.9400 (0.8157)  time: 0.0670  data: 0.0002  max mem: 379
+Passive Test:  [  1330/?]  eta: ?  loss: 0.6440 (0.5955)  accuracy: 0.9688 (0.8638)  balanced_accuracy: 0.9828 (0.8594)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9384)  f1_weighted: 0.9714 (0.8146)  time: 0.0760  data: 0.0002  max mem: 379
+Passive Test:  [  1340/?]  eta: ?  loss: 0.6512 (0.5960)  accuracy: 0.9375 (0.8630)  balanced_accuracy: 0.9825 (0.8589)  pr_auc: 1.0000 (0.9385)  roc_auc: 1.0000 (0.9374)  f1_weighted: 0.9400 (0.8147)  time: 0.0859  data: 0.0002  max mem: 379
+Passive Test:  [  1350/?]  eta: ?  loss: 0.6517 (0.5962)  accuracy: 0.9531 (0.8635)  balanced_accuracy: 0.9825 (0.8589)  pr_auc: 1.0000 (0.9388)  roc_auc: 1.0000 (0.9376)  f1_weighted: 0.9464 (0.8153)  time: 0.0832  data: 0.0002  max mem: 379
+Passive Test:  [  1360/?]  eta: ?  loss: 0.6244 (0.5961)  accuracy: 0.9844 (0.8635)  balanced_accuracy: 0.9841 (0.8596)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9380)  f1_weighted: 0.9714 (0.8163)  time: 0.0772  data: 0.0002  max mem: 379
+Passive Test:  [  1370/?]  eta: ?  loss: 0.5488 (0.5960)  accuracy: 0.9062 (0.8632)  balanced_accuracy: 0.9841 (0.8596)  pr_auc: 1.0000 (0.9391)  roc_auc: 1.0000 (0.9380)  f1_weighted: 0.9714 (0.8163)  time: 0.0769  data: 0.0002  max mem: 379
+Passive Test:  [  1380/?]  eta: ?  loss: 0.5488 (0.5959)  accuracy: 0.9062 (0.8633)  balanced_accuracy: 0.9828 (0.8601)  pr_auc: 1.0000 (0.9393)  roc_auc: 1.0000 (0.9382)  f1_weighted: 0.9464 (0.8169)  time: 0.0760  data: 0.0002  max mem: 379
+Passive Test:  [  1390/?]  eta: ?  loss: 0.5456 (0.5958)  accuracy: 0.9219 (0.8638)  balanced_accuracy: 0.9634 (0.8602)  pr_auc: 1.0000 (0.9393)  roc_auc: 1.0000 (0.9383)  f1_weighted: 0.9464 (0.8169)  time: 0.0824  data: 0.0002  max mem: 379
+Passive Test:  [  1400/?]  eta: ?  loss: 0.5348 (0.5955)  accuracy: 1.0000 (0.8647)  balanced_accuracy: 0.9841 (0.8604)  pr_auc: 1.0000 (0.9397)  roc_auc: 1.0000 (0.9386)  f1_weighted: 0.9714 (0.8173)  time: 0.0824  data: 0.0002  max mem: 379
+Passive Test:  [  1410/?]  eta: ?  loss: 0.5227 (0.5955)  accuracy: 0.9844 (0.8647)  balanced_accuracy: 0.9634 (0.8601)  pr_auc: 1.0000 (0.9395)  roc_auc: 1.0000 (0.9384)  f1_weighted: 0.9464 (0.8168)  time: 0.0758  data: 0.0002  max mem: 379
+Passive Test:  [  1420/?]  eta: ?  loss: 0.6534 (0.5960)  accuracy: 0.8438 (0.8638)  balanced_accuracy: 0.9634 (0.8604)  pr_auc: 1.0000 (0.9396)  roc_auc: 1.0000 (0.9385)  f1_weighted: 0.9464 (0.8172)  time: 0.0751  data: 0.0002  max mem: 379
+Passive Test:  [  1430/?]  eta: ?  loss: 0.6472 (0.5962)  accuracy: 0.9688 (0.8642)  balanced_accuracy: 0.9915 (0.8612)  pr_auc: 1.0000 (0.9399)  roc_auc: 1.0000 (0.9388)  f1_weighted: 0.9915 (0.8181)  time: 0.0846  data: 0.0002  max mem: 379
+Passive Test:  [  1440/?]  eta: ?  loss: 0.6280 (0.5962)  accuracy: 1.0000 (0.8647)  balanced_accuracy: 1.0000 (0.8617)  pr_auc: 1.0000 (0.9401)  roc_auc: 1.0000 (0.9391)  f1_weighted: 1.0000 (0.8187)  time: 0.0862  data: 0.0002  max mem: 379
+Passive Test:  [  1450/?]  eta: ?  loss: 0.5742 (0.5962)  accuracy: 0.9844 (0.8652)  balanced_accuracy: 1.0000 (0.8620)  pr_auc: 1.0000 (0.9402)  roc_auc: 1.0000 (0.9393)  f1_weighted: 1.0000 (0.8191)  time: 0.0734  data: 0.0002  max mem: 379
+Passive Test:  [  1460/?]  eta: ?  loss: 0.5742 (0.5962)  accuracy: 0.9844 (0.8657)  balanced_accuracy: 1.0000 (0.8620)  pr_auc: 1.0000 (0.9402)  roc_auc: 1.0000 (0.9393)  f1_weighted: 1.0000 (0.8191)  time: 0.0721  data: 0.0002  max mem: 379
+Passive Test:  [  1470/?]  eta: ?  loss: 0.5548 (0.5959)  accuracy: 1.0000 (0.8665)  balanced_accuracy: 1.0000 (0.8622)  pr_auc: 1.0000 (0.9404)  roc_auc: 1.0000 (0.9394)  f1_weighted: 1.0000 (0.8194)  time: 0.0745  data: 0.0002  max mem: 379
+Passive Test:  [  1480/?]  eta: ?  loss: 0.5162 (0.5956)  accuracy: 1.0000 (0.8672)  balanced_accuracy: 1.0000 (0.8625)  pr_auc: 1.0000 (0.9405)  roc_auc: 1.0000 (0.9395)  f1_weighted: 1.0000 (0.8197)  time: 0.0837  data: 0.0002  max mem: 379
+Passive Test:  [  1490/?]  eta: ?  loss: 0.5131 (0.5952)  accuracy: 1.0000 (0.8678)  balanced_accuracy: 1.0000 (0.8623)  pr_auc: 1.0000 (0.9406)  roc_auc: 1.0000 (0.9396)  f1_weighted: 1.0000 (0.8195)  time: 0.0791  data: 0.0002  max mem: 379
+Passive Test:  [  1500/?]  eta: ?  loss: 0.5154 (0.5953)  accuracy: 1.0000 (0.8679)  balanced_accuracy: 1.0000 (0.8619)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9397)  f1_weighted: 1.0000 (0.8188)  time: 0.0694  data: 0.0002  max mem: 379
+Passive Test:  [  1510/?]  eta: ?  loss: 0.6494 (0.5955)  accuracy: 0.9688 (0.8682)  balanced_accuracy: 1.0000 (0.8618)  pr_auc: 1.0000 (0.9408)  roc_auc: 1.0000 (0.9398)  f1_weighted: 1.0000 (0.8187)  time: 0.0683  data: 0.0002  max mem: 379
+Passive Test:  [  1520/?]  eta: ?  loss: 0.5420 (0.5953)  accuracy: 0.9688 (0.8683)  balanced_accuracy: 1.0000 (0.8621)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9400)  f1_weighted: 1.0000 (0.8193)  time: 0.0674  data: 0.0002  max mem: 379
+Passive Test:  [  1530/?]  eta: ?  loss: 0.5369 (0.5951)  accuracy: 0.9844 (0.8690)  balanced_accuracy: 1.0000 (0.8624)  pr_auc: 1.0000 (0.9411)  roc_auc: 1.0000 (0.9401)  f1_weighted: 1.0000 (0.8197)  time: 0.0840  data: 0.0002  max mem: 379
+Passive Test:  [  1540/?]  eta: ?  loss: 0.5227 (0.5947)  accuracy: 1.0000 (0.8697)  balanced_accuracy: 1.0000 (0.8626)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9402)  f1_weighted: 1.0000 (0.8200)  time: 0.0823  data: 0.0002  max mem: 379
+Passive Test:  [  1550/?]  eta: ?  loss: 0.5146 (0.5943)  accuracy: 1.0000 (0.8701)  balanced_accuracy: 1.0000 (0.8626)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9402)  f1_weighted: 1.0000 (0.8200)  time: 0.0670  data: 0.0002  max mem: 379
+Passive Test:  [  1560/?]  eta: ?  loss: 0.5177 (0.5940)  accuracy: 1.0000 (0.8701)  balanced_accuracy: 1.0000 (0.8626)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9402)  f1_weighted: 1.0000 (0.8200)  time: 0.0718  data: 0.0002  max mem: 379
+Passive Test:  [  1570/?]  eta: ?  loss: 0.5207 (0.5938)  accuracy: 1.0000 (0.8706)  balanced_accuracy: 1.0000 (0.8630)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9405)  f1_weighted: 1.0000 (0.8196)  time: 0.0751  data: 0.0003  max mem: 379
+Passive Test:  [  1580/?]  eta: ?  loss: 0.6012 (0.5942)  accuracy: 1.0000 (0.8704)  balanced_accuracy: 1.0000 (0.8630)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9405)  f1_weighted: 1.0000 (0.8196)  time: 0.0810  data: 0.0002  max mem: 379
+Passive Test:  [  1590/?]  eta: ?  loss: 0.6461 (0.5941)  accuracy: 0.9844 (0.8709)  balanced_accuracy: 1.0000 (0.8633)  pr_auc: 1.0000 (0.9409)  roc_auc: 1.0000 (0.9406)  f1_weighted: 1.0000 (0.8202)  time: 0.0815  data: 0.0002  max mem: 379
+Passive Test:  [  1600/?]  eta: ?  loss: 0.5280 (0.5940)  accuracy: 0.9844 (0.8710)  balanced_accuracy: 1.0000 (0.8633)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9407)  f1_weighted: 1.0000 (0.8203)  time: 0.0744  data: 0.0002  max mem: 379
+Passive Test:  [  1610/?]  eta: ?  loss: 0.5861 (0.5943)  accuracy: 0.9844 (0.8706)  balanced_accuracy: 1.0000 (0.8633)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9407)  f1_weighted: 1.0000 (0.8203)  time: 0.0710  data: 0.0002  max mem: 379
+Passive Test:  [  1620/?]  eta: ?  loss: 0.6465 (0.5943)  accuracy: 1.0000 (0.8709)  balanced_accuracy: 1.0000 (0.8632)  pr_auc: 1.0000 (0.9412)  roc_auc: 1.0000 (0.9409)  f1_weighted: 1.0000 (0.8195)  time: 0.0872  data: 0.0002  max mem: 379
+Passive Test:  [  1630/?]  eta: ?  loss: 0.5455 (0.5943)  accuracy: 1.0000 (0.8713)  balanced_accuracy: 1.0000 (0.8635)  pr_auc: 1.0000 (0.9414)  roc_auc: 1.0000 (0.9411)  f1_weighted: 1.0000 (0.8200)  time: 0.1016  data: 0.0002  max mem: 379
+Passive Test:  [  1640/?]  eta: ?  loss: 0.6158 (0.5946)  accuracy: 1.0000 (0.8713)  balanced_accuracy: 0.9722 (0.8641)  pr_auc: 1.0000 (0.9417)  roc_auc: 1.0000 (0.9414)  f1_weighted: 0.9882 (0.8208)  time: 0.1010  data: 0.0002  max mem: 379
+Passive Test:  [  1650/?]  eta: ?  loss: 0.6448 (0.5947)  accuracy: 0.9844 (0.8715)  balanced_accuracy: 0.9884 (0.8645)  pr_auc: 1.0000 (0.9420)  roc_auc: 1.0000 (0.9417)  f1_weighted: 0.9916 (0.8213)  time: 0.0959  data: 0.0002  max mem: 379
+Passive Test:  [  1660/?]  eta: ?  loss: 0.5335 (0.5943)  accuracy: 1.0000 (0.8722)  balanced_accuracy: 1.0000 (0.8647)  pr_auc: 1.0000 (0.9421)  roc_auc: 1.0000 (0.9418)  f1_weighted: 1.0000 (0.8216)  time: 0.0772  data: 0.0002  max mem: 379
+Passive Test:  [  1670/?]  eta: ?  loss: 0.5195 (0.5942)  accuracy: 1.0000 (0.8725)  balanced_accuracy: 1.0000 (0.8649)  pr_auc: 1.0000 (0.9422)  roc_auc: 1.0000 (0.9419)  f1_weighted: 1.0000 (0.8219)  time: 0.0829  data: 0.0002  max mem: 379
+Passive Test:  [  1680/?]  eta: ?  loss: 0.5365 (0.5943)  accuracy: 1.0000 (0.8726)  balanced_accuracy: 0.9758 (0.8641)  pr_auc: 1.0000 (0.9407)  roc_auc: 1.0000 (0.9417)  f1_weighted: 0.9882 (0.8204)  time: 0.0806  data: 0.0002  max mem: 379
+Passive Test:  [  1690/?]  eta: ?  loss: 0.5672 (0.5943)  accuracy: 0.9844 (0.8729)  balanced_accuracy: 0.9758 (0.8640)  pr_auc: 1.0000 (0.9409)  roc_auc: 1.0000 (0.9418)  f1_weighted: 0.9882 (0.8201)  time: 0.0659  data: 0.0002  max mem: 379
+Passive Test:  [  1700/?]  eta: ?  loss: 0.5672 (0.5945)  accuracy: 0.9531 (0.8726)  balanced_accuracy: 0.9722 (0.8637)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9419)  f1_weighted: 0.9752 (0.8197)  time: 0.0724  data: 0.0002  max mem: 379
+Passive Test:  [  1710/?]  eta: ?  loss: 0.5289 (0.5943)  accuracy: 0.9844 (0.8729)  balanced_accuracy: 0.9722 (0.8637)  pr_auc: 1.0000 (0.9410)  roc_auc: 1.0000 (0.9419)  f1_weighted: 0.9752 (0.8197)  time: 0.0750  data: 0.0002  max mem: 379
+Passive Test:  [  1720/?]  eta: ?  loss: 0.5183 (0.5943)  accuracy: 1.0000 (0.8726)  balanced_accuracy: 0.9286 (0.8629)  pr_auc: 1.0000 (0.9406)  roc_auc: 1.0000 (0.9408)  f1_weighted: 0.9550 (0.8191)  time: 0.0825  data: 0.0002  max mem: 379
+Passive Test:  [  1730/?]  eta: ?  loss: 0.5183 (0.5943)  accuracy: 1.0000 (0.8722)  balanced_accuracy: 0.9722 (0.8620)  pr_auc: 1.0000 (0.9392)  roc_auc: 1.0000 (0.9393)  f1_weighted: 0.9752 (0.8180)  time: 0.0802  data: 0.0002  max mem: 379
+Passive Test:  [  1740/?]  eta: ?  loss: 0.5214 (0.5946)  accuracy: 1.0000 (0.8713)  balanced_accuracy: 0.9758 (0.8623)  pr_auc: 1.0000 (0.9393)  roc_auc: 1.0000 (0.9394)  f1_weighted: 0.9882 (0.8183)  time: 0.0633  data: 0.0002  max mem: 379
+Passive Test:  [  1750/?]  eta: ?  loss: 0.5240 (0.5947)  accuracy: 1.0000 (0.8709)  balanced_accuracy: 0.9722 (0.8624)  pr_auc: 0.9989 (0.9395)  roc_auc: 0.9979 (0.9397)  f1_weighted: 0.9752 (0.8185)  time: 0.0653  data: 0.0002  max mem: 379
+Passive Test:  [  1760/?]  eta: ?  loss: 0.5240 (0.5947)  accuracy: 1.0000 (0.8711)  balanced_accuracy: 0.9667 (0.8624)  pr_auc: 0.9971 (0.9395)  roc_auc: 0.9948 (0.9396)  f1_weighted: 0.9583 (0.8185)  time: 0.0773  data: 0.0002  max mem: 379
+Passive Test: Total time: 0:02:20 (0.0795 s / it)
+* loss 0.595
+
+================================================================================
+Task-type results:
+================================================================================
+  ACTIVE tasks: Accuracy = 89.4917%, F1-Score = 0.8524 (n=20,949)
+  PASSIVE tasks: Accuracy = 87.1553%, F1-Score = 0.8157 (n=113,222)

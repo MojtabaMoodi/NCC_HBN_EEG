@@ -1,0 +1,366 @@
+================================================================================
+RESNET18 GENDER CLASSIFICATION EXPERIMENT
+================================================================================
+Model: ResNet18
+Task: Gender Classification (2 classes)
+Mode: 2s (EEG segment length)
+Results directory: ./final_logs
+Reports directory: ./final_logs
+Epochs: 50, Learning rate: 0.0001
+Batch size: 192 (auto-selected), Random seed: 42
+Number of GPUs: 4
+Stratified train batches disabled (--no_stratified); using class weights in loss.
+Number of workers: 8
+================================================================================
+
+Starting ResNet18 gender classification experiment...
+Experiment name: gender_resnet18_2s
+Model type: gender_resnet
+Training: Both active and passive tasks
+Evaluation: Separate accuracy reports for active and passive tasks
+--------------------------------------------------------------------------------
+
+================================================================================
+STARTING EXPERIMENTS
+Number of experiments: 1
+Random seed: 42
+Results directory: ./final_logs
+Generate reports: True
+================================================================================
+
+Progress: 1/1
+Experiment: gender_resnet18_2s
+Setting up experiment: gender_resnet18_2s
+Creating standard loaders for gender classification (train on both task types)
+============================================================
+GPU Configuration
+============================================================
+CUDA Available: True
+Available GPUs: 4
+Requested GPUs: 4
+Using GPUs: 4
+Device: cuda
+GPU Device IDs: [0, 1, 2, 3]
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+  GPU 2: NVIDIA L40S
+  GPU 3: NVIDIA L40S
+============================================================
+Compiling model with torch.compile() for faster execution...
+✅ Model compiled successfully
+✅ Using CrossEntropyLoss with class_weight=[0.7718490501136646, 1.4196280064082287] (fix imbalanced / collapse)
+✅ Using fused Adam optimizer
+✅ Mixed precision training (AMP) enabled
+✅ Gradient clipping enabled: max_norm=0.2
+✅ Learning rate scheduler: factor=0.5, patience=10
+✅ Learning rate warmup enabled: 10 epochs
+✅ Experiment setup complete
+
+================================================================================
+STARTING EXPERIMENT: gender_resnet18_2s
+Model: gender_resnet | Target: gender
+Channels: 60
+================================================================================
+Training gender_resnet for gender classification...
+Starting training for gender_resnet18_2s
+Model: EEGGenderResNet
+Target: gender
+Epochs: 50
+Learning rate: 0.0001
+------------------------------------------------------------
+   No existing checkpoint found. Starting fresh training.
+⏳ Loading first batch (batch_size=192, num_workers=8)...
+
+🔄 Starting epoch 1/50
+   🔥 Warmup: LR = 0.000010 (target: 0.000100)
+  ✅ First batch loaded! (took 468.5s)
+  First batch label distribution: class 0: 126, class 1: 66
+W0304 15:11:00.108000 569021 site-packages/torch/_logging/_internal.py:1081] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+/home/mojtabam/miniconda3/envs/eeg_env/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py:725: UserWarning: Graph break due to unsupported builtin sys._getframe. This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind). If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround. If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use torch.compiler.allow_in_graph.
+  torch._dynamo.utils.warn_once(msg)
+libibverbs: Warning: couldn't load driver 'libvmw_pvrdma-rdmav34.so': libvmw_pvrdma-rdmav34.so: cannot open shared object file: No such file or directory
+  Processed 1000 batches, elapsed: 153.5s
+  Processed 2000 batches, elapsed: 238.4s
+  Processed 3000 batches, elapsed: 322.7s
+  Processed 4000 batches, elapsed: 408.0s
+  Processed 5000 batches, elapsed: 494.6s
+  Validation: 1000 batches, elapsed: 137.0s
+  → Epoch   1/50 | Train Loss: 0.5558 | Val Loss: 0.5471 | Train Acc: 0.6466 | Val Acc: 0.6942 | LR: 0.000010 | Time: 1182.47s
+New best model saved at epoch 1 in ./final_logs/checkpoints
+
+🔄 Starting epoch 2/50
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 129.6s
+  Processed 2000 batches, elapsed: 227.0s
+  Processed 3000 batches, elapsed: 323.2s
+  Processed 4000 batches, elapsed: 419.1s
+  Processed 5000 batches, elapsed: 514.7s
+  Validation: 1000 batches, elapsed: 59.7s
+  → Epoch   2/50 | Train Loss: 0.4502 | Val Loss: 0.4767 | Train Acc: 0.7461 | Val Acc: 0.7583 | LR: 0.000020 | Time: 667.32s
+New best model saved at epoch 2 in ./final_logs/checkpoints
+
+🔄 Starting epoch 3/50
+   🔥 Warmup: LR = 0.000030 (target: 0.000100)
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 130.5s
+  Processed 2000 batches, elapsed: 223.1s
+  Processed 3000 batches, elapsed: 305.0s
+  Processed 4000 batches, elapsed: 390.0s
+  Processed 5000 batches, elapsed: 476.4s
+  Validation: 1000 batches, elapsed: 44.2s
+  → Epoch   3/50 | Train Loss: 0.3921 | Val Loss: 0.4465 | Train Acc: 0.7921 | Val Acc: 0.7901 | LR: 0.000030 | Time: 605.78s
+New best model saved at epoch 3 in ./final_logs/checkpoints
+
+🔄 Starting epoch 4/50
+  ✅ First batch loaded! (took 5.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 131.4s
+  Processed 2000 batches, elapsed: 231.8s
+  Processed 3000 batches, elapsed: 325.8s
+  Processed 4000 batches, elapsed: 421.7s
+  Processed 5000 batches, elapsed: 517.5s
+  Validation: 1000 batches, elapsed: 60.1s
+  → Epoch   4/50 | Train Loss: 0.3534 | Val Loss: 0.4559 | Train Acc: 0.8179 | Val Acc: 0.7888 | LR: 0.000040 | Time: 672.67s
+
+🔄 Starting epoch 5/50
+  ✅ First batch loaded! (took 4.9s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 156.3s
+  Processed 2000 batches, elapsed: 259.8s
+  Processed 3000 batches, elapsed: 341.4s
+  Processed 4000 batches, elapsed: 426.1s
+  Processed 5000 batches, elapsed: 512.1s
+  Validation: 1000 batches, elapsed: 44.6s
+⚠️  WARNING: Model collapse in validation (2 consecutive batches, all class 1). Monitoring...
+✅ Model recovered in validation: Predictions diverse again (unique: 2)
+  → Epoch   5/50 | Train Loss: 0.3234 | Val Loss: 0.4381 | Train Acc: 0.8355 | Val Acc: 0.8062 | LR: 0.000050 | Time: 642.29s
+New best model saved at epoch 5 in ./final_logs/checkpoints
+
+🔄 Starting epoch 6/50
+   🔥 Warmup: LR = 0.000060 (target: 0.000100)
+  ✅ First batch loaded! (took 4.4s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 142.7s
+  Processed 2000 batches, elapsed: 240.4s
+  Processed 3000 batches, elapsed: 319.8s
+  Processed 4000 batches, elapsed: 403.8s
+  Processed 5000 batches, elapsed: 488.3s
+  Validation: 1000 batches, elapsed: 60.8s
+  → Epoch   6/50 | Train Loss: 0.2973 | Val Loss: 0.4442 | Train Acc: 0.8494 | Val Acc: 0.8200 | LR: 0.000060 | Time: 636.53s
+
+🔄 Starting epoch 7/50
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 126.6s
+  Processed 2000 batches, elapsed: 222.6s
+  Processed 3000 batches, elapsed: 317.9s
+  Processed 4000 batches, elapsed: 412.9s
+  Processed 5000 batches, elapsed: 509.3s
+  Validation: 1000 batches, elapsed: 45.0s
+  → Epoch   7/50 | Train Loss: 0.2756 | Val Loss: 0.4340 | Train Acc: 0.8601 | Val Acc: 0.8220 | LR: 0.000070 | Time: 645.21s
+New best model saved at epoch 7 in ./final_logs/checkpoints
+
+🔄 Starting epoch 8/50
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 129.2s
+  Processed 2000 batches, elapsed: 224.0s
+  Processed 3000 batches, elapsed: 302.9s
+  Processed 4000 batches, elapsed: 387.9s
+  Processed 5000 batches, elapsed: 472.4s
+  Validation: 1000 batches, elapsed: 58.7s
+  → Epoch   8/50 | Train Loss: 0.2572 | Val Loss: 0.4470 | Train Acc: 0.8698 | Val Acc: 0.8176 | LR: 0.000080 | Time: 616.37s
+
+🔄 Starting epoch 9/50
+   🔥 Warmup: LR = 0.000090 (target: 0.000100)
+  ✅ First batch loaded! (took 4.4s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 139.5s
+  Processed 2000 batches, elapsed: 238.2s
+  Processed 3000 batches, elapsed: 333.1s
+  Processed 4000 batches, elapsed: 429.5s
+  Processed 5000 batches, elapsed: 524.9s
+  Validation: 1000 batches, elapsed: 44.5s
+  → Epoch   9/50 | Train Loss: 0.2425 | Val Loss: 0.4653 | Train Acc: 0.8776 | Val Acc: 0.8269 | LR: 0.000090 | Time: 661.09s
+
+🔄 Starting epoch 10/50
+  ✅ First batch loaded! (took 4.6s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 134.5s
+  Processed 2000 batches, elapsed: 227.4s
+  Processed 3000 batches, elapsed: 308.7s
+  Processed 4000 batches, elapsed: 392.8s
+  Processed 5000 batches, elapsed: 478.8s
+  Validation: 1000 batches, elapsed: 60.0s
+  → Epoch  10/50 | Train Loss: 0.2292 | Val Loss: 0.4862 | Train Acc: 0.8849 | Val Acc: 0.8420 | LR: 0.000100 | Time: 627.45s
+
+🔄 Starting epoch 11/50
+  ✅ First batch loaded! (took 3.9s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 129.0s
+  Processed 2000 batches, elapsed: 226.6s
+  Processed 3000 batches, elapsed: 321.6s
+  Processed 4000 batches, elapsed: 417.1s
+  Processed 5000 batches, elapsed: 513.0s
+  Validation: 1000 batches, elapsed: 44.1s
+  → Epoch  11/50 | Train Loss: 0.2098 | Val Loss: 0.4932 | Train Acc: 0.8958 | Val Acc: 0.8286 | LR: 0.000100 | Time: 650.39s
+
+🔄 Starting epoch 12/50
+  ✅ First batch loaded! (took 4.5s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 132.1s
+  Processed 2000 batches, elapsed: 224.7s
+  Processed 3000 batches, elapsed: 308.2s
+  Processed 4000 batches, elapsed: 395.3s
+  Processed 5000 batches, elapsed: 482.2s
+  Validation: 1000 batches, elapsed: 60.1s
+  → Epoch  12/50 | Train Loss: 0.1901 | Val Loss: 0.5327 | Train Acc: 0.9071 | Val Acc: 0.8334 | LR: 0.000100 | Time: 630.28s
+
+🔄 Starting epoch 13/50
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 131.1s
+  Processed 2000 batches, elapsed: 229.5s
+  Processed 3000 batches, elapsed: 324.3s
+  Processed 4000 batches, elapsed: 419.5s
+  Processed 5000 batches, elapsed: 514.6s
+  Validation: 1000 batches, elapsed: 44.0s
+  → Epoch  13/50 | Train Loss: 0.1733 | Val Loss: 0.5714 | Train Acc: 0.9162 | Val Acc: 0.8193 | LR: 0.000100 | Time: 650.29s
+
+🔄 Starting epoch 14/50
+  ✅ First batch loaded! (took 3.8s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 133.2s
+  Processed 2000 batches, elapsed: 225.8s
+  Processed 3000 batches, elapsed: 307.5s
+  Processed 4000 batches, elapsed: 394.4s
+  Processed 5000 batches, elapsed: 480.2s
+  Validation: 1000 batches, elapsed: 60.2s
+  → Epoch  14/50 | Train Loss: 0.1576 | Val Loss: 0.6212 | Train Acc: 0.9251 | Val Acc: 0.8287 | LR: 0.000100 | Time: 627.08s
+
+🔄 Starting epoch 15/50
+  ✅ First batch loaded! (took 4.2s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 131.0s
+  Processed 2000 batches, elapsed: 230.4s
+  Processed 3000 batches, elapsed: 325.5s
+  Processed 4000 batches, elapsed: 421.1s
+  Processed 5000 batches, elapsed: 517.1s
+  Validation: 1000 batches, elapsed: 43.6s
+  → Epoch  15/50 | Train Loss: 0.1439 | Val Loss: 0.6378 | Train Acc: 0.9328 | Val Acc: 0.8226 | LR: 0.000100 | Time: 652.21s
+
+🔄 Starting epoch 16/50
+  ✅ First batch loaded! (took 4.4s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 131.3s
+  Processed 2000 batches, elapsed: 221.8s
+  Processed 3000 batches, elapsed: 305.2s
+  Processed 4000 batches, elapsed: 391.8s
+  Processed 5000 batches, elapsed: 479.0s
+  Validation: 1000 batches, elapsed: 60.9s
+  → Epoch  16/50 | Train Loss: 0.1315 | Val Loss: 0.7051 | Train Acc: 0.9394 | Val Acc: 0.8328 | LR: 0.000100 | Time: 628.35s
+
+🔄 Starting epoch 17/50
+  ✅ First batch loaded! (took 4.5s)
+  First batch label distribution: class 0: 126, class 1: 66
+  Processed 1000 batches, elapsed: 131.2s
+  Processed 2000 batches, elapsed: 228.6s
+  Processed 3000 batches, elapsed: 324.0s
+  Processed 4000 batches, elapsed: 420.2s
+  Processed 5000 batches, elapsed: 516.1s
+  Validation: 1000 batches, elapsed: 43.5s
+  → Epoch  17/50 | Train Loss: 0.1213 | Val Loss: 0.7158 | Train Acc: 0.9445 | Val Acc: 0.8215 | LR: 0.000100 | Time: 651.20s
+Early stopping at epoch 17 (patience: 10)
+Last model saved at epoch 17 in ./final_logs/checkpoints
+
+Training completed in 11447.99s
+Best validation loss: 0.4340 at epoch 7
+✅ Training completed
+   Training metrics saved to: ./final_logs/gender_resnet18_2s/gender_resnet18_2s_training_metrics.json
+Evaluating gender_resnet on gender classification...
+? Loaded checkpoint from ./final_logs/checkpoints/gender_resnet18_2s_best.pth
+✅ Evaluation completed
+   Accuracy: 0.8113
+   F1-Score: 0.8148
+   Evaluation time: 131.52s
+   Evaluation results saved to: ./final_logs/gender_resnet18_2s
+
+Evaluating separately by task type...
+
+============================================================
+Evaluating on active tasks...
+============================================================
+
+ACTIVE Task Results:
+  Accuracy: 0.8384
+  F1-Score (weighted): 0.8410
+  ROC-AUC: 0.9242
+  Number of samples: 35284
+
+============================================================
+Evaluating on passive tasks...
+============================================================
+
+PASSIVE Task Results:
+  Accuracy: 0.8066
+  F1-Score (weighted): 0.8102
+  ROC-AUC: 0.8976
+  Number of samples: 204188
+
+============================================================
+Task Type Comparison:
+============================================================
+  ACTIVE: Accuracy = 0.8384, F1 = 0.8410
+  PASSIVE: Accuracy = 0.8066, F1 = 0.8102
+   Evaluation results saved to: ./final_logs/gender_resnet18_2s_task_active
+   Evaluation results saved to: ./final_logs/gender_resnet18_2s_task_passive
+  ACTIVE tasks: Accuracy = 0.8384, F1-Score = 0.8410
+  PASSIVE tasks: Accuracy = 0.8066, F1-Score = 0.8102
+
+✅ Experiment 'gender_resnet18_2s' completed successfully!
+   Total time: 11905.70s
+   Training time: 11448.00s
+   Evaluation time: 457.70s
+   Accuracy: 0.8113
+   Result saved to: ./final_logs/gender_resnet18_2s/gender_resnet18_2s_result.json
+✅ Experiment completed: gender_resnet18_2s
+
+========================================================================================================================
+MODEL COMPARISON
+========================================================================================================================
+Model                Target     Accuracy   F1-Score   Time (s)   Description                                       
+------------------------------------------------------------------------------------------------------------------------
+gender_resnet        gender     0.8113     0.8148     457.70     ResNet18 gender classification with 2s segme...   
+
+Best Model: gender_resnet (Accuracy: 0.8113)
+========================================================================================================================
+Generating comprehensive reports...
+CSV summary saved to: ./final_logs/experiment_results.csv
+Reports generated in: ./final_logs
+Reports generated in: ./final_logs
+
+================================================================================
+ALL EXPERIMENTS COMPLETED
+Results saved to: ./final_logs
+================================================================================
+
+================================================================================
+EXPERIMENT COMPLETED SUCCESSFULLY!
+================================================================================
+Results saved to: ./final_logs/gender_resnet18_2s/
+Reports generated in: ./final_logs/
+
+Overall Test Set Metrics:
+  Accuracy: 0.8113
+  F1-Score (weighted): 0.8148
+
+Task-Specific Metrics:
+  Active Tasks:
+    Accuracy: 0.8384
+    F1-Score: 0.8410
+  Passive Tasks:
+    Accuracy: 0.8066
+    F1-Score: 0.8102
+================================================================================

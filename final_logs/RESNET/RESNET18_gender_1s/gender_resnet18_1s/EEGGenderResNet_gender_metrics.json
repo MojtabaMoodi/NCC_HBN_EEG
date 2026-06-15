@@ -1,0 +1,70 @@
+{
+  "model_name": "EEGGenderResNet",
+  "target_type": "gender",
+  "metrics": {
+    "accuracy": 0.7846779555784885,
+    "precision_weighted": 0.8157913298115966,
+    "recall_weighted": 0.7846779555784885,
+    "f1_weighted": 0.7891535416467688,
+    "precision_per_class": [
+      0.9085554916251118,
+      0.6477863289753134
+    ],
+    "recall_per_class": [
+      0.740297244062444,
+      0.8650557796174438
+    ],
+    "f1_per_class": [
+      0.8158413568054651,
+      0.7408192892760209
+    ],
+    "support_per_class": [
+      307155,
+      169596
+    ],
+    "confusion_matrix": [
+      [
+        227386,
+        79769
+      ],
+      [
+        22886,
+        146710
+      ]
+    ],
+    "roc_auc": 0.888165205707382,
+    "classification_report": {
+      "Female": {
+        "precision": 0.9085554916251118,
+        "recall": 0.740297244062444,
+        "f1-score": 0.8158413568054651,
+        "support": 307155.0
+      },
+      "Male": {
+        "precision": 0.6477863289753134,
+        "recall": 0.8650557796174438,
+        "f1-score": 0.7408192892760209,
+        "support": 169596.0
+      },
+      "accuracy": 0.7846779555784885,
+      "macro avg": {
+        "precision": 0.7781709103002126,
+        "recall": 0.8026765118399439,
+        "f1-score": 0.778330323040743,
+        "support": 476751.0
+      },
+      "weighted avg": {
+        "precision": 0.8157913298115966,
+        "recall": 0.7846779555784885,
+        "f1-score": 0.7891535416467688,
+        "support": 476751.0
+      }
+    }
+  },
+  "evaluation_time": 195.8940086364746,
+  "num_samples": 476751,
+  "class_names": [
+    "Female",
+    "Male"
+  ]
+}

@@ -1,0 +1,2 @@
+experiment_name,model_type,target_type,combined_accuracy,precision_weighted,recall_weighted,f1_weighted,training_time,evaluation_time,active_accuracy,passive_accuracy
+age_resnet18_1s,age_resnet,age,0.4771715214021575,0.5061447965006365,0.4771715214021575,0.4168480860214513,14350.333694458008,955.7102425098419,0.4772993365422141,0.47714737172692656
