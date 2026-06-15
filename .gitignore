@@ -28,3 +28,5 @@ user_identification/**/__pycache__/
 user_identification/jobs/logs/*
 user_identification/*.log
 user_identification/*.log.old
+reports/**/final_saliency2_report.pdf
+reports/**/final_user_identification_report.pdf
