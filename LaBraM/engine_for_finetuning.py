@@ -113,15 +113,16 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     
     # For first epoch, count task types by iterating through underlying dataset separately
     # This creates a new iterator, so it won't interfere with the training loop
-    if count_samples and hasattr(data_loader.dataset, 'eeg_dataset'):
-        print(f"  Counting task types in training dataset...")
-        eeg_dataset = data_loader.dataset.eeg_dataset
-        # Create a new iterator (IterableDataset creates new iterator each time)
-        for sample in eeg_dataset:
-            task_type = sample.get('task_type', 'unknown')
-            if task_type in task_type_counts:
-                task_type_counts[task_type] += 1
-        print(f"  Training dataset: {task_type_counts['active']:,} active, {task_type_counts['passive']:,} passive samples")
+    # TEMPORARY: disabled — full-dataset iteration is slow on large HDF5 splits.
+    # if count_samples and hasattr(data_loader.dataset, 'eeg_dataset'):
+    #     print(f"  Counting task types in training dataset...")
+    #     eeg_dataset = data_loader.dataset.eeg_dataset
+    #     # Create a new iterator (IterableDataset creates new iterator each time)
+    #     for sample in eeg_dataset:
+    #         task_type = sample.get('task_type', 'unknown')
+    #         if task_type in task_type_counts:
+    #             task_type_counts[task_type] += 1
+    #     print(f"  Training dataset: {task_type_counts['active']:,} active, {task_type_counts['passive']:,} passive samples")
     
     for data_iter_step, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         samples = batch[0]
@@ -914,27 +915,28 @@ def evaluate_by_task_type(model, device, dataset_type, hdf5_dir, segment_length,
     passive_loader = _create_task_type_loader("passive")
     
     # Count samples for each task type
-    print(f"\n{'='*60}")
-    print(f"Counting samples by task type...")
-    print(f"{'='*60}")
-    active_counts = count_task_type_samples(active_loader)
-    passive_counts = count_task_type_samples(passive_loader)
+    # TEMPORARY: disabled — full-dataset iteration is slow on large HDF5 splits.
+    # print(f"\n{'='*60}")
+    # print(f"Counting samples by task type...")
+    # print(f"{'='*60}")
+    # active_counts = count_task_type_samples(active_loader)
+    # passive_counts = count_task_type_samples(passive_loader)
     
     # Evaluate separately
     print(f"\n{'='*60}")
-    print(f"Evaluating on active tasks ({active_counts['active']:,} samples)...")
+    print(f"Evaluating on active tasks...")
     print(f"{'='*60}")
     active_results = evaluate(active_loader, model, device, header='Active Test:', 
                               ch_names=ch_names, metrics=metrics, is_binary=is_binary,
                               is_regression=is_regression, age_min=age_min, age_max=age_max)
-    active_results['num_samples'] = active_counts['active']
+    # active_results['num_samples'] = active_counts['active']
     
     print(f"\n{'='*60}")
-    print(f"Evaluating on passive tasks ({passive_counts['passive']:,} samples)...")
+    print(f"Evaluating on passive tasks...")
     print(f"{'='*60}")
     passive_results = evaluate(passive_loader, model, device, header='Passive Test:', 
                                ch_names=ch_names, metrics=metrics, is_binary=is_binary,
                                is_regression=is_regression, age_min=age_min, age_max=age_max)
-    passive_results['num_samples'] = passive_counts['passive']
+    # passive_results['num_samples'] = passive_counts['passive']
     
     return {'active': active_results, 'passive': passive_results}
