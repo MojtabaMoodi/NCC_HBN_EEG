@@ -1,0 +1,252 @@
+## process the data for age and gender identification:
+
+python preprocess_eeg_to_hdf5.py --data_root /home/mojtabam/scratch/preprocessed_new --output_dir /home/mojtabam/scratch/processed_eeg_data_hdf5 --num_channels 60 --window_sizes 1s 2s 4s --random_seed 42 --stratify_by both
+
+## Resume labram 1s for age:
+
+cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM
+RUN_DIR=/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/LaBraM/labram_age_1s
+CKPT=/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/checkpoints/age_labram_1s_best.pth
+
+bash runs/run_age_baseline_1s.sh --output_dir "$RUN_DIR/output" --log_dir "$RUN_DIR/logs" --resume "$CKPT" --early_stopping_patience 10 --early_stopping_min_delta 0.002 2>&1 | tee "$RUN_DIR/train3.log"
+
+## Resume labram 1s for gender:
+
+cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/LaBraM
+RUN_DIR=/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/LaBraM/labram_gender_1s
+CKPT=/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG/final_logs/checkpoints/gender_labram_1s_best.pth
+
+bash runs/run_gender_baseline_1s.sh --output_dir "$RUN_DIR/output" --log_dir "$RUN_DIR/logs" --resume "$CKPT" 2>&1 | tee "$RUN_DIR/train2.log"
+
+## Regression for different RESNET models.
+
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+DATA="/home/mojtabam/scratch/processed_eeg_data_hdf5"
+cd "$EEG_ROOT"
+
+mkdir -p "$EEG_ROOT/final_logs/RESNET"/RESNET{18,34,50}_age_regression_{1s,2s,4s}
+
+### RESNET18
+
+python CNN/resnet/run_resnet_age.py --mode 1s --resnet_type 18 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_1s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_1s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_1s/resnet18_age_regression_1s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 2s --resnet_type 18 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_2s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_2s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_2s/resnet18_age_regression_2s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 4s --resnet_type 18 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_4s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_4s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET18_age_regression_4s/resnet18_age_regression_4s.log"
+
+### RESNET34
+
+python CNN/resnet/run_resnet_age.py --mode 1s --resnet_type 34 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_1s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_1s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_1s/resnet34_age_regression_1s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 2s --resnet_type 34 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_2s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_2s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_2s/resnet34_age_regression_2s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 4s --resnet_type 34 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_4s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_4s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET34_age_regression_4s/resnet34_age_regression_4s.log"
+
+### RESNET50
+
+python CNN/resnet/run_resnet_age.py --mode 1s --resnet_type 50 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_1s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_1s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_1s/resnet50_age_regression_1s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 2s --resnet_type 50 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_2s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_2s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_2s/resnet50_age_regression_2s.log"
+
+python CNN/resnet/run_resnet_age.py --mode 4s --resnet_type 50 --prediction-type regression --data_path "$DATA" --results_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_4s" --reports_dir "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_4s" 2>&1 | tee "$EEG_ROOT/final_logs/RESNET/RESNET50_age_regression_4s/resnet50_age_regression_4s.log"
+
+
+## Age regression with Labram:
+
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+DATA="/home/mojtabam/scratch/processed_eeg_data_hdf5"
+CKPT="$EEG_ROOT/LaBraM/checkpoints/labram-base.pth"
+
+mkdir -p "$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_1s"/{output,logs}
+mkdir -p "$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_2s"/{output,logs}
+mkdir -p "$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_4s"/{output,logs}
+
+cd "$EEG_ROOT/LaBraM"
+
+### Labram age regression for 1s:
+RUN_DIR="$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_1s"
+python -u run_class_finetuning.py \
+  --model labram_base_patch200_200 \
+  --finetune "$CKPT" \
+  --dataset age_regression_baseline \
+  --data_path "$DATA" \
+  --segment_length 1s \
+  --epochs 50 \
+  --batch_size 1024 \
+  --lr 0.0005 \
+  --weight_decay 0.05 \
+  --warmup_epochs 5 \
+  --min_lr 1e-5 \
+  --drop_path 0.1 \
+  --smoothing 0.0 \
+  --layer_decay 0.65 \
+  --layer_scale_init_value 0.1 \
+  --clip_grad 3.0 \
+  --opt_betas 0.9 0.98 \
+  --opt_eps 1e-8 \
+  --momentum 0.9 \
+  --abs_pos_emb \
+  --qkv_bias \
+  --use_mean_pooling \
+  --model_ema \
+  --model_ema_decay 0.996 \
+  --save_ckpt \
+  --auto_resume \
+  --seed 42 \
+  --pin_mem \
+  --aggregate_by_participant majority_vote \
+  --output_dir "$RUN_DIR/output" \
+  --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/labram_base_age_regression_1s.log"
+
+### Labram age regression for 2s:
+RUN_DIR="$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_2s"
+python -u run_class_finetuning.py \
+  --model labram_base_patch200_200 \
+  --finetune "$CKPT" \
+  --dataset age_regression_baseline \
+  --data_path "$DATA" \
+  --segment_length 2s \
+  --epochs 50 \
+  --batch_size 512 \
+  --lr 0.0005 \
+  --weight_decay 0.05 \
+  --warmup_epochs 5 \
+  --min_lr 1e-5 \
+  --drop_path 0.1 \
+  --smoothing 0.0 \
+  --layer_decay 0.65 \
+  --layer_scale_init_value 0.1 \
+  --clip_grad 3.0 \
+  --opt_betas 0.9 0.98 \
+  --opt_eps 1e-8 \
+  --momentum 0.9 \
+  --abs_pos_emb \
+  --qkv_bias \
+  --use_mean_pooling \
+  --model_ema \
+  --model_ema_decay 0.996 \
+  --save_ckpt \
+  --auto_resume \
+  --seed 42 \
+  --pin_mem \
+  --aggregate_by_participant majority_vote \
+  --output_dir "$RUN_DIR/output" \
+  --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/labram_base_age_regression_2s.log"
+
+### Labram age regression for 4s:
+RUN_DIR="$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_4s"
+python -u run_class_finetuning.py \
+  --model labram_base_patch200_200 \
+  --finetune "$CKPT" \
+  --dataset age_regression_baseline \
+  --data_path "$DATA" \
+  --segment_length 4s \
+  --epochs 50 \
+  --batch_size 256 \
+  --lr 0.0005 \
+  --weight_decay 0.05 \
+  --warmup_epochs 5 \
+  --min_lr 1e-5 \
+  --drop_path 0.1 \
+  --smoothing 0.0 \
+  --layer_decay 0.65 \
+  --layer_scale_init_value 0.1 \
+  --clip_grad 3.0 \
+  --opt_betas 0.9 0.98 \
+  --opt_eps 1e-8 \
+  --momentum 0.9 \
+  --abs_pos_emb \
+  --qkv_bias \
+  --use_mean_pooling \
+  --model_ema \
+  --model_ema_decay 0.996 \
+  --save_ckpt \
+  --auto_resume \
+  --seed 42 \
+  --pin_mem \
+  --aggregate_by_participant majority_vote \
+  --output_dir "$RUN_DIR/output" \
+  --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/labram_base_age_regression_4s.log"
+
+
+## Resume labram 1s age regression:
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+DATA="/home/mojtabam/scratch/processed_eeg_data_hdf5"
+CKPT="$EEG_ROOT/LaBraM/checkpoints/labram-base.pth"
+RUN_DIR="$EEG_ROOT/final_logs/LaBraM/LABRAM_base_age_regression_1s"
+
+cd "$EEG_ROOT/LaBraM"
+
+python -u run_class_finetuning.py \
+  --model labram_base_patch200_200 \
+  --finetune "$CKPT" \
+  --dataset age_regression_baseline \
+  --data_path "$DATA" \
+  --segment_length 1s \
+  --epochs 50 \
+  --batch_size 1024 \
+  --lr 0.0005 \
+  --weight_decay 0.05 \
+  --warmup_epochs 5 \
+  --min_lr 1e-5 \
+  --drop_path 0.1 \
+  --smoothing 0.0 \
+  --layer_decay 0.65 \
+  --layer_scale_init_value 0.1 \
+  --clip_grad 3.0 \
+  --opt_betas 0.9 0.98 \
+  --opt_eps 1e-8 \
+  --momentum 0.9 \
+  --abs_pos_emb \
+  --qkv_bias \
+  --use_mean_pooling \
+  --model_ema \
+  --model_ema_decay 0.996 \
+  --save_ckpt \
+  --auto_resume \
+  --seed 42 \
+  --pin_mem \
+  --aggregate_by_participant majority_vote \
+  --output_dir "$RUN_DIR/output" \
+  --log_dir "$RUN_DIR/logs" \
+  --start_epoch 46 \
+  2>&1 | tee -a "$RUN_DIR/labram_base_age_regression_1s_resume2.log"
+
+
+## Evaluation of Labram for gender prediction to calculate f1 scores for 2s and 4s:
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+DATA="/home/mojtabam/scratch/processed_eeg_data_hdf5"
+
+conda activate eeg_env
+cd "$EEG_ROOT/LaBraM"
+
+# 2s
+/home/mojtabam/miniconda3/envs/eeg_env/bin/python run_class_finetuning.py \
+  --eval \
+  --dataset gender_baseline \
+  --segment_length 2s \
+  --nb_classes 1 \
+  --model labram_base_patch200_200 \
+  --finetune "$EEG_ROOT/LaBraM/checkpoints/labram-base.pth" \
+  --resume "$EEG_ROOT/final_logs/LaBraM/labram_gender_2s/output/gender_labram_2s_best.pth" \
+  --data_path "$DATA" \
+  --output_dir "$EEG_ROOT/final_logs/LaBraM/labram_gender_2s/output" \
+  --abs_pos_emb --qkv_bias --use_mean_pooling \
+  2>&1 | tee "$EEG_ROOT/final_logs/LaBraM/labram_gender_2s/eval_f1.log"
+
+# 4s
+/home/mojtabam/miniconda3/envs/eeg_env/bin/python run_class_finetuning.py \
+  --eval \
+  --dataset gender_baseline \
+  --segment_length 4s \
+  --nb_classes 1 \
+  --model labram_base_patch200_200 \
+  --finetune "$EEG_ROOT/LaBraM/checkpoints/labram-base.pth" \
+  --resume "$EEG_ROOT/final_logs/LaBraM/labram_gender_4s/output/gender_labram_4s_best.pth" \
+  --data_path "$DATA" \
+  --output_dir "$EEG_ROOT/final_logs/LaBraM/labram_gender_4s/output" \
+  --abs_pos_emb --qkv_bias --use_mean_pooling \
+  2>&1 | tee "$EEG_ROOT/final_logs/LaBraM/labram_gender_4s/eval_f1.log"

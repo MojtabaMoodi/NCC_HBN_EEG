@@ -1,0 +1,1 @@
+python -m CNN.main --mode 2s --results_dir ./final_logs --reports_dir ./final_logs 2>&1 | tee ./final_logs/cnn_2s.log

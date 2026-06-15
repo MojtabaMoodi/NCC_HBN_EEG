@@ -1,0 +1,1 @@
+python -m CNN.resnet.run_resnet_gender --mode 1s --resnet_type 50 --results_dir ./final_logs3 --reports_dir ./final_logs3 --no_stratified 2>&1 | tee ./final_logs3/resnet50_gender_1s.log
