@@ -1,0 +1,159 @@
+# LaBraM frozen-backbone experiments (linear probe)
+
+Freeze all LaBraM weights except the task head (`--freeze_backbone --unfreeze_last_n_blocks 0`).
+Training uses the same metrics and active/passive breakdown as `final_logs/` (JSONL `output/log.txt`).
+
+## Prerequisites
+
+- HDF5 data: `/home/mojtabam/scratch/processed_eeg_data_hdf5`
+- Pretrained weights: `LaBraM/checkpoints/labram-base.pth`
+
+## Run all frozen experiments (SLURM — recommended)
+
+Submit all 9 jobs (age, gender, regression × 1s, 2s, 4s):
+
+```bash
+cd /home/mojtabam/projects/aip-aghodsib/mojtabam/EEG
+chmod +x LaBraM/runs/submit_labram_frozen_*.sh LaBraM/runs/slurm_jobs/run_labram_frozen.slurm
+bash LaBraM/runs/submit_labram_frozen_all.sh
+```
+
+Preview without submitting:
+
+```bash
+bash LaBraM/runs/submit_labram_frozen_all.sh --dry-run
+```
+
+Submit one segment length only:
+
+```bash
+bash LaBraM/runs/submit_labram_frozen_1s.sh   # 3 jobs
+bash LaBraM/runs/submit_labram_frozen_2s.sh   # 3 jobs
+bash LaBraM/runs/submit_labram_frozen_4s.sh   # 3 jobs
+```
+
+Wall time defaults: **3 days** for 1s jobs, **2 days** for 2s/4s. Optional overrides: `SLURM_PARTITION`, `SLURM_GRES`, `SLURM_TIME` (uniform override), `DATA_PATH`, `EEG_ROOT`.
+
+### Resume incomplete 1s runs
+
+If 1s jobs hit the time limit, resume from `checkpoint-best.pth` (weights only — `START_EPOCH` is taken from the last line of `output/log.txt`):
+
+```bash
+bash LaBraM/runs/submit_labram_frozen_resume_1s.sh
+bash LaBraM/runs/submit_labram_frozen_resume_1s.sh --dry-run
+```
+
+Each Slurm invocation writes its own training log (never overwrites prior runs):
+
+- First run: `train_slurm-<jobid>.log` (original `train.log` from manual runs is kept)
+- Resume: `train_resume_slurm-<jobid>.log`
+- Slurm stdout: `slurm-<jobid>.out` or `slurm-resume-<jobid>.out`
+
+Check last completed epoch / next resume epoch:
+
+```bash
+bash LaBraM/runs/check_frozen_1s_progress.sh
+bash LaBraM/runs/check_frozen_1s_progress.sh --update-note
+```
+
+### 1s job progress (auto-updated)
+
+<!-- FROZEN_1S_STATUS_START -->
+Updated: 2026-05-23 20:19:47 EDT
+
+| Task | Run directory | Last completed epoch | Next resume epoch | Epochs in log.txt | Status |
+|------|---------------|----------------------|-------------------|-------------------|--------|
+| Age classification | `labram_age_frozen_1s` | 27 | 28 | 38 | in progress (27/49 done) |
+| Gender classification | `labram_gender_frozen_1s` | 26 | 27 | 38 | in progress (26/49 done) |
+| Age regression | `labram_age_regression_frozen_1s` | 23 | 24 | 33 | in progress (23/49 done) |
+
+Resume command (auto-detects `START_EPOCH` from `output/log.txt`):
+`bash LaBraM/runs/submit_labram_frozen_resume_1s.sh`
+<!-- FROZEN_1S_STATUS_END -->
+
+After training finishes, submit aggregated report (or run locally — see below):
+
+```bash
+bash LaBraM/runs/submit_labram_frozen_report.sh
+# Or chain after training jobs: bash LaBraM/runs/submit_labram_frozen_report.sh --dependency afterok:JOB1,JOB2,...
+```
+
+Per-run outputs: `output/log.txt` (JSONL metrics, appended across resumes), `train_slurm-<jobid>.log`, `slurm-<jobid>.out`.
+
+## Run all frozen experiments (interactive shell)
+
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+DATA="/home/mojtabam/scratch/processed_eeg_data_hdf5"
+cd "$EEG_ROOT/LaBraM"
+chmod +x runs/run_labram_frozen.sh
+
+for TASK in age gender regression; do
+  for SEG in 1s 2s 4s; do
+    RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_${TASK}_frozen_${SEG}"
+    if [ "$TASK" = "regression" ]; then
+      RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_age_regression_frozen_${SEG}"
+    fi
+    mkdir -p "$RUN_DIR"/{output,logs}
+    DATA_PATH="$DATA" TASK="$TASK" SEGMENT="$SEG" \
+      bash runs/run_labram_frozen.sh \
+        --output_dir "$RUN_DIR/output" \
+        --log_dir "$RUN_DIR/logs" \
+      2>&1 | tee "$RUN_DIR/train.log"
+  done
+done
+
+## Single run examples
+
+### Age classification (1s)
+
+RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_age_frozen_1s"
+mkdir -p "$RUN_DIR"/{output,logs}
+DATA_PATH="$DATA" TASK=age SEGMENT=1s \
+  bash runs/run_labram_frozen.sh \
+    --output_dir "$RUN_DIR/output" --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/train.log"
+
+### Gender classification (1s)
+
+RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_gender_frozen_1s"
+mkdir -p "$RUN_DIR"/{output,logs}
+DATA_PATH="$DATA" TASK=gender SEGMENT=1s \
+  bash runs/run_labram_frozen.sh \
+    --output_dir "$RUN_DIR/output" --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/train.log"
+
+### Age regression (1s)
+
+RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_age_regression_frozen_1s"
+mkdir -p "$RUN_DIR"/{output,logs}
+DATA_PATH="$DATA" TASK=regression SEGMENT=1s \
+  bash runs/run_labram_frozen.sh \
+    --output_dir "$RUN_DIR/output" --log_dir "$RUN_DIR/logs" \
+  2>&1 | tee "$RUN_DIR/train.log"
+
+
+# Resume 1s frozen labram for age regression:
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+RUN_DIR="$EEG_ROOT/final_logs_frozen/LaBraM/labram_age_regression_frozen_1s"
+cd "$EEG_ROOT/LaBraM"
+
+DATA_PATH=/home/mojtabam/scratch/processed_eeg_data_hdf5 TASK=regression SEGMENT=1s \
+  bash runs/run_labram_frozen.sh \
+    --output_dir "$RUN_DIR/output" \
+    --log_dir "$RUN_DIR/logs" \
+    --resume "$RUN_DIR/output/checkpoint-best.pth" \
+    --start_epoch 50 \
+  2>&1 | tee "$RUN_DIR/train_resume_$(date +%Y%m%d_%H%M).log"
+
+
+## Generate aggregated report
+
+EEG_ROOT="/home/mojtabam/projects/aip-aghodsib/mojtabam/EEG"
+python "$EEG_ROOT/reports/generate_final_logs_report.py" \
+  --final-logs-dir "$EEG_ROOT/final_logs_frozen" \
+  --out-dir "$EEG_ROOT/reports/final_logs_frozen_report_$(date +%Y-%m-%d)"
+
+
+Outputs: `final_logs_report.md`, `final_logs_experiments.csv`, `final_logs_experiments.json`
+
+Per-epoch JSONL metrics (segment + participant + `task_type_metrics` for active/passive) are in each run's `output/log.txt`.

@@ -1,0 +1,10 @@
+Updated: 2026-05-27 01:30:33 EDT
+
+| Task | Run directory | Last completed epoch | Next resume epoch | Epochs in log.txt | Status |
+|------|---------------|----------------------|-------------------|-------------------|--------|
+| Age classification | `labram_age_frozen_1s` | 49 | — | 60 | complete (50/50) |
+| Gender classification | `labram_gender_frozen_1s` | 49 | — | 61 | complete (50/50) |
+| Age regression | `labram_age_regression_frozen_1s` | 45 | 46 | 55 | in progress (45/49 done) |
+
+Resume command (auto-detects `START_EPOCH` from `output/log.txt`):
+`bash LaBraM/runs/submit_labram_frozen_resume_1s.sh`
