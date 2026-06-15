@@ -1,0 +1,286 @@
+{
+  "train_counts_subject": {
+    "1": 883,
+    "0": 768,
+    "2": 496
+  },
+  "train_proportions_subject": {
+    "0": 0.3577084303679553,
+    "1": 0.4112715416860736,
+    "2": 0.23102002794597112
+  },
+  "majority_class": 1,
+  "test_subject_count": 461,
+  "test_segments_count": 66286,
+  "models": {
+    "cnn": {
+      "point_metrics": {
+        "accuracy": 0.631236442516269,
+        "balanced_accuracy": 0.6241544299620525,
+        "macro_f1": 0.640832655363888,
+        "per_class_recall": {
+          "0": 0.5844155844155844,
+          "1": 0.7241379310344828,
+          "2": 0.5639097744360902
+        }
+      },
+      "random_metrics": {
+        "accuracy": 0.31670281995661603,
+        "balanced_accuracy": 0.3101615061687657,
+        "macro_f1": 0.30873650889982923,
+        "per_class_recall": {
+          "0": 0.36363636363636365,
+          "1": 0.3563218390804598,
+          "2": 0.21052631578947367
+        }
+      },
+      "majority_metrics": {
+        "accuracy": 0.3774403470715835,
+        "balanced_accuracy": 0.3333333333333333,
+        "macro_f1": 0.18267716535433073,
+        "per_class_recall": {
+          "0": 0.0,
+          "1": 1.0,
+          "2": 0.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          90,
+          63,
+          1
+        ],
+        [
+          43,
+          126,
+          5
+        ],
+        [
+          6,
+          52,
+          75
+        ]
+      ],
+      "bootstrap_summary": {
+        "accuracy": {
+          "point_estimate": 0.631236442516269,
+          "ci_low": 0.5856832971800434,
+          "ci_high": 0.6746203904555315,
+          "delta_point": 0.31453362255965295,
+          "delta_ci_low": 0.22559652928416485,
+          "delta_ci_high": 0.351409978308026,
+          "p_delta_gt_0": 1.0
+        },
+        "balanced_accuracy": {
+          "point_estimate": 0.6241544299620525,
+          "ci_low": 0.5786065261561777,
+          "ci_high": 0.6688131636029244,
+          "delta_point": 0.3139929237932868,
+          "delta_ci_low": 0.226897496235773,
+          "delta_ci_high": 0.35277991648710844,
+          "p_delta_gt_0": 1.0
+        },
+        "macro_f1": {
+          "point_estimate": 0.640832655363888,
+          "ci_low": 0.5948724881496988,
+          "ci_high": 0.6850549154772557,
+          "delta_point": 0.3320961464640588,
+          "delta_ci_low": 0.24621506986818892,
+          "delta_ci_high": 0.3708106526154266,
+          "p_delta_gt_0": 1.0
+        }
+      },
+      "permutation_p_value": 0.000999000999000999,
+      "num_subjects": 461,
+      "num_segments": 66286,
+      "segments_per_subject": {
+        "min": 5,
+        "median": 163.0,
+        "max": 207
+      }
+    },
+    "resnet": {
+      "point_metrics": {
+        "accuracy": 0.6507592190889371,
+        "balanced_accuracy": 0.6545137661290111,
+        "macro_f1": 0.6583183757096801,
+        "per_class_recall": {
+          "0": 0.6493506493506493,
+          "1": 0.6149425287356322,
+          "2": 0.6992481203007519
+        }
+      },
+      "random_metrics": {
+        "accuracy": 0.2950108459869848,
+        "balanced_accuracy": 0.28335729606147025,
+        "macro_f1": 0.27776149932416355,
+        "per_class_recall": {
+          "0": 0.3181818181818182,
+          "1": 0.39655172413793105,
+          "2": 0.13533834586466165
+        }
+      },
+      "majority_metrics": {
+        "accuracy": 0.3774403470715835,
+        "balanced_accuracy": 0.3333333333333333,
+        "macro_f1": 0.18267716535433073,
+        "per_class_recall": {
+          "0": 0.0,
+          "1": 1.0,
+          "2": 0.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          100,
+          50,
+          4
+        ],
+        [
+          38,
+          107,
+          29
+        ],
+        [
+          7,
+          33,
+          93
+        ]
+      ],
+      "bootstrap_summary": {
+        "accuracy": {
+          "point_estimate": 0.6507592190889371,
+          "ci_low": 0.6073752711496746,
+          "ci_high": 0.6963123644251626,
+          "delta_point": 0.3557483731019523,
+          "delta_ci_low": 0.2472885032537961,
+          "delta_ci_high": 0.3753253796095442,
+          "p_delta_gt_0": 1.0
+        },
+        "balanced_accuracy": {
+          "point_estimate": 0.6545137661290111,
+          "ci_low": 0.6109047686696355,
+          "ci_high": 0.6994922604441992,
+          "delta_point": 0.3711564700675409,
+          "delta_ci_low": 0.2591432179798719,
+          "delta_ci_high": 0.38594620887189124,
+          "p_delta_gt_0": 1.0
+        },
+        "macro_f1": {
+          "point_estimate": 0.6583183757096801,
+          "ci_low": 0.6140177572577076,
+          "ci_high": 0.7022552963395633,
+          "delta_point": 0.38055687638551655,
+          "delta_ci_low": 0.2650679480921847,
+          "delta_ci_high": 0.3909441642215756,
+          "p_delta_gt_0": 1.0
+        }
+      },
+      "permutation_p_value": 0.000999000999000999,
+      "num_subjects": 461,
+      "num_segments": 66286,
+      "segments_per_subject": {
+        "min": 5,
+        "median": 163.0,
+        "max": 207
+      }
+    },
+    "labram": {
+      "point_metrics": {
+        "accuracy": 0.6203904555314533,
+        "balanced_accuracy": 0.6230348598769652,
+        "macro_f1": 0.6273563983144822,
+        "per_class_recall": {
+          "0": 0.8051948051948052,
+          "1": 0.5,
+          "2": 0.5639097744360902
+        }
+      },
+      "random_metrics": {
+        "accuracy": 0.2950108459869848,
+        "balanced_accuracy": 0.28335729606147025,
+        "macro_f1": 0.27776149932416355,
+        "per_class_recall": {
+          "0": 0.3181818181818182,
+          "1": 0.39655172413793105,
+          "2": 0.13533834586466165
+        }
+      },
+      "majority_metrics": {
+        "accuracy": 0.3774403470715835,
+        "balanced_accuracy": 0.3333333333333333,
+        "macro_f1": 0.18267716535433073,
+        "per_class_recall": {
+          "0": 0.0,
+          "1": 1.0,
+          "2": 0.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          124,
+          29,
+          1
+        ],
+        [
+          80,
+          87,
+          7
+        ],
+        [
+          14,
+          44,
+          75
+        ]
+      ],
+      "bootstrap_summary": {
+        "accuracy": {
+          "point_estimate": 0.6203904555314533,
+          "ci_low": 0.5748373101952278,
+          "ci_high": 0.665943600867679,
+          "delta_point": 0.32537960954446854,
+          "delta_ci_low": 0.21475054229934926,
+          "delta_ci_high": 0.34273318872017355,
+          "p_delta_gt_0": 1.0
+        },
+        "balanced_accuracy": {
+          "point_estimate": 0.6230348598769652,
+          "ci_low": 0.5809327651558012,
+          "ci_high": 0.6649121283736454,
+          "delta_point": 0.3396775638154949,
+          "delta_ci_low": 0.2289608893900457,
+          "delta_ci_high": 0.3501321692720739,
+          "p_delta_gt_0": 1.0
+        },
+        "macro_f1": {
+          "point_estimate": 0.6273563983144822,
+          "ci_low": 0.5833216155684825,
+          "ci_high": 0.6708839925735883,
+          "delta_point": 0.34959489899031865,
+          "delta_ci_low": 0.23392916161712204,
+          "delta_ci_high": 0.35883811538593574,
+          "p_delta_gt_0": 1.0
+        }
+      },
+      "permutation_p_value": 0.000999000999000999,
+      "num_subjects": 461,
+      "num_segments": 66286,
+      "segments_per_subject": {
+        "min": 5,
+        "median": 163.0,
+        "max": 207
+      }
+    }
+  },
+  "bootstrap_B": 2000,
+  "seed": 123,
+  "primary_metric": "balanced_accuracy",
+  "permutation_M": 1000,
+  "timestamp": "2026-01-16T18:35:27.350969",
+  "git_commit": "0e3764102ad860f2ff31112fd44920c81fc6cad3",
+  "segments_per_subject": {
+    "min": 5,
+    "median": 163.0,
+    "max": 207
+  }
+}
