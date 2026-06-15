@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_4s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 98.69571208953857,
+  "training_time": 0.0,
+  "evaluation_time": 98.69571208953857,
+  "description": "Age regression baseline with 4s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 1.790070494621015,
+    "mse": 5.474602492564343,
+    "rmse": 2.3397868476774426,
+    "r2": 0.5676465822072335,
+    "mae_normalized": 0.1061398940242437,
+    "mse_normalized": 0.019247291408581727,
+    "rmse_normalized": 0.13873460782581154,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 1.7516111018965663,
+        "mse": 5.184599878176111,
+        "rmse": 2.276971646326785,
+        "r2": 0.5379595799049942,
+        "mae_normalized": 0.1038594945202711,
+        "mse_normalized": 0.018227716958023523,
+        "rmse_normalized": 0.1350100624324851,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 331
+      },
+      "passive": {
+        "mae": 1.8133440461281958,
+        "mse": 5.5956320560352655,
+        "rmse": 2.3655088366005455,
+        "r2": 0.5594373297117634,
+        "mae_normalized": 0.10751986889001733,
+        "mse_normalized": 0.01967280016110617,
+        "rmse_normalized": 0.14025975959307135,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 459
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "CNN_4s_oversample/checkpoints/age_regression_4s_best.pth",
+  "segment_metrics": {
+    "mae": 2.1179609298706055,
+    "mse": 7.532812595367432,
+    "rmse": 2.7445969823213447,
+    "r2": 0.3819727897644043,
+    "mae_normalized": 0.12558171153068542,
+    "mse_normalized": 0.02648342400789261,
+    "rmse_normalized": 0.16273728524186645,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}
