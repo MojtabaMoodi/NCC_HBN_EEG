@@ -13,6 +13,29 @@ This document describes how to run **project-specific** LaBraM fine-tuning on ge
 | `run_eval_majority_vote.sh` | Eval-only with participant-level aggregation |
 | `report_generator.py` | Summaries from `outputs/*/log.txt` |
 | [REPORT_GENERATION_PROCESS.md](REPORT_GENERATION_PROCESS.md) | Report pipeline details |
+| `freeze_backbone.py` | Linear-probe helper (`apply_finetune_freeze`) |
+| `runs/run_labram_frozen.sh` | Frozen backbone for age / gender / regression |
+
+## Frozen backbone (linear probe)
+
+Train only the task head while keeping pretrained LaBraM weights fixed:
+
+```bash
+cd LaBraM
+TASK=age SEGMENT=1s bash runs/run_labram_frozen.sh \
+  --output_dir ../final_logs_frozen/LaBraM/labram_age_frozen_1s/output \
+  --log_dir ../final_logs_frozen/LaBraM/labram_age_frozen_1s/logs
+```
+
+Or pass flags directly to `run_class_finetuning.py`:
+
+```bash
+python run_class_finetuning.py ... --freeze_backbone --unfreeze_last_n_blocks 0
+```
+
+- `--unfreeze_last_n_blocks N` also unfreezes the last `N` transformer blocks (default `0` = head only).
+- Logs record `freeze_backbone`, `n_parameters`, `n_parameters_total`, and `task_type_metrics` (active/passive).
+- Aggregated reports: see [final_logs_frozen/note.txt](../final_logs_frozen/note.txt).
 
 ## Data
 

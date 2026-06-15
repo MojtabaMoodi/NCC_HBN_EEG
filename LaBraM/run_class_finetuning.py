@@ -56,6 +56,7 @@ from dataset_config import (
     DATA_PATHS,
 )
 from labram_dataset import collate_labram_with_participant_ids
+from freeze_backbone import apply_finetune_freeze, count_parameters
 from data_processing.eeg_dataset import (
     compute_class_weights_from_train_hdf5,
     get_dataloader_multiprocessing_kwargs,
@@ -158,6 +159,18 @@ def get_args():
     parser.set_defaults(use_mean_pooling=True)
     parser.add_argument('--use_cls', action='store_false', dest='use_mean_pooling')
     parser.add_argument('--disable_weight_decay_on_rel_pos_bias', action='store_true', default=False)
+    parser.add_argument(
+        '--freeze_backbone',
+        action='store_true',
+        help='Freeze LaBraM backbone weights and train only the task head (linear probe). '
+             'Use --unfreeze_last_n_blocks to also unfreeze the last N transformer blocks.',
+    )
+    parser.add_argument(
+        '--unfreeze_last_n_blocks',
+        default=0,
+        type=int,
+        help='With --freeze_backbone, also unfreeze the last N transformer blocks (default: 0 = head only).',
+    )
 
     # Dataset parameters
     parser.add_argument('--nb_classes', default=0, type=int,
@@ -471,7 +484,11 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         if segment_length == "1s":
             num_workers = 0
             if utils.is_main_process():
-                print("DataLoader num_workers: 0 (1s segments: single process to avoid each worker building HDF5 cache; first batch may take 10-30 min)")
+                print(
+                    "DataLoader num_workers: 0 (1s segments: single process to avoid each worker "
+                    "building HDF5 cache; first batch may take 10-30 min). "
+                    "Most epoch time is HDF5 I/O, not GPU — freezing the backbone does not change that."
+                )
         else:
             num_workers = get_recommended_num_workers(segment_length, num_gpus)
             if utils.is_main_process():
@@ -586,6 +603,20 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
 
         utils.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
 
+    if args.freeze_backbone:
+        n_trainable, n_total = apply_finetune_freeze(
+            model, unfreeze_last_n_blocks=args.unfreeze_last_n_blocks
+        )
+        pct = 100.0 * n_trainable / n_total if n_total else 0.0
+        print(
+            f"freeze_backbone=True (unfreeze_last_n_blocks={args.unfreeze_last_n_blocks}): "
+            f"trainable params {n_trainable:,} / {n_total:,} ({pct:.2f}%)"
+        )
+        if not args.finetune:
+            print(
+                "Warning: --freeze_backbone without --finetune: backbone may be randomly initialized."
+            )
+
     model.to(device)
 
     # Use all visible GPUs when not in distributed mode
@@ -597,6 +628,12 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
         model_without_ddp = model
 
     model_ema = None
+    if args.model_ema and args.freeze_backbone and args.unfreeze_last_n_blocks == 0:
+        print(
+            "Skipping Model EMA for head-only linear probe (freeze_backbone): "
+            "EMA would still track the full 5.8M-param backbone each step."
+        )
+        args.model_ema = False
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
         model_ema = ModelEma(
@@ -605,10 +642,12 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
         print("Using EMA with decay = %.8f" % args.model_ema_decay)
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    n_parameters = sum(p.numel() for p in model_without_ddp.parameters() if p.requires_grad)
+    n_parameters_total = sum(p.numel() for p in model_without_ddp.parameters())
 
     print("Model = %s" % str(model_without_ddp))
-    print('number of params:', n_parameters)
+    print('number of trainable params:', n_parameters)
+    print('number of total params:', n_parameters_total)
 
     total_batch_size = args.batch_size * args.update_freq * utils.get_world_size()
     # Note: IterableDataset doesn't support __len__(), so we can't calculate exact steps per epoch
@@ -805,20 +844,21 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
     # Count task types for validation and test sets (once, before training)
     val_task_counts = None
     test_task_counts = None
-    if data_loader_val is not None:
-        print(f"\n{'='*60}")
-        print("Counting task types in validation and test sets...")
-        print(f"{'='*60}")
-        val_task_counts = count_task_type_samples(data_loader_val)
-        print(f"  Validation: {val_task_counts['active']:,} active, {val_task_counts['passive']:,} passive samples")
-        if type(data_loader_test) == list:
-            # Multiple test sets - count first one
-            test_task_counts = count_task_type_samples(data_loader_test[0])
-            print(f"  Test (first set): {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
-        else:
-            test_task_counts = count_task_type_samples(data_loader_test)
-            print(f"  Test: {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
-        print(f"{'='*60}\n")
+    # TEMPORARY: disabled — full-dataset iteration is slow on large HDF5 splits.
+    # if data_loader_val is not None:
+    #     print(f"\n{'='*60}")
+    #     print("Counting task types in validation and test sets...")
+    #     print(f"{'='*60}")
+    #     val_task_counts = count_task_type_samples(data_loader_val)
+    #     print(f"  Validation: {val_task_counts['active']:,} active, {val_task_counts['passive']:,} passive samples")
+    #     if type(data_loader_test) == list:
+    #         # Multiple test sets - count first one
+    #         test_task_counts = count_task_type_samples(data_loader_test[0])
+    #         print(f"  Test (first set): {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
+    #     else:
+    #         test_task_counts = count_task_type_samples(data_loader_test)
+    #         print(f"  Test: {test_task_counts['active']:,} active, {test_task_counts['passive']:,} passive samples")
+    #     print(f"{'='*60}\n")
     
     training_unstable = False
     early_stop_collapse = False
@@ -1061,7 +1101,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
                              **{f'val_{k}': v for k, v in val_stats.items()},
                              **{f'test_{k}': v for k, v in test_stats.items()},
                              'epoch': epoch,
-                             'n_parameters': n_parameters}
+                             'n_parameters': n_parameters,
+                             'n_parameters_total': n_parameters_total,
+                             'freeze_backbone': bool(args.freeze_backbone),
+                             'unfreeze_last_n_blocks': int(args.unfreeze_last_n_blocks)}
                 if test_stats.get('segment_metrics') is not None:
                     log_stats['test_segment_metrics'] = test_stats['segment_metrics']
                 if test_stats.get('participant_mean_prob_metrics') is not None:
@@ -1106,7 +1149,10 @@ def train_single_fold(args, ds_init, cv_fold_idx=None, cv_datasets=None):
             else:
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                              'epoch': epoch,
-                             'n_parameters': n_parameters}
+                             'n_parameters': n_parameters,
+                             'n_parameters_total': n_parameters_total,
+                             'freeze_backbone': bool(args.freeze_backbone),
+                             'unfreeze_last_n_blocks': int(args.unfreeze_last_n_blocks)}
     
             if args.output_dir and utils.is_main_process():
                 if log_writer is not None:

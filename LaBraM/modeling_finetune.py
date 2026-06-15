@@ -412,23 +412,42 @@ class NeuralTransformer(nn.Module):
             else:
                 return x[:, 0]
 
+    def _forward_heads(self, x):
+        if self.multi_output:
+            return {'gender': self.gender_head(x), 'age': self.age_head(x)}
+        logits = self.head(x)
+        if (
+            self.prediction_type == 'regression'
+            and isinstance(self.head, nn.Linear)
+            and self.num_classes == 1
+        ):
+            return torch.sigmoid(logits)
+        return logits
+
     def forward(self, x, input_chans=None, return_patch_tokens=False, return_all_tokens=False, **kwargs):
         '''
         x: [batch size, number of electrodes, number of patches, patch size]
         For example, for an EEG sample of 4 seconds with 64 electrodes, x will be [batch size, 64, 4, 200]
         '''
-        x = self.forward_features(x, input_chans=input_chans, return_patch_tokens=return_patch_tokens, return_all_tokens=return_all_tokens, **kwargs)
-        if self.multi_output:
-            return {'gender': self.gender_head(x), 'age': self.age_head(x)}
-        else:
-            logits = self.head(x)
-            if (
-                self.prediction_type == 'regression'
-                and isinstance(self.head, nn.Linear)
-                and self.num_classes == 1
-            ):
-                return torch.sigmoid(logits)
-            return logits
+        if getattr(self, 'linear_probe_forward', False):
+            with torch.no_grad():
+                feats = self.forward_features(
+                    x,
+                    input_chans=input_chans,
+                    return_patch_tokens=return_patch_tokens,
+                    return_all_tokens=return_all_tokens,
+                    **kwargs,
+                )
+            return self._forward_heads(feats.detach())
+
+        feats = self.forward_features(
+            x,
+            input_chans=input_chans,
+            return_patch_tokens=return_patch_tokens,
+            return_all_tokens=return_all_tokens,
+            **kwargs,
+        )
+        return self._forward_heads(feats)
 
     def forward_intermediate(self, x, layer_id=12, norm_output=False):
         x = self.patch_embed(x)
