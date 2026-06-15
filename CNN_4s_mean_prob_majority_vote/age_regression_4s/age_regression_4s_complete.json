@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_4s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 97.76547265052795,
+  "training_time": 0.0,
+  "evaluation_time": 97.76547265052795,
+  "description": "Age regression baseline with 4s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 3.7567523136799843,
+    "mse": 18.93086488924278,
+    "rmse": 4.350961375287395,
+    "r2": -0.4950535948050847,
+    "mae_normalized": 0.22275172606190877,
+    "mse_normalized": 0.0665560419472705,
+    "rmse_normalized": 0.25798457695620197,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 3.2716314854226676,
+        "mse": 14.90256393097764,
+        "rmse": 3.860383909791569,
+        "r2": -0.32808453129537707,
+        "mae_normalized": 0.19398711960930856,
+        "mse_normalized": 0.05239357398169575,
+        "rmse_normalized": 0.22889642631918863,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 331
+      },
+      "passive": {
+        "mae": 3.762573231078448,
+        "mse": 18.971449750228693,
+        "rmse": 4.355622774096569,
+        "r2": -0.4936851596925613,
+        "mae_normalized": 0.22309686976303864,
+        "mse_normalized": 0.06669872785866472,
+        "rmse_normalized": 0.25826096851569486,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 459
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "CNN_4s_mean_prob_majority_vote/checkpoints/age_regression_4s_best.pth",
+  "segment_metrics": {
+    "mae": 3.5729382038116455,
+    "mse": 17.445938110351562,
+    "rmse": 4.176833502828615,
+    "r2": -0.4313465356826782,
+    "mae_normalized": 0.21185266971588135,
+    "mse_normalized": 0.06133542209863663,
+    "rmse_normalized": 0.24765989198624114,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}

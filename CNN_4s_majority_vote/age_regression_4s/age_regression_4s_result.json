@@ -1,0 +1,61 @@
+{
+  "experiment_name": "age_regression_4s",
+  "model_type": "age_regression_cnn",
+  "target_type": "age",
+  "success": true,
+  "total_time": 97.98849177360535,
+  "training_time": 0.0,
+  "evaluation_time": 97.98849177360535,
+  "description": "Age regression baseline with 4s segments (train on both, evaluate separately)",
+  "metrics": {
+    "mae": 3.7567517129320773,
+    "mse": 18.930862291560228,
+    "rmse": 4.350961076769158,
+    "r2": -0.4950533896546778,
+    "mae_normalized": 0.22275169044134557,
+    "mse_normalized": 0.06655603281448813,
+    "rmse_normalized": 0.25798455925595265,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312,
+    "task_type_metrics": {
+      "active": {
+        "mae": 3.2716303298473526,
+        "mse": 14.902554712172662,
+        "rmse": 3.860382715764418,
+        "r2": -0.328083709735252,
+        "mae_normalized": 0.19398705109097822,
+        "mse_normalized": 0.052393541570753384,
+        "rmse_normalized": 0.22889635552090684,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 331
+      },
+      "passive": {
+        "mae": 3.7625731763265846,
+        "mse": 18.971449192237106,
+        "rmse": 4.3556227100424,
+        "r2": -0.49368511576003304,
+        "mae_normalized": 0.2230968665165983,
+        "mse_normalized": 0.06669872589691012,
+        "rmse_normalized": 0.2582609647176865,
+        "age_min": 5.035999774932861,
+        "age_max": 21.901199340820312,
+        "num_samples": 459
+      }
+    }
+  },
+  "training_metrics": null,
+  "error": null,
+  "model_checkpoint_path": "CNN_4s_majority_vote/checkpoints/age_regression_4s_best.pth",
+  "segment_metrics": {
+    "mae": 3.572937488555908,
+    "mse": 17.44593620300293,
+    "rmse": 4.176833274503895,
+    "r2": -0.43134641647338867,
+    "mae_normalized": 0.21185263991355896,
+    "mse_normalized": 0.06133541464805603,
+    "rmse_normalized": 0.24765987694428024,
+    "age_min": 5.035999774932861,
+    "age_max": 21.901199340820312
+  }
+}
