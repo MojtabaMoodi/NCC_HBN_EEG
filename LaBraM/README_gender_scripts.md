@@ -144,6 +144,42 @@ python run_class_finetuning.py --eval \
 
 For age classification use `--dataset age_classification --nb_classes 3`.
 
+## Random classifier baseline
+
+Segment-level random predictions on the test split, with the same participant
+aggregation as model eval. Results and commands live under
+**`LaBraM/random_classifier/`** (see that README).
+
+Quick run (all age/gender × 1s/2s/4s, `train_segment_frequency`):
+
+```bash
+bash LaBraM/random_classifier/run_train_segment_frequency_eval.sh
+```
+
+Outputs: `LaBraM/random_classifier/results/{age,gender}_{1s,2s,4s}_train_segment_frequency.json`
+
+## Confusion matrices (finetuned LaBraM)
+
+Load saved finetuned weights (e.g. `{task}_labram_{segment}_best.pth`; no retraining) and compute segment- and
+participant-level confusion matrices on the test split. See **`LaBraM/confusion_matrix/`**.
+
+Interactive batch (requires `DATA_PATH` and `DEVICE`):
+
+```bash
+export DATA_PATH=/home/mojtabam/scratch/processed_eeg_data_hdf5
+export DEVICE=cuda
+bash LaBraM/confusion_matrix/run_all_confusion_matrices.sh
+```
+
+SLURM (all age/gender × 1s/2s/4s):
+
+```bash
+bash LaBraM/confusion_matrix/submit_confusion_matrices.sh
+```
+
+Outputs: `LaBraM/confusion_matrix/results/{age,gender}_{1s,2s,4s}_confusion_matrix.json`
+(primary table: `test.confusion_matrices.participant_majority_vote`).
+
 ## Outputs
 
 ```
