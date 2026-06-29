@@ -49,6 +49,11 @@ def multiclass_macro_fpr_fnr(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[fl
     return float(np.mean(fprs)), float(np.mean(fnrs))
 
 
+def _tensor_has_invalid_values(t: torch.Tensor) -> bool:
+    """True for NaN or +inf. -inf is allowed (triplet masked prototype logits)."""
+    return bool(torch.isnan(t).any() or torch.isposinf(t).any())
+
+
 def _call_optional_input_chans(module: nn.Module, method_name: str, EEG: torch.Tensor, input_chans) -> torch.Tensor:
     """Call ``module.method_name(EEG, input_chans=...)`` only if the method accepts ``input_chans`` (LaBraM); else ``(EEG)`` (CNN/ResNet)."""
     fn = getattr(module, method_name)
@@ -106,66 +111,80 @@ except ImportError:
             return optimizer.loss_scale if hasattr(optimizer, "loss_scale") else optimizer.cur_scale
         evaluate_by_task_type = None
 
-# Import ArcFace loss
-from CNN.models.arcface_loss import ArcFaceLoss
+# Import embedding loss helpers
+from user_identification.embedding_criterion_utils import resolve_loss_type, uses_embedding_logits
+from CNN.models.triplet_loss import batch_local_nearest_prototype_accuracy
+
+
+def train_class_batch_with_embedding_loss(
+    model,
+    samples,
+    target,
+    criterion,
+    input_chans,
+    loss_type=None,
+    use_arcface=False,
+):
+    """
+    Compute loss and logits for user-identification embedding training.
+
+    For ArcFace / FaceNet triplet:
+    - Extracts features from model (before classification head)
+    - Computes metric-learning loss via criterion
+    - Returns logits from criterion.compute_logits for accuracy
+
+    For standard CE:
+    - Uses direct model output logits
+    """
+    loss_type = resolve_loss_type(loss_type=loss_type, use_arcface=use_arcface)
+
+    if uses_embedding_logits(loss_type):
+        model_to_use = model.module if hasattr(model, "module") else model
+
+        if hasattr(model_to_use, "extract_features"):
+            features = model_to_use.extract_features(samples, input_chans=input_chans)
+        elif hasattr(model_to_use, "forward_features"):
+            features = model_to_use.forward_features(samples, input_chans=input_chans)
+        else:
+            raise AttributeError(
+                "Model must have 'extract_features' or 'forward_features' for "
+                f"loss_type={loss_type!r}"
+            )
+
+        if not hasattr(criterion, "compute_logits"):
+            raise AttributeError(
+                f"criterion for loss_type={loss_type!r} must implement compute_logits(); "
+                f"got {type(criterion).__name__}"
+            )
+
+        loss = criterion(features, target)
+
+        with torch.no_grad():
+            if loss_type == "triplet":
+                # FaceNet-pure: triplet loss only during training; prototypes are built
+                # offline before val/test (refresh_prototypes_from_train_hdf5).
+                triplet_batch_acc = batch_local_nearest_prototype_accuracy(features, target)
+                outputs = None
+            else:
+                triplet_batch_acc = None
+                outputs = criterion.compute_logits(features)
+                outputs = outputs.float() if outputs.dtype == torch.float16 else outputs
+    else:
+        outputs = model(samples, input_chans=input_chans)
+        loss = criterion(outputs, target)
+        triplet_batch_acc = None
+
+    return loss, outputs, triplet_batch_acc
 
 
 def train_class_batch_with_arcface(model, samples, target, criterion, input_chans, use_arcface=False):
-    """
-    Modified train_class_batch that supports ArcFace loss.
-    
-    For ArcFace:
-    - Extracts features from model (before classification head)
-    - Computes loss using ArcFace (which handles logits internally)
-    - Returns both loss and logits for accuracy calculation
-    
-    For standard loss:
-    - Uses original LaBraM behavior (direct model output)
-    
-    Args:
-        model: Model instance (should have extract_features method if use_arcface=True)
-        samples: Input samples
-        target: Target labels
-        criterion: Loss function (ArcFaceLoss or standard)
-        input_chans: Input channel indices
-        use_arcface: Whether to use ArcFace loss
-        
-    Returns:
-        loss: Computed loss
-        outputs: Model outputs (logits for ArcFace, direct outputs for standard)
-    """
-    if use_arcface:
-        # Extract features for ArcFace
-        # Note: samples is already in LaBraM format [B, N, A, T] from rearrange
-        # Handle DistributedDataParallel wrapper
-        model_to_use = model.module if hasattr(model, 'module') else model
-        
-        if hasattr(model_to_use, 'extract_features'):
-            # extract_features can handle both [B, N, T] and [B, N, A, T] formats
-            features = model_to_use.extract_features(samples, input_chans=input_chans)
-        else:
-            # Fallback: try to get features from forward_features
-            if hasattr(model_to_use, 'forward_features'):
-                features = model_to_use.forward_features(samples, input_chans=input_chans)
-            else:
-                raise AttributeError(
-                    "Model must have 'extract_features' or 'forward_features' method for ArcFace loss"
-                )
-        
-        # ArcFace loss computes logits internally from normalized features
-        loss = criterion(features, target)
-        
-        # For accuracy calculation, compute logits from ArcFace
-        with torch.no_grad():
-            outputs = criterion.compute_logits(features)
-            # Convert to float32 for accuracy calculation
-            outputs = outputs.float() if outputs.dtype == torch.float16 else outputs
-    else:
-        # Standard LaBraM behavior (for user identification, single output)
-        outputs = model(samples, input_chans=input_chans)
-        loss = criterion(outputs, target)
-    
-    return loss, outputs
+    """Backward-compatible alias for ArcFace / embedding batch training."""
+    loss, output, _ = train_class_batch_with_embedding_loss(
+        model, samples, target, criterion, input_chans,
+        loss_type="arcface" if use_arcface else "ce",
+        use_arcface=use_arcface,
+    )
+    return loss, output
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -174,7 +193,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     model_ema: Optional[ModelEma] = None, log_writer=None,
                     start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
                     num_training_steps_per_epoch=None, update_freq=None, ch_names=None, 
-                    use_arcface=False):
+                    use_arcface=False, loss_type=None):
     """
     Modified train_one_epoch that supports ArcFace loss for user identification.
     
@@ -201,8 +220,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         num_training_steps_per_epoch: Number of training steps per epoch
         update_freq: Gradient accumulation frequency
         ch_names: Channel names
-        use_arcface: Whether to use ArcFace loss
+        use_arcface: Deprecated; use loss_type='arcface'. Kept for backward compatibility.
+        loss_type: 'arcface', 'triplet', or 'ce'
     """
+    resolved_loss_type = resolve_loss_type(loss_type=loss_type, use_arcface=use_arcface)
     skipped_batches = 0
     input_chans = None
     if ch_names is not None:
@@ -281,22 +302,25 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         # Compute loss and outputs
         if loss_scaler is None:
             samples = samples.half()
-            loss, output = train_class_batch_with_arcface(
-                model, samples, targets, criterion, input_chans, use_arcface=use_arcface)
+            loss, output, triplet_batch_acc = train_class_batch_with_embedding_loss(
+                model, samples, targets, criterion, input_chans,
+                loss_type=resolved_loss_type)
         else:
             with torch.amp.autocast(device_type='cuda'):
-                loss, output = train_class_batch_with_arcface(
-                    model, samples, targets, criterion, input_chans, use_arcface=use_arcface)
+                loss, output, triplet_batch_acc = train_class_batch_with_embedding_loss(
+                    model, samples, targets, criterion, input_chans,
+                    loss_type=resolved_loss_type)
 
-        # Check for NaN/Inf in output
+        # Check for NaN/+inf in output (-inf is valid for triplet masked logits)
         output_has_nan = False
-        if isinstance(output, dict):
-            for key, val in output.items():
-                if torch.isnan(val).any() or torch.isinf(val).any():
-                    output_has_nan = True
-                    break
-        elif torch.is_tensor(output) and (torch.isnan(output).any() or torch.isinf(output).any()):
-            output_has_nan = True
+        if output is not None:
+            if isinstance(output, dict):
+                for key, val in output.items():
+                    if torch.is_tensor(val) and _tensor_has_invalid_values(val):
+                        output_has_nan = True
+                        break
+            elif torch.is_tensor(output) and _tensor_has_invalid_values(output):
+                output_has_nan = True
 
         loss_value = loss.item()
 
@@ -334,13 +358,23 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         torch.cuda.synchronize()
 
         # Compute accuracy (user identification - multi-class classification)
-        # For ArcFace, output is already logits
-        # For standard, output is logits
-        class_acc = (output.max(-1)[-1] == targets.squeeze()).float().mean()
+        if triplet_batch_acc is not None:
+            class_acc = triplet_batch_acc
+        else:
+            class_acc = (output.max(-1)[-1] == targets.squeeze()).float().mean()
             
         metric_logger.update(loss=loss_value)
         metric_logger.update(class_acc=class_acc)
         metric_logger.update(loss_scale=loss_scale_value)
+        if resolved_loss_type == "triplet" and hasattr(criterion, "last_batch_stats"):
+            tri_stats = criterion.last_batch_stats
+            if tri_stats:
+                metric_logger.update(
+                    tri_active=tri_stats.get("active_triplet_fraction", 0.0)
+                )
+                if "mean_d_ap" in tri_stats:
+                    metric_logger.update(tri_d_ap=tri_stats["mean_d_ap"])
+                    metric_logger.update(tri_d_an=tri_stats["mean_d_an"])
         
         min_lr = 10.
         max_lr = 0.
@@ -368,10 +402,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             log_writer.set_step()
 
     metric_logger.synchronize_between_processes()
+    loss_meter = metric_logger.meters.get("loss")
+    if loss_meter is not None and loss_meter.count == 0:
+        raise RuntimeError(
+            f"Epoch {epoch + 1}: no training batches completed successfully. "
+            f"The DataLoader yielded {batch_count} batch(es) but metrics were never updated. "
+            f"Check triplet P×K settings, data paths, and skipped-batch warnings above."
+        )
     stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     
     if count_samples:
-        actual_batch_size = data_loader.batch_size
+        actual_batch_size = getattr(data_loader, "batch_size", None)
+        if actual_batch_size is None and hasattr(data_loader, "batch_sampler"):
+            actual_batch_size = getattr(data_loader.batch_sampler, "batch_size", "P×K")
         print(f"\n{'='*60}")
         print(f"  DIAGNOSTIC: Epoch {epoch} Summary")
         print(f"{'='*60}")
@@ -398,6 +441,7 @@ def evaluate(
     criterion=None,
     collect_predictions: bool = False,
     eeg_input_mode: str = "labram",
+    loss_type=None,
 ):
     """
     Modified evaluate function that supports ArcFace loss for user identification.
@@ -416,15 +460,17 @@ def evaluate(
             remove these before JSON serialization.
         eeg_input_mode: ``"labram"`` (default) scales by ``/100`` and rearranges to patch layout;
             ``"cnn"`` uses raw ``(B, C, T)`` tensors from ``EEGDataLoader`` (no LaBraM preprocessing).
+        loss_type: ``'arcface'``, ``'triplet'``, or ``'ce'``. Overrides ``use_arcface`` when set.
     """
+    resolved_loss_type = resolve_loss_type(loss_type=loss_type, use_arcface=use_arcface)
     if eeg_input_mode not in ("labram", "cnn"):
         raise ValueError(f"eeg_input_mode must be 'labram' or 'cnn', got {eeg_input_mode!r}")
     input_chans = None
     if ch_names is not None:
         input_chans = labram_utils.get_input_chans(ch_names)
     
-    # For user identification, we use CrossEntropyLoss if not using ArcFace
-    criterion_eval = torch.nn.CrossEntropyLoss() if not use_arcface else None
+    # CrossEntropyLoss for direct logits; embedding losses use criterion forward for eval loss.
+    criterion_eval = torch.nn.CrossEntropyLoss() if not uses_embedding_logits(resolved_loss_type) else None
 
     metric_logger = labram_utils.MetricLogger(delimiter="  ")
     model.eval()
@@ -462,8 +508,11 @@ def evaluate(
         )
         with amp_ctx:
             model_to_use = model.module if hasattr(model, 'module') else model
-            if use_arcface:
-                # Extract features and compute logits via ArcFace
+            if uses_embedding_logits(resolved_loss_type):
+                if criterion is None:
+                    raise ValueError(
+                        f"criterion is required when loss_type={resolved_loss_type!r}"
+                    )
                 if hasattr(model_to_use, 'extract_features'):
                     features = _call_optional_input_chans(
                         model_to_use, 'extract_features', EEG, input_chans
@@ -474,12 +523,26 @@ def evaluate(
                     )
                 else:
                     raise AttributeError(
-                        "Model must have extract_features or forward_features for ArcFace"
+                        f"Model must have extract_features or forward_features for "
+                        f"loss_type={resolved_loss_type!r}"
                     )
 
+                if not hasattr(criterion, "compute_logits"):
+                    raise AttributeError(
+                        f"criterion must implement compute_logits for "
+                        f"loss_type={resolved_loss_type!r}"
+                    )
                 output = criterion.compute_logits(features)
                 output = output.float() if output.dtype == torch.float16 else output
-                loss = criterion(features, target)
+                if resolved_loss_type == "triplet":
+                    if hasattr(criterion, "classification_loss"):
+                        loss = criterion.classification_loss(features, target)
+                    else:
+                        loss = torch.nn.functional.cross_entropy(
+                            output, target.view(-1).long()
+                        )
+                else:
+                    loss = criterion(features, target)
             else:
                 output = _forward_logits_optional_input_chans(model_to_use, EEG, input_chans)
                 loss = criterion_eval(output, target)
@@ -508,11 +571,13 @@ def evaluate(
             print(f"   Batch size: {batch_size}")
             print(f"   Unique classes in batch: {unique_classes} (ratio: {class_ratio:.2%})")
             print(f"   Samples per class: min={min_samples_per_class}, max={max_samples_per_class}, mean={mean_samples_per_class:.2f}")
-            if class_ratio > 0.5:
+            if resolved_loss_type == "triplet":
+                print(f"   ✅ Triplet (P×K) training expects low class diversity per batch")
+            elif class_ratio > 0.5 and resolved_loss_type == "arcface":
                 print(f"   ✅ High class diversity (ratio > 50%) - this is EXPECTED and CORRECT")
                 print(f"   ✅ Indicates proper shuffling: samples from different users are mixed")
                 if eeg_input_mode == "labram":
-                    print(f"   ✅ With 3145 classes and batch_size={batch_size}, high diversity is normal")
+                    print(f"   ✅ With many user classes and large batch_size, high diversity is normal")
                     print(f"   ⚠️  sklearn warning is harmless - metrics are computed correctly")
             else:
                 print(f"   ⚠️  Low class diversity (ratio <= 50%) - may indicate clustering issue")
