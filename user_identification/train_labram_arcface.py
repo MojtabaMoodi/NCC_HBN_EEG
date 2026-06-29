@@ -1,12 +1,13 @@
 """
-Training Script for LaBraM User Identification with ArcFace Loss
+Training Script for LaBraM User Identification with ArcFace or FaceNet Triplet Loss
 
 This script uses LaBraM's native training infrastructure (layer decay LR, etc.)
-but with ArcFace loss for large-scale user identification.
+with either ArcFace (default) or FaceNet-style triplet loss for user identification.
 """
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -31,18 +32,26 @@ from optim_factory import create_optimizer, get_parameter_groups, LayerDecayValu
 # Import our modified trainer
 from user_identification.labram_trainer import train_one_epoch, evaluate
 
-# Import ArcFace loss
-from CNN.models.arcface_loss import ArcFaceLoss
+from user_identification.embedding_criterion_utils import (
+    build_training_criterion,
+    checkpoint_extra_state,
+)
+from user_identification.triplet_diagnostics import diagnose_embedding_separation
+from CNN.models.triplet_loss import TripletTrainingCriterion
 
 # Import model and data
 from user_identification.labram_model import LaBraMUserIdentificationWrapper, iter_trainable_parameter_names
-from data_processing.eeg_dataset import EEGDataLoader
+from data_processing.eeg_dataset import EEGDataLoader, EEGMapDataset, get_train_sample_list_user_identification
 from data_processing.target_transforms import create_user_identification_transform_from_hdf5
+from einops import rearrange
+from torch.utils.data import DataLoader
 
 
 def get_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser('LaBraM User Identification with ArcFace', add_help=False)
+    parser = argparse.ArgumentParser(
+        'LaBraM User Identification (ArcFace or FaceNet Triplet)', add_help=False
+    )
     
     # Data parameters
     parser.add_argument('--hdf5_dir', type=str, required=True,
@@ -84,6 +93,15 @@ def get_args():
     parser.add_argument('--update_freq', type=int, default=1,
                        help='Gradient accumulation frequency')
     
+    # Loss selection
+    parser.add_argument(
+        '--loss_type',
+        type=str,
+        default='arcface',
+        choices=['arcface', 'triplet'],
+        help='Training loss: arcface (default) or facenet triplet',
+    )
+
     # ArcFace parameters
     parser.add_argument('--arcface_margin', type=float, default=0.5,
                        help='ArcFace angular margin')
@@ -91,6 +109,25 @@ def get_args():
                        help='ArcFace scale parameter')
     parser.add_argument('--arcface_easy_margin', action='store_true',
                        help='Use easy margin for ArcFace')
+
+    # FaceNet triplet parameters (used when --loss_type triplet)
+    parser.add_argument('--triplet_margin', type=float, default=0.2,
+                       help='Triplet margin alpha (FaceNet default: 0.2; try 0.5 if loss saturates)')
+    parser.add_argument('--triplet_mining', type=str, default='semi_hard',
+                       choices=['batch_hard', 'semi_hard', 'all'],
+                       help='Triplet mining: semi_hard (FaceNet paper), batch_hard, or all')
+    parser.add_argument('--triplet_classes_per_batch', type=int, default=32,
+                       help='P in P×K triplet batching (identities per batch; FaceNet ~45)')
+    parser.add_argument('--triplet_samples_per_class', type=int, default=12,
+                       help='K in P×K triplet batching (segments per identity; FaceNet ~40)')
+    parser.add_argument('--triplet_extra_negatives', type=int, default=0,
+                       help='Random out-of-batch negative segments per batch (FaceNet paper; try 128 with batch P×K+128)')
+    parser.add_argument('--prototype_momentum', type=float, default=0.9,
+                       help='EMA momentum for online prototype updates during training')
+    parser.add_argument('--triplet_logit_scale', type=float, default=10.0,
+                       help='Scale for -distance prototype logits at eval')
+    parser.add_argument('--triplet_batches_per_epoch', type=int, default=None,
+                       help='PK mini-batches per epoch (default: train_samples//batch_size, max 10000)')
     
     # Output parameters
     parser.add_argument('--output_dir', type=str, default='./results_labram_arcface',
@@ -127,8 +164,94 @@ def get_args():
     return parser.parse_args()
 
 
+@torch.no_grad()
+def refresh_prototypes_from_train_hdf5(
+    model: torch.nn.Module,
+    hdf5_dir: str,
+    segment_length: str,
+    participant_id_to_class: dict,
+    criterion: TripletTrainingCriterion,
+    device: torch.device,
+    batch_size: int,
+    num_workers: int,
+    seed: int,
+) -> None:
+    """
+    FaceNet-pure eval: set class prototypes to mean L2-normalized train embeddings.
+
+    Matches analyze_confidence.compute_centroids_from_embeddings used for open-set.
+    """
+    train_files, _, _ = EEGDataLoader._get_hdf5_file_paths(Path(hdf5_dir), segment_length)
+    samples, class_indices, _ = get_train_sample_list_user_identification(
+        train_files,
+        participant_id_to_class=participant_id_to_class,
+        task_type="both",
+    )
+    num_classes = criterion.prototype_classifier.num_classes
+    embedding_dim = criterion.prototype_classifier.embedding_dim
+    dataset = EEGMapDataset(
+        samples=samples,
+        target_type="user_identification",
+        class_indices=class_indices,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        collate_fn=EEGDataLoader.collate_fn,
+    )
+    model.eval()
+    model_to_use = model.module if hasattr(model, "module") else model
+    sums = torch.zeros(num_classes, embedding_dim, device=device)
+    counts = torch.zeros(num_classes, device=device, dtype=torch.long)
+
+    for batch in loader:
+        eeg = batch["eeg_data"].float().to(device, non_blocking=True) / 100
+        eeg = rearrange(eeg, "B N (A T) -> B N A T", T=200)
+        labels = batch["user_identification"].to(device, non_blocking=True).long()
+        features = model_to_use.extract_features(eeg)
+        features = torch.nn.functional.normalize(features, p=2, dim=1)
+        for c in labels.unique():
+            c_int = int(c.item())
+            mask = labels == c_int
+            sums[c_int] += features[mask].sum(dim=0)
+            counts[c_int] += int(mask.sum().item())
+
+    missing = (counts == 0).nonzero(as_tuple=True)[0].cpu().tolist()
+    if missing:
+        raise RuntimeError(
+            f"Cannot compute train prototypes: {len(missing)} classes have zero "
+            f"training samples in HDF5 index (e.g. {missing[:10]})."
+        )
+    centroids = sums / counts.unsqueeze(1).clamp(min=1).to(sums.dtype)
+    centroids = torch.nn.functional.normalize(centroids, p=2, dim=1)
+    criterion.prototype_classifier.set_prototypes_from_numpy(centroids)
+    model.train()
+
+
 def main():
     args = get_args()
+
+    if args.loss_type == "triplet":
+        core_bs = args.triplet_classes_per_batch * args.triplet_samples_per_class
+        expected_bs = core_bs + args.triplet_extra_negatives
+        if args.batch_size != expected_bs:
+            raise ValueError(
+                f"For triplet loss, batch_size must equal P×K + extra_negatives = "
+                f"{args.triplet_classes_per_batch}×{args.triplet_samples_per_class}"
+                f"+{args.triplet_extra_negatives}={expected_bs}, "
+                f"got batch_size={args.batch_size}. Adjust --batch_size, P/K, or extra_negatives."
+            )
+        if args.triplet_samples_per_class <= 1:
+            raise ValueError(
+                f"triplet_samples_per_class must be > 1, got {args.triplet_samples_per_class}"
+            )
+        if args.triplet_extra_negatives < 0:
+            raise ValueError(
+                f"triplet_extra_negatives must be >= 0, got {args.triplet_extra_negatives}"
+            )
     
     # Initialize distributed training only when --distributed was passed (multi-GPU / SLURM).
     # When not passed, skip init so single-GPU runs work even if SLURM_PROCID etc. are set (e.g. salloc).
@@ -177,18 +300,42 @@ def main():
     if not args.distributed or labram_utils.is_main_process():
         print("Creating data loaders...")
     from LaBraM.labram_dataset import prepare_labram_dataset
-    from torch.utils.data import DataLoader
     
-    # Create LaBraM-compatible datasets (returns (X, Y) tuples)
-    train_dataset, val_dataset, test_dataset = prepare_labram_dataset(
-        dataset_type="user_identification",
-        hdf5_dir=args.hdf5_dir,
-        segment_length=args.segment_length,
-        task_type="both",
-        random_seed=args.seed,
-        user_identification_transform=transform,
-        sampling_rate=200
-    )
+    participant_id_to_class = transform.participant_id_to_class_idx
+
+    if args.loss_type == "triplet":
+        train_loader = EEGDataLoader.create_pk_user_identification_train_loader(
+            hdf5_dir=args.hdf5_dir,
+            segment_length=args.segment_length,
+            participant_id_to_class=participant_id_to_class,
+            classes_per_batch=args.triplet_classes_per_batch,
+            samples_per_class=args.triplet_samples_per_class,
+            task_type="both",
+            num_workers=args.num_workers,
+            random_seed=args.seed,
+            batches_per_epoch=args.triplet_batches_per_epoch,
+            extra_negatives=args.triplet_extra_negatives,
+        )
+        _, val_dataset, test_dataset = prepare_labram_dataset(
+            dataset_type="user_identification",
+            hdf5_dir=args.hdf5_dir,
+            segment_length=args.segment_length,
+            task_type="both",
+            random_seed=args.seed,
+            user_identification_transform=transform,
+            sampling_rate=200,
+        )
+    else:
+        train_dataset, val_dataset, test_dataset = prepare_labram_dataset(
+            dataset_type="user_identification",
+            hdf5_dir=args.hdf5_dir,
+            segment_length=args.segment_length,
+            task_type="both",
+            random_seed=args.seed,
+            user_identification_transform=transform,
+            sampling_rate=200,
+        )
+        train_loader = None
     
     # For distributed training, IterableDataset handles sharding internally
     # No need for DistributedSampler (IterableDataset doesn't support it)
@@ -203,14 +350,15 @@ def main():
     
     # Create DataLoaders (LaBraM datasets return (X, Y) tuples, so no custom collate_fn needed)
     # Note: IterableDataset doesn't support DistributedSampler, sharding is handled in dataset
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=True,
-        drop_last=True
-    )
-    
+    if args.loss_type != "triplet":
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=True,
+        )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=int(1.5 * args.batch_size),  # Larger batch for validation
@@ -229,6 +377,13 @@ def main():
     
     if not args.distributed or labram_utils.is_main_process():
         print(f"✅ Data loaders created using LaBraM's dataset format (X, Y) tuples")
+        print(f"   Loss type: {args.loss_type}")
+        if args.loss_type == "triplet":
+            print(
+                f"   Triplet train loader: P={args.triplet_classes_per_batch}, "
+                f"K={args.triplet_samples_per_class}, extra_neg={args.triplet_extra_negatives}, "
+                f"batch_size={args.batch_size}, batches/epoch={len(train_loader)}"
+            )
         if args.distributed:
             total_batch_size = args.batch_size * num_tasks * args.update_freq
             print(f"   Effective batch size: {total_batch_size} (batch_size={args.batch_size} × {num_tasks} GPUs × update_freq={args.update_freq})")
@@ -285,17 +440,28 @@ def main():
             else:
                 print(f"      ({len(trainable_names)} trainable tensors; names omitted)")
     
-    # Create ArcFace loss
-    criterion = ArcFaceLoss(
+    # Create training criterion (ArcFace or FaceNet triplet)
+    criterion = build_training_criterion(
+        args.loss_type,
         num_classes=num_classes,
         embedding_dim=embedding_dim,
-        margin=args.arcface_margin,
-        scale=args.arcface_scale,
-        easy_margin=args.arcface_easy_margin
+        arcface_margin=args.arcface_margin,
+        arcface_scale=args.arcface_scale,
+        arcface_easy_margin=args.arcface_easy_margin,
+        triplet_margin=args.triplet_margin,
+        triplet_mining=args.triplet_mining,
+        prototype_momentum=args.prototype_momentum,
+        triplet_logit_scale=args.triplet_logit_scale,
+        device=device,
     )
-    criterion = criterion.to(device)
     if not args.distributed or labram_utils.is_main_process():
-        print(f"✅ ArcFace loss created: margin={args.arcface_margin}, scale={args.arcface_scale}")
+        if args.loss_type == "arcface":
+            print(f"✅ ArcFace loss created: margin={args.arcface_margin}, scale={args.arcface_scale}")
+        else:
+            print(
+                f"✅ FaceNet triplet loss: margin={args.triplet_margin}, mining={args.triplet_mining}, "
+                f"P×K={args.triplet_classes_per_batch}×{args.triplet_samples_per_class}"
+            )
     
     # Create optimizer with layer decay
     # Use model_without_ddp for optimizer creation (already set above)
@@ -338,9 +504,17 @@ def main():
     # Create loss scaler
     loss_scaler = labram_utils.NativeScalerWithGradNormCount()
     
-    # Create LR and WD schedules
-    # Estimate steps per epoch (use placeholder for IterableDataset)
-    num_training_steps_per_epoch = 10000  # Placeholder for IterableDataset
+    # Steps per epoch: ArcFace IterableDataset is capped at 10k; triplet PK must match
+    # len(train_loader) so the cosine LR schedule stays aligned with actual updates.
+    if args.loss_type == "triplet":
+        num_training_steps_per_epoch = len(train_loader)
+        if num_training_steps_per_epoch <= 0:
+            raise RuntimeError(
+                "Triplet PK train loader has zero batches per epoch. "
+                "Check P×K settings and training data."
+            )
+    else:
+        num_training_steps_per_epoch = 10000  # Placeholder cap for IterableDataset
     
     lr_schedule_values = labram_utils.cosine_scheduler(
         args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
@@ -353,12 +527,15 @@ def main():
     
     if not args.distributed or labram_utils.is_main_process():
         print(f"✅ Optimizer and schedules created")
+        print(f"   Steps per epoch: {num_training_steps_per_epoch}")
         print(f"   Max LR: {max(lr_schedule_values):.6f}, Min LR: {min(lr_schedule_values):.6f}")
     
     # Resume from checkpoint if specified
     start_epoch = 0
     max_accuracy = 0.0
-    best_test_accuracy = 0.0  # test accuracy at best val epoch (for results.json)
+    best_test_accuracy = 0.0
+    best_val_loss = float("inf")
+    last_separation_ratio = float("nan")
     patience_counter = 0  # For early stopping (tracks epochs without improvement)
     if args.resume:
         if not args.distributed or labram_utils.is_main_process():
@@ -402,9 +579,28 @@ def main():
         if 'loss_scaler_state_dict' in checkpoint and loss_scaler is not None:
             loss_scaler.load_state_dict(checkpoint['loss_scaler_state_dict'])
         
-        # Load ArcFace state if available
-        if 'arcface_state_dict' in checkpoint:
-            criterion.load_state_dict(checkpoint['arcface_state_dict'])
+        # Load loss-specific state if available
+        ckpt_loss_type = checkpoint.get("loss_type", "arcface")
+        if ckpt_loss_type != args.loss_type:
+            raise ValueError(
+                f"Checkpoint loss_type={ckpt_loss_type!r} does not match --loss_type={args.loss_type!r}"
+            )
+        if args.loss_type == "arcface":
+            if "arcface_state_dict" not in checkpoint:
+                raise KeyError("ArcFace resume checkpoint missing 'arcface_state_dict'")
+            criterion.load_state_dict(checkpoint["arcface_state_dict"])
+        else:
+            if "triplet_criterion_state_dict" in checkpoint:
+                criterion.load_state_dict(checkpoint["triplet_criterion_state_dict"])
+            elif "prototype_state_dict" in checkpoint:
+                criterion.prototype_classifier.load_state_dict(
+                    checkpoint["prototype_state_dict"]
+                )
+            else:
+                raise KeyError(
+                    "Triplet resume checkpoint missing 'triplet_criterion_state_dict' "
+                    "or 'prototype_state_dict'"
+                )
         
         # Get starting epoch and max accuracy
         # Note: checkpoint saves 'epoch' as 1-indexed (epoch + 1 after completing the epoch)
@@ -452,6 +648,11 @@ def main():
     
     for epoch in range(start_epoch, args.epochs):
         epoch_start_time = time.time()
+
+        if args.loss_type == "triplet":
+            pk_sampler = getattr(train_loader, "batch_sampler", None)
+            if pk_sampler is not None and hasattr(pk_sampler, "set_epoch"):
+                pk_sampler.set_epoch(epoch)
         
         # Train (epoch is 0-indexed in the loop, but we display as 1-indexed)
         train_stats = train_one_epoch(
@@ -464,8 +665,23 @@ def main():
             num_training_steps_per_epoch=num_training_steps_per_epoch,
             update_freq=args.update_freq,
             ch_names=None,  # Will be determined from model
-            use_arcface=True
+            loss_type=args.loss_type,
         )
+
+        if args.loss_type == "triplet":
+            if not args.distributed or labram_utils.is_main_process():
+                print("  Refreshing FaceNet prototypes from full train split...")
+            refresh_prototypes_from_train_hdf5(
+                model,
+                args.hdf5_dir,
+                args.segment_length,
+                participant_id_to_class,
+                criterion,
+                device,
+                batch_size=int(1.5 * args.batch_size),
+                num_workers=args.num_workers,
+                seed=args.seed,
+            )
         
         # Validate
         val_stats = evaluate(
@@ -473,8 +689,8 @@ def main():
             header=f'Val Epoch {epoch+1}:',
             ch_names=None,
             metrics=['accuracy'],
-            use_arcface=True,
-            criterion=criterion
+            criterion=criterion,
+            loss_type=args.loss_type,
         )
         
         # Test
@@ -483,8 +699,8 @@ def main():
             header=f'Test Epoch {epoch+1}:',
             ch_names=None,
             metrics=['accuracy'],
-            use_arcface=True,
-            criterion=criterion
+            criterion=criterion,
+            loss_type=args.loss_type,
         )
         
         epoch_time = time.time() - epoch_start_time
@@ -495,51 +711,114 @@ def main():
         val_loss = val_stats.get('loss', 0.0)
         val_acc = val_stats.get('accuracy', 0.0) * 100
         test_acc = test_stats.get('accuracy', 0.0) * 100
+        tri_active = train_stats.get('tri_active', None)
+        tri_d_ap = train_stats.get('tri_d_ap', None)
+        tri_d_an = train_stats.get('tri_d_an', None)
+
+        separation_stats = None
+        if args.loss_type == "triplet" and (
+            not args.distributed or labram_utils.is_main_process()
+        ):
+            separation_stats = diagnose_embedding_separation(
+                model, val_loader, device,
+                max_batches=20,
+                header="Val embedding separation",
+            )
+            last_separation_ratio = separation_stats["inter_over_intra_ratio"]
         
         # Only print and save on main process for distributed training
         if not args.distributed or labram_utils.is_main_process():
-            print(f"  → Epoch {epoch+1:3d}/{args.epochs} | "
-                  f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-                  f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
-                  f"Test Acc: {test_acc:.4f}% | LR: {current_lr:.6f} | Time: {epoch_time:.2f}s")
+            line = (
+                f"  → Epoch {epoch+1:3d}/{args.epochs} | "
+                f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
+                f"Train Acc: {train_acc:.4f}% | Val Acc: {val_acc:.4f}% | "
+                f"Test Acc: {test_acc:.4f}% | LR: {current_lr:.6f} | Time: {epoch_time:.2f}s"
+            )
+            if tri_active is not None:
+                line += f" | tri_active: {tri_active:.3f}"
+            if tri_d_ap is not None and tri_d_an is not None:
+                line += f" | d_ap: {tri_d_ap:.3f} d_an: {tri_d_an:.3f}"
+            if separation_stats is not None:
+                line += f" | inter/intra: {separation_stats['inter_over_intra_ratio']:.3f}"
+            print(line)
         
         # Save checkpoint and check for early stopping (only on main process)
         if not args.distributed or labram_utils.is_main_process():
-            # Check for improvement (early stopping logic)
-            improvement_threshold = max_accuracy + args.early_stopping_min_delta
-            if val_acc > improvement_threshold:
-                # Significant improvement - save new best and reset patience
-                improvement = val_acc - max_accuracy
-                max_accuracy = val_acc
-                best_test_accuracy = test_acc
-                patience_counter = 0
-                checkpoint = {
-                    'epoch': epoch + 1,
-                    'model_state_dict': model_without_ddp.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_scaler_state_dict': loss_scaler.state_dict(),
-                    'arcface_state_dict': criterion.state_dict(),
-                    'val_accuracy': val_acc,
-                    'test_accuracy': test_acc,
-                    'num_classes': num_classes,
-                    'embedding_dim': embedding_dim,
-                    'freeze_backbone': bool(args.freeze_backbone),
-                }
-                checkpoint_path = output_dir / 'best_model.pth'
-                torch.save(checkpoint, checkpoint_path)
-                print(f"  ✅ Best model saved (val_acc: {val_acc:.4f}%, improvement: {improvement:.4f}%)")
+            if args.loss_type == "triplet":
+                # Triplet: val loss (prototype CE) is a more stable early-stop signal than ~0% val acc
+                improved = val_loss < (best_val_loss - args.early_stopping_min_delta)
+                if improved:
+                    best_val_loss = val_loss
+                    max_accuracy = val_acc
+                    best_test_accuracy = test_acc
+                    patience_counter = 0
+                    checkpoint = {
+                        'epoch': epoch + 1,
+                        'model_state_dict': model_without_ddp.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss_scaler_state_dict': loss_scaler.state_dict(),
+                        'val_accuracy': val_acc,
+                        'test_accuracy': test_acc,
+                        'val_loss': val_loss,
+                        'num_classes': num_classes,
+                        'embedding_dim': embedding_dim,
+                        'freeze_backbone': bool(args.freeze_backbone),
+                    }
+                    if separation_stats is not None:
+                        checkpoint['embedding_separation'] = separation_stats
+                    checkpoint.update(checkpoint_extra_state(args.loss_type, criterion))
+                    checkpoint_path = output_dir / 'best_model.pth'
+                    torch.save(checkpoint, checkpoint_path)
+                    print(
+                        f"  ✅ Best model saved (val_loss: {val_loss:.4f}, val_acc: {val_acc:.4f}%)"
+                    )
+                else:
+                    patience_counter += 1
+                    if args.early_stopping_patience > 0:
+                        print(
+                            f"  ⏳ No val_loss improvement for {patience_counter}/"
+                            f"{args.early_stopping_patience} epochs "
+                            f"(val_loss: {val_loss:.4f}, best: {best_val_loss:.4f})"
+                        )
             else:
-                # No improvement - increment patience counter
-                patience_counter += 1
-                if args.early_stopping_patience > 0:
-                    print(f"  ⏳ No improvement for {patience_counter}/{args.early_stopping_patience} epochs (val_acc: {val_acc:.4f}%, best: {max_accuracy:.4f}%)")
+                improvement_threshold = max_accuracy + args.early_stopping_min_delta
+                if val_acc > improvement_threshold:
+                    improvement = val_acc - max_accuracy
+                    max_accuracy = val_acc
+                    best_test_accuracy = test_acc
+                    patience_counter = 0
+                    checkpoint = {
+                        'epoch': epoch + 1,
+                        'model_state_dict': model_without_ddp.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss_scaler_state_dict': loss_scaler.state_dict(),
+                        'val_accuracy': val_acc,
+                        'test_accuracy': test_acc,
+                        'num_classes': num_classes,
+                        'embedding_dim': embedding_dim,
+                        'freeze_backbone': bool(args.freeze_backbone),
+                    }
+                    checkpoint.update(checkpoint_extra_state(args.loss_type, criterion))
+                    checkpoint_path = output_dir / 'best_model.pth'
+                    torch.save(checkpoint, checkpoint_path)
+                    print(f"  ✅ Best model saved (val_acc: {val_acc:.4f}%, improvement: {improvement:.4f}%)")
+                else:
+                    patience_counter += 1
+                    if args.early_stopping_patience > 0:
+                        print(f"  ⏳ No improvement for {patience_counter}/{args.early_stopping_patience} epochs (val_acc: {val_acc:.4f}%, best: {max_accuracy:.4f}%)")
             
             # Early stopping check
             if args.early_stopping_patience > 0 and patience_counter >= args.early_stopping_patience:
                 print(f"\n{'='*80}")
                 print(f"⏹️  Early stopping triggered at epoch {epoch+1}")
                 print(f"   No improvement for {patience_counter} epochs")
-                print(f"   Best validation accuracy: {max_accuracy:.4f}%")
+                if args.loss_type == "triplet":
+                    print(f"   Best validation loss: {best_val_loss:.4f}")
+                    print(f"   Best validation accuracy: {max_accuracy:.4f}%")
+                    if not math.isnan(last_separation_ratio):
+                        print(f"   Last inter/intra ratio: {last_separation_ratio:.4f}")
+                else:
+                    print(f"   Best validation accuracy: {max_accuracy:.4f}%")
                 print(f"{'='*80}\n")
                 break
             
@@ -551,9 +830,9 @@ def main():
                     'model_state_dict': model_without_ddp.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss_scaler_state_dict': loss_scaler.state_dict(),
-                    'arcface_state_dict': criterion.state_dict(),
                     'freeze_backbone': bool(args.freeze_backbone),
                 }
+                checkpoint.update(checkpoint_extra_state(args.loss_type, criterion))
                 torch.save(checkpoint, checkpoint_path)
     
     total_time = time.time() - start_time
@@ -562,7 +841,14 @@ def main():
             'val_accuracy': float(max_accuracy),
             'test_accuracy': float(best_test_accuracy),
             'freeze_backbone': bool(args.freeze_backbone),
+            'loss_type': args.loss_type,
         }
+        if args.loss_type == "triplet":
+            results['best_val_loss'] = float(best_val_loss)
+            results['triplet_mining'] = args.triplet_mining
+            results['triplet_margin'] = float(args.triplet_margin)
+            if not math.isnan(last_separation_ratio):
+                results['last_inter_over_intra_ratio'] = float(last_separation_ratio)
         results_path = output_dir / 'results.json'
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2)
