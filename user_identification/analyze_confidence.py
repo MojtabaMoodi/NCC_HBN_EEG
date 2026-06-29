@@ -38,7 +38,10 @@ from data_processing.target_transforms import (
     UserIdentificationTransform
 )
 from LaBraM.labram_dataset import prepare_labram_dataset, prepare_labram_unknown_dataset
-from CNN.models.arcface_loss import ArcFaceLoss
+from user_identification.embedding_criterion_utils import (
+    load_criterion_from_checkpoint,
+    uses_embedding_logits,
+)
 import utils as labram_utils
 
 
@@ -65,18 +68,12 @@ def _format_histogram_stats(arr: np.ndarray) -> str:
 
 def load_model(checkpoint_path: str, hdf5_dir: str, device: torch.device) -> tuple:
     """
-    Load trained LaBraM model and ArcFace criterion from checkpoint.
-    
-    Args:
-        checkpoint_path: Path to model checkpoint
-        hdf5_dir: Directory containing HDF5 files (to get num_classes)
-        device: Device to load model on
-        
+    Load trained LaBraM model and embedding criterion from checkpoint.
+
     Returns:
-        Tuple of (model, arcface_criterion, use_arcface)
-        - model: Loaded model in eval mode
-        - arcface_criterion: ArcFace criterion if available, None otherwise
-        - use_arcface: Boolean indicating if ArcFace should be used
+        Tuple of (model, embedding_criterion, loss_type)
+        - embedding_criterion: ArcFace or PrototypeClassifier for arcface/triplet; None otherwise
+        - loss_type: 'arcface', 'triplet', or 'ce'
     """
     print(f"Loading model from {checkpoint_path}...")
     
@@ -117,57 +114,45 @@ def load_model(checkpoint_path: str, hdf5_dir: str, device: torch.device) -> tup
     model.load_state_dict(state_dict, strict=False)
     model = model.to(device)
     model.eval()
-    
-    # Check if checkpoint has ArcFace criterion
-    arcface_criterion = None
-    use_arcface = False
-    if 'arcface_state_dict' in checkpoint:
-        print("Found ArcFace criterion in checkpoint, loading it...")
-        use_arcface = True
-        
-        # Get embedding dimension from model
+
+    loss_type = checkpoint.get("loss_type")
+    if loss_type is None:
+        if "arcface_state_dict" in checkpoint:
+            loss_type = "arcface"
+        elif "prototype_state_dict" in checkpoint or "triplet_criterion_state_dict" in checkpoint:
+            loss_type = "triplet"
+        else:
+            loss_type = "ce"
+
+    embedding_criterion = None
+    if uses_embedding_logits(loss_type):
         model_to_use = _unwrap_model(model)
-        if hasattr(model_to_use, 'fc2_intermediate'):
+        if hasattr(model_to_use, "fc2_intermediate"):
             embedding_dim = model_to_use.fc2_intermediate.out_features
         else:
             embedding_dim = model_to_use.embed_dim
-        
-        # Create ArcFace criterion with default parameters (should match training)
-        arcface_criterion = ArcFaceLoss(
+        embedding_criterion, loss_type = load_criterion_from_checkpoint(
+            checkpoint,
             num_classes=num_classes,
             embedding_dim=embedding_dim,
-            margin=0.5,  # Default from training script
-            scale=256.0,  # Default from training script
-            easy_margin=False
+            device=device,
         )
-        arcface_criterion.load_state_dict(checkpoint['arcface_state_dict'])
-        arcface_criterion = arcface_criterion.to(device)
-        arcface_criterion.eval()
-        print(f"✅ ArcFace criterion loaded (embedding_dim={embedding_dim})")
+        print(f"✅ Loaded {loss_type} embedding criterion (embedding_dim={embedding_dim})")
     else:
-        print("⚠️  No ArcFace criterion found in checkpoint, using standard forward()")
-    
+        print("⚠️  No embedding criterion in checkpoint; using standard forward()")
+
     print("Model loaded successfully!")
-    return model, arcface_criterion, use_arcface
+    return model, embedding_criterion, loss_type
 
 
 def run_inference(model: nn.Module, data_loader: DataLoader, device: torch.device,
-                 arcface_criterion: nn.Module = None, use_arcface: bool = False,
+                 embedding_criterion: nn.Module = None, loss_type: str = "ce",
                  return_embeddings: bool = False) -> tuple:
     """
     Run inference on data and collect predictions, confidence scores, and labels.
-    
-    Args:
-        model: Model in eval mode
-        data_loader: DataLoader for test/validation data
-        device: Device to run inference on
-        arcface_criterion: ArcFace criterion if model was trained with ArcFace (optional)
-        use_arcface: Whether to use ArcFace for inference (default: False)
-        return_embeddings: If True and use_arcface, also return L2-normalized embeddings (default: False)
-        
-    Returns:
-        Tuple of (predictions, confidence_scores, true_labels, user_ids) or, when return_embeddings=True,
-        (predictions, confidence_scores, true_labels, user_ids, embeddings).
+
+    For arcface/triplet (FaceNet-pure): closed-set predictions use embedding_criterion.compute_logits
+    (nearest prototype for triplet after train centroids are synced).
     """
     model.eval()
     all_predictions = []
@@ -239,20 +224,18 @@ def run_inference(model: nn.Module, data_loader: DataLoader, device: torch.devic
             eeg_data = rearrange(eeg_data, 'B N (A T) -> B N A T', T=patch_size)
             labels = labels.to(device, non_blocking=True).long()
             
-            # Get model output
-            # For ArcFace models, extract features and compute logits via ArcFace
-            # For standard models, use direct forward
-            if use_arcface and arcface_criterion is not None:
-                # Extract features and compute logits via ArcFace
+            # Embedding losses: extract features and compute logits (ArcFace or nearest prototype)
+            if uses_embedding_logits(loss_type) and embedding_criterion is not None:
                 model_to_use = _unwrap_model(model)
                 if hasattr(model_to_use, 'extract_features'):
                     features = model_to_use.extract_features(eeg_data, input_chans=input_chans)
                 else:
-                    raise AttributeError("Model must have extract_features for ArcFace inference")
+                    raise AttributeError(
+                        f"Model must have extract_features for loss_type={loss_type!r}"
+                    )
                 if return_embeddings:
                     all_embeddings.append(features.cpu().numpy())
-                # Compute logits from ArcFace
-                outputs = arcface_criterion.compute_logits(features)
+                outputs = embedding_criterion.compute_logits(features)
                 outputs = outputs.float() if outputs.dtype == torch.float16 else outputs
             else:
                 # Standard forward pass
@@ -357,26 +340,41 @@ def compute_ood_distances(embeddings: np.ndarray, centroids: np.ndarray,
 
 
 def load_or_compute_centroids(model: nn.Module, train_loader: DataLoader, device: torch.device,
-                              arcface_criterion: nn.Module, use_arcface: bool,
+                              embedding_criterion: nn.Module, loss_type: str,
                               output_dir: Path, num_classes: int) -> np.ndarray:
     """
     Load cached known-user centroids or compute from train set (one centroid per class).
     Used for feature-space OOD: distance to nearest centroid indicates in- vs out-of-distribution.
+
+    For triplet (FaceNet-pure), also syncs centroids into embedding_criterion for closed-set preds.
     """
     cache_path = output_dir / 'ood_centroids.npz'
     if cache_path.exists():
         data = np.load(cache_path)
-        return data['centroids']
-    if not use_arcface:
-        raise ValueError("Centroids require use_arcface (embeddings from extract_features).")
-    result = run_inference(
-        model, train_loader, device, arcface_criterion, use_arcface, return_embeddings=True
-    )
-    _, _, true_labels, _, embeddings = result
-    centroids = compute_centroids_from_embeddings(embeddings, true_labels, num_classes)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(cache_path, centroids=centroids)
-    print(f"Saved OOD centroids to {cache_path}")
+        centroids = data['centroids']
+    else:
+        if not uses_embedding_logits(loss_type):
+            raise ValueError(
+                f"Centroids require embedding loss (arcface/triplet), got loss_type={loss_type!r}"
+            )
+        result = run_inference(
+            model, train_loader, device, embedding_criterion, loss_type,
+            return_embeddings=True,
+        )
+        _, _, true_labels, _, embeddings = result
+        centroids = compute_centroids_from_embeddings(embeddings, true_labels, num_classes)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(cache_path, centroids=centroids)
+        print(f"Saved OOD centroids to {cache_path}")
+
+    if loss_type == "triplet" and embedding_criterion is not None:
+        if not hasattr(embedding_criterion, "set_prototypes_from_numpy"):
+            raise AttributeError(
+                "Triplet embedding_criterion must implement set_prototypes_from_numpy"
+            )
+        embedding_criterion.set_prototypes_from_numpy(
+            torch.from_numpy(centroids).to(device=embedding_criterion.prototypes.device)
+        )
     return centroids
 
 
@@ -768,7 +766,7 @@ def main():
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
-    model, arcface_criterion, use_arcface = load_model(str(checkpoint_path), args.hdf5_dir, device)
+    model, embedding_criterion, loss_type = load_model(str(checkpoint_path), args.hdf5_dir, device)
     
     def run_analysis_on_split(split_name: str, dataset, output_suffix: str = "", centroids=None,
                               return_results_for_open_set: bool = False):
@@ -780,10 +778,13 @@ def main():
             shuffle=False,
             pin_memory=(device.type == 'cuda')
         )
-        need_embeddings = (centroids is not None and use_arcface and
-                          (return_results_for_open_set or split_name == "unknown"))
+        need_embeddings = (
+            centroids is not None
+            and uses_embedding_logits(loss_type)
+            and (return_results_for_open_set or split_name == "unknown")
+        )
         result = run_inference(
-            model, data_loader, device, arcface_criterion, use_arcface,
+            model, data_loader, device, embedding_criterion, loss_type,
             return_embeddings=need_embeddings
         )
         predictions, confidence_scores, true_labels, _ = result[:4]
@@ -873,15 +874,16 @@ def main():
             user_identification_transform=transform,
             sampling_rate=200
         )
-        # OOD centroids for unknown split and open-set (only when ArcFace)
+        # OOD centroids for unknown split and open-set (arcface and FaceNet triplet)
         centroids = None
-        if use_arcface:
+        if uses_embedding_logits(loss_type):
             train_loader = DataLoader(
                 train_dataset, batch_size=args.batch_size, num_workers=args.num_workers,
                 shuffle=False, pin_memory=(device.type == 'cuda')
             )
             centroids = load_or_compute_centroids(
-                model, train_loader, device, arcface_criterion, use_arcface, output_dir, num_classes
+                model, train_loader, device, embedding_criterion, loss_type,
+                output_dir, num_classes,
             )
         unknown_dataset = prepare_labram_unknown_dataset(
             hdf5_dir=args.hdf5_dir,
@@ -902,7 +904,12 @@ def main():
                 return_results_for_open_set=(centroids is not None)
             )
             # Open-set: tune threshold on test+unknown and report (reuse test_result from above)
-            if centroids is not None and use_arcface and test_result is not None and unknown_result is not None:
+            if (
+                centroids is not None
+                and uses_embedding_logits(loss_type)
+                and test_result is not None
+                and unknown_result is not None
+            ):
                 (test_pred, _, test_true, test_emb) = test_result
                 (unknown_pred, _, unknown_true, unknown_emb) = unknown_result
                 test_known = ood_distance_to_known_user_score(compute_ood_distances(test_emb, centroids))
@@ -946,7 +953,7 @@ def main():
                 raise FileNotFoundError(
                     "Unknown split not found. Run preprocessing with --consider_unknown to create it."
                 )
-            if use_arcface:
+            if uses_embedding_logits(loss_type):
                 transform, num_classes = create_user_identification_transform_from_hdf5(args.hdf5_dir)
                 train_dataset, _, _ = prepare_labram_dataset(
                     dataset_type="user_identification",
@@ -962,7 +969,8 @@ def main():
                     shuffle=False, pin_memory=(device.type == 'cuda')
                 )
                 centroids = load_or_compute_centroids(
-                    model, train_loader, device, arcface_criterion, use_arcface, output_dir, num_classes
+                    model, train_loader, device, embedding_criterion, loss_type,
+                    output_dir, num_classes,
                 )
             run_analysis_on_split(args.split, dataset, centroids=centroids)
         else:
@@ -981,7 +989,21 @@ def main():
                 'val': val_dataset,
                 'test': test_dataset
             }[args.split]
-            run_analysis_on_split(args.split, dataset)
+            centroids = None
+            if uses_embedding_logits(loss_type):
+                _, num_classes = create_user_identification_transform_from_hdf5(args.hdf5_dir)
+                train_loader = DataLoader(
+                    train_dataset,
+                    batch_size=args.batch_size,
+                    num_workers=args.num_workers,
+                    shuffle=False,
+                    pin_memory=(device.type == 'cuda'),
+                )
+                centroids = load_or_compute_centroids(
+                    model, train_loader, device, embedding_criterion, loss_type,
+                    output_dir, num_classes,
+                )
+            run_analysis_on_split(args.split, dataset, centroids=centroids)
     
     print(f"\n{'='*60}")
     print("Analysis complete!")
