@@ -1,6 +1,6 @@
 # User Identification Module
 
-This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (training, evaluation, open-set analysis with known vs unknown participants), **CNN or ResNet with ArcFace** (`cnn_resnet_arcface/train_user_identification_backbone.py`), and an alternative **CNN experiment pipeline** via `main.py` (gender/age and related tasks).
+This module provides tools for **user identification**: the model learns which **participant (user)** an EEG segment belongs to. It supports **LaBraM with ArcFace** (default) or **LaBraM with FaceNet-style triplet loss** (training, evaluation, open-set analysis with known vs unknown participants), **CNN or ResNet with ArcFace** (`cnn_resnet_arcface/train_user_identification_backbone.py`), and an alternative **CNN experiment pipeline** via `main.py` (gender/age and related tasks).
 
 **Run from project root:** All scripts and wrappers assume the EEG project root as the current working directory (e.g. `cd /path/to/EEG` before running). The shell wrappers set this explicitly; when calling Python scripts directly, run them from the project root so imports and paths resolve correctly. **Usage steps:** [Prepare data → Validate → Train → (optional) Analyze](#usage-steps).
 
@@ -12,7 +12,9 @@ This module provides tools for **user identification**: the model learns which *
 
 | What | Where |
 |------|--------|
-| Training (LaBraM + ArcFace) | `run_4s.sh` or `train_labram_arcface.py` |
+| Training (LaBraM + ArcFace, default) | `run_4s.sh` or `train_labram_arcface.py` |
+| Training (LaBraM + FaceNet triplet) | `train_labram_arcface.py --loss_type triplet` (see [FaceNet triplet](#training-labram--facenet-triplet-loss)) |
+| Triplet checkpoint diagnostics | `diagnose_triplet_checkpoint.py` |
 | **5-fold CV** (disjoint unknown, mean ± std) | `run_5fold_cv.py` (data: `preprocess_user_identification.py --n_folds 5`); optional `--train_script` for CNN/ResNet ArcFace; per-fold `fold_k/train_fold_k.log`; use `--aggregate_only` to aggregate results from folds trained on separate machines |
 | **CNN / ResNet + ArcFace (user identification)** | `cnn_resnet_arcface/train_user_identification_backbone.py`; active/passive eval: `cnn_resnet_arcface/eval_active_passive_cnn_resnet.py` |
 | Test active/passive accuracy (per fold or all folds) | `eval_active_passive_test.py` |
@@ -77,7 +79,7 @@ For 5-fold data, validate one fold: `--hdf5_dir /path/to/user_id_5fold/fold_0`.
 
 **Single run:**
 ```bash
-# Easiest: use wrapper (output under ./results_user_id_4s_labram_arcface)
+# Easiest: use wrapper (output under ./results_user_id_4s_labram_arcface) — ArcFace only
 OUTPUT_DIR=/path/to/my_run ./user_identification/run_4s.sh
 
 # Or call the training script directly (set paths explicitly)
@@ -85,6 +87,15 @@ python user_identification/train_labram_arcface.py \
   --hdf5_dir /path/to/processed_eeg_data_user_identification \
   --output_dir /path/to/my_run \
   --segment_length 4s --epochs 200 --batch_size 192 --seed 42
+
+# FaceNet triplet (same script, different loss and batch layout — see dedicated section)
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir /path/to/fold_0 \
+  --output_dir /path/to/triplet_run \
+  --segment_length 4s --loss_type triplet \
+  --batch_size 512 --triplet_classes_per_batch 32 \
+  --triplet_samples_per_class 12 --triplet_extra_negatives 128 \
+  --epochs 200 --seed 42
 ```
 
 **5-fold CV (train one model per fold, then get mean ± std):**
@@ -97,7 +108,7 @@ python user_identification/run_5fold_cv.py \
 ```
 Summary is written to `output_root/cv_summary.json`. Each fold’s training subprocess stdout/stderr is saved under `output_root/fold_k/train_fold_k.log`.
 
-**Optional `train_script`:** by default `run_5fold_cv.py` invokes `train_labram_arcface.py`. For CNN or ResNet + ArcFace user identification, pass e.g. `--train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py` plus that script’s flags (`--backbone`, etc.); unknown CLI tokens are forwarded to the training script, and `--hdf5_dir` / `--output_dir` are set per fold automatically. See [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification).
+**Optional `train_script`:** by default `run_5fold_cv.py` invokes `train_labram_arcface.py`. For CNN or ResNet + ArcFace user identification, pass e.g. `--train_script user_identification/cnn_resnet_arcface/train_user_identification_backbone.py` plus that script’s flags (`--backbone`, etc.); unknown CLI tokens are forwarded to the training script, and `--hdf5_dir` / `--output_dir` are set per fold automatically. For **FaceNet triplet**, pass `--loss_type triplet` and triplet-specific flags (see [FaceNet triplet](#training-labram--facenet-triplet-loss)). See [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification).
 
 ### 4. Optional: user registration evaluation (unknown-only)
 
@@ -305,15 +316,18 @@ python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
 
 | File | Description |
 |------|-------------|
-| `train_labram_arcface.py` | LaBraM + ArcFace training (primary training script) |
+| `train_labram_arcface.py` | LaBraM training with **ArcFace** (default) or **FaceNet triplet** (`--loss_type triplet`) |
 | `run_5fold_cv.py` | Run N-fold CV: train one model per fold on data from `--n_folds` preprocessing, then report mean ± std of val/test accuracy and save `cv_summary.json`. Optional `--train_script` (default: `train_labram_arcface.py`). Writes `fold_k/train_fold_k.log` per fold. Use `--aggregate_only` to only aggregate existing fold results (e.g. after training each fold on a separate machine). |
-| `eval_active_passive_test.py` | Evaluate saved checkpoint(s) on **test** split with `task_type=active` and `task_type=passive` separately; writes per-fold metrics and mean ± std summary. |
+| `eval_active_passive_test.py` | Evaluate saved checkpoint(s) on **test** split with `task_type=active` and `task_type=passive` separately; supports ArcFace and triplet checkpoints. |
 | `run_all_folds_active_passive_test_unknown_eval.py` | Orchestrates fold/segment evaluation: per-fold test active/passive accuracy + per-fold `analyze_confidence.py --split both` for active/passive; writes aggregate summary JSON and optional split logs. |
-| `run_4s.sh` | Bash wrapper for 4s training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
+| `run_4s.sh` | Bash wrapper for 4s **ArcFace** training: single-GPU or multi-GPU (interactive or SLURM batch). HDF5 path and `cd` to project root are hardcoded; for custom paths use the direct Python command or edit the script. |
 | `run_4s.slurm` | SLURM batch script for cluster runs (output_dir and hdf5_dir are fixed in the script; no resume by default—edit to add `--resume` or `OUTPUT_DIR` if needed). |
 | `labram_model.py` | LaBraM wrapper for user identification |
-| `labram_trainer.py` | Training loop and ArcFace integration |
-| `analyze_confidence.py` | Confidence and OOD analysis: test/unknown splits, open-set threshold tuning |
+| `labram_trainer.py` | Training loop; ArcFace and triplet embedding losses |
+| `embedding_criterion_utils.py` | Build/load ArcFace or triplet criteria; checkpoint metadata |
+| `triplet_diagnostics.py` | Embedding separation stats and mining comparison helpers |
+| `diagnose_triplet_checkpoint.py` | Offline diagnostic CLI for triplet checkpoints |
+| `analyze_confidence.py` | Confidence and OOD analysis: test/unknown splits, open-set threshold tuning (ArcFace and triplet) |
 | `run_analysis_test_unknown.sh` | Wrapper to run analysis on test + unknown (`--split both`). Requires `CHECKPOINT`; optional: `OUTPUT_DIR`, `HDF5_DIR`, `SEGMENT_LENGTH`. |
 | `cnn_resnet_arcface/train_user_identification_backbone.py` | CNN or ResNet18/34/50 + ArcFace for user identification (compact metrics JSON; see [CNN and ResNet ArcFace user identification](#cnn-and-resnet-arcface-user-identification)). |
 | `cnn_resnet_arcface/eval_active_passive_cnn_resnet.py` | Evaluate saved CNN/ResNet user-ID checkpoints on val or test, active and passive. |
@@ -322,7 +336,7 @@ python user_identification/run_all_folds_active_passive_test_unknown_eval.py \
 
 ## Training (LaBraM + ArcFace)
 
-The primary training flow uses LaBraM with ArcFace loss. Data must be preprocessed for user identification (see `data_processing`); HDF5 directory must contain `participant_id_to_class_idx.json`.
+The default training flow uses LaBraM with ArcFace loss. For FaceNet triplet, see [Training (LaBraM + FaceNet triplet loss)](#training-labram--facenet-triplet-loss). Data must be preprocessed for user identification (see `data_processing`); HDF5 directory must contain `participant_id_to_class_idx.json`.
 
 ### Run training (recommended: use the wrapper)
 
@@ -373,7 +387,103 @@ python user_identification/train_labram_arcface.py \
 # Multi-GPU: add --distributed and run with torchrun
 ```
 
-**Key arguments:** `--hdf5_dir` (required), `--segment_length` (1s/2s/4s), `--output_dir` (default when run directly: `./results_labram_arcface`; `run_4s.sh` uses `OUTPUT_DIR`), `--resume` (e.g. `best_model.pth`), `--distributed` (only for multi-GPU). ArcFace: `--arcface_margin`, `--arcface_scale`. Early stopping: `--early_stopping_patience`, `--early_stopping_min_delta`. Optimizer: `--lr`, `--layer_decay`, `--weight_decay`, `--warmup_epochs`, `--clip_grad`. Run `python user_identification/train_labram_arcface.py --help` for full list.
+**Key arguments:** `--hdf5_dir` (required), `--segment_length` (1s/2s/4s), `--output_dir` (default when run directly: `./results_labram_arcface`; `run_4s.sh` uses `OUTPUT_DIR`), `--resume` (e.g. `best_model.pth`), `--distributed` (only for multi-GPU). Loss: `--loss_type arcface` (default) or `--loss_type triplet`. ArcFace: `--arcface_margin`, `--arcface_scale`. Early stopping: `--early_stopping_patience`, `--early_stopping_min_delta`. Optimizer: `--lr`, `--layer_decay`, `--weight_decay`, `--warmup_epochs`, `--clip_grad`. Run `python user_identification/train_labram_arcface.py --help` for full list.
+
+## Training (LaBraM + FaceNet triplet loss)
+
+Alternative to ArcFace: **FaceNet-pure** metric learning ([Schroff et al. 2015](https://arxiv.org/pdf/1503.03832)). Training minimizes triplet loss on L2-normalized embeddings; **closed-set** and **open-set** evaluation use nearest **train-split prototype** (same centroids as `analyze_confidence.py`).
+
+### Design (aligned with FaceNet paper)
+
+| Component | Behavior |
+|-----------|----------|
+| **Training loss** | Squared L2 triplet loss with margin α (default **0.2**); mining **semi_hard** (paper default), or `batch_hard` / `all` |
+| **Batching** | **P×K** sampler: `P` identities × `K` segments per mini-batch; optional **extra random negatives** (`--triplet_extra_negatives`, FaceNet adds out-of-batch negatives) |
+| **Batch size** | Must equal `P×K + extra_negatives` (e.g. 32×12+128=**512**) |
+| **Training metric** | **Batch-local** nearest-prototype accuracy (classes in current batch only); not global 2500-way accuracy |
+| **Val/test metric** | Full **train centroids** refreshed each epoch → nearest prototype over all known users |
+| **Early stopping** | Tracks **validation loss** (prototype CE), not val accuracy (often ~0% early on) |
+| **Open-set** | Unchanged: train centroids + OOD distance + known-user score in `analyze_confidence.py` |
+
+Implementation: `CNN/models/triplet_loss.py` (`TripletLoss`, `PrototypeClassifier`, `TripletTrainingCriterion`).
+
+### Run triplet training (4s example)
+
+Use the **same HDF5** and fold layout as ArcFace. Start a **new output directory** after code updates; do not resume broken triplet runs.
+
+```bash
+python user_identification/train_labram_arcface.py \
+  --hdf5_dir "${HOME}/scratch/4s/fold_0" \
+  --output_dir final_user_identification_triplet/4s/fold_0 \
+  --segment_length 4s \
+  --loss_type triplet \
+  --pretrained_path LaBraM/checkpoints/labram-base.pth \
+  --epochs 200 \
+  --batch_size 512 \
+  --triplet_classes_per_batch 32 \
+  --triplet_samples_per_class 12 \
+  --triplet_extra_negatives 128 \
+  --triplet_margin 0.2 \
+  --triplet_mining semi_hard \
+  --early_stopping_patience 0 \
+  --seed 42 --num_workers 8
+```
+
+**Startup checks:** log should show `batches/epoch` in the **hundreds–thousands** (e.g. ~1298) and `Steps per epoch` matching that count. Single-digit batches/epoch indicates an outdated PK sampler.
+
+**Healthy signals during training:**
+
+| Log field | Poor | Good |
+|-----------|------|------|
+| Train acc | ~3% (1/P) flat | **>10%**, rising (batch-local) |
+| Val acc | ~0.04% (= 1/2500) | **>0.1%** early, then climbing |
+| `tri_active` | ~0 sustained | **>0.1** |
+| `inter/intra` | ~1.0 | **>1.2**, rising |
+| Train triplet loss | stuck at ~0.19 | decreasing |
+
+Pure triplet at ~2500 users is **harder** than ArcFace (no full softmax over all classes each step). Expect slower convergence and lower ceiling than ArcFace (~97% on the same fold).
+
+### Triplet CLI arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--loss_type` | `arcface` | Set to `triplet` for FaceNet training |
+| `--triplet_classes_per_batch` | 32 | **P** identities per batch |
+| `--triplet_samples_per_class` | 12 | **K** segments per identity (must be >1) |
+| `--triplet_extra_negatives` | 0 | Random out-of-batch negatives appended per batch (try **128**) |
+| `--triplet_margin` | 0.2 | FaceNet margin α |
+| `--triplet_mining` | `semi_hard` | `semi_hard`, `batch_hard`, or `all` |
+| `--triplet_logit_scale` | 10.0 | Scale for `-distance²` prototype logits at eval |
+| `--triplet_batches_per_epoch` | auto | Cap/default: `min(10000, train_samples // batch_size)` |
+| `--batch_size` | 192 | For triplet: **must** equal `P×K + extra_negatives` |
+
+### Diagnose a triplet checkpoint
+
+```bash
+python user_identification/diagnose_triplet_checkpoint.py \
+  --checkpoint final_user_identification_triplet/4s/fold_0/best_model.pth \
+  --hdf5_dir ~/scratch/4s/fold_0 \
+  --segment_length 4s \
+  --split val \
+  --compare_mining
+```
+
+Writes `triplet_diagnostic.json` next to the checkpoint. **inter/intra ratio ~1.0** indicates collapsed embeddings; **>1.2** is healthier.
+
+### Triplet evaluation and analysis
+
+- **Active/passive test:** `eval_active_passive_test.py` loads triplet checkpoints via `embedding_criterion_utils.load_criterion_from_checkpoint`.
+- **Open-set / confidence:** `analyze_confidence.py --split both` — same OOD path as ArcFace; triplet closed-set uses synced train centroids.
+- **Checkpoints** store `loss_type`, `triplet_criterion_state_dict` or `prototype_state_dict`, `triplet_margin`, `triplet_mining`.
+
+### Triplet vs ArcFace (fair comparison)
+
+| | ArcFace | FaceNet triplet |
+|---|---------|-----------------|
+| Train signal | Angular margin + **all-class** weight matrix | Batch-local triplets only |
+| Typical batch | Shuffled mix (~384 samples, many users) | P×K (+ optional extra negatives) |
+| Inference | ArcFace logits | Nearest L2-normalized train prototype |
+| Same data? | Yes — reuse HDF5 and `participant_id_to_class_idx.json` |
 
 ### 5-fold cross-validation (disjoint unknown participants)
 
@@ -431,11 +541,13 @@ To report mean ± std across 5 folds with **no overlap** in unknown participants
 
 3. **Analysis and open-set behavior**  
    After training, run analysis with `--split both` (test + unknown). For each sample we get:
-   - **Embeddings** from the model (ArcFace backbone).
-   - **Known-user centroids**: mean embedding per known class, computed on the training set.
+   - **Embeddings** from the model (LaBraM backbone + projection head).
+   - **Known-user centroids**: mean L2-normalized embedding per known class, computed on the training set (ArcFace: feature centroids; triplet: same geometry as training prototypes).
    - **OOD distance**: minimum L2 distance from the sample’s embedding to any known-user centroid (high = more “out-of-distribution”).
    - **Known-user score** = 1/(1 + OOD distance): low for unknown participants, high for known ones. This score is used (instead of softmax) to decide “known vs unknown”.
    - **Open-set threshold**: we tune a threshold on the known-user score so that “predict unknown” when score < threshold. The threshold is chosen to maximize **open-set accuracy** (correctly identifying known users + correctly rejecting unknown users) on the combined test+unknown set.
+
+   For **ArcFace** checkpoints, closed-set predictions use ArcFace logits. For **triplet** checkpoints, closed-set predictions use nearest train prototype logits after centroids are loaded/synced.
 
 So: unknown participants are **created at preprocessing** (held-out users, unknown split), **ignored at training**, and **detected at analysis** via feature-space OOD and the known-user score, with a tunable threshold for open-set recognition.
 
@@ -473,7 +585,7 @@ python user_identification/analyze_confidence.py \
 | `--num_workers` | 4 | DataLoader workers |
 | `--device` | `cuda` | `cuda` or `cpu` |
 
-**`--split both`** runs on test and unknown; when the checkpoint uses ArcFace, it also computes feature-space OOD (distance to known-user centroids), **known-user score** (1/(1+OOD distance)), and **open-set threshold** tuning.
+**`--split both`** runs on test and unknown; for embedding losses (ArcFace or triplet), it also computes feature-space OOD (distance to known-user centroids), **known-user score** (1/(1+OOD distance)), and **open-set threshold** tuning. Triplet checkpoints use nearest-prototype closed-set predictions after train centroids are computed.
 
 **Split semantics:**
 - `test` = known participants only
@@ -538,6 +650,7 @@ python user_identification/main.py \
 
 ## Notes
 
-- LaBraM training in `run_4s.sh` uses a pre-trained LaBraM backbone (`--pretrained_path`); the checkpoint saves the full model and ArcFace state for analysis.
+- LaBraM training in `run_4s.sh` uses a pre-trained LaBraM backbone (`--pretrained_path`); ArcFace checkpoints save the full model and ArcFace state; triplet checkpoints save model + prototype/triplet criterion state and `loss_type`.
+- **FaceNet triplet:** sync latest `train_labram_arcface.py`, `labram_trainer.py`, `data_processing/eeg_dataset.py` (PK sampler), and `CNN/models/triplet_loss.py` before cluster runs. Do not resume checkpoints from runs with starved PK batches or online-EMA train accuracy.
 - Unknown participants are created at preprocessing: run `data_processing/preprocess_user_identification.py` with **`--consider_unknown`** (and optionally `--unknown_ratio`); otherwise the unknown split is empty. See [How unknown participants are handled](#how-unknown-participants-are-handled) above.
-- For **saliency and topography** on user identification models (LaBraM + ArcFace), use the `saliency_analysis` module with `--target_type user_identification`. Run from project root: `python saliency_analysis/main.py --checkpoint <path/to/best_model.pth> --target_type user_identification --segment_length 4s --hdf5_dir <same_as_training_fold> --output_dir <output_dir>`. Use the same `--hdf5_dir` as for training that fold (directory containing `participant_id_to_class_idx.json` and HDF5 files). See `saliency_analysis/README.md` and `saliency_analysis/TOPOGRAPHY_GUIDE.md`.
+- For **saliency and topography** on user identification models (LaBraM + ArcFace or triplet), use the `saliency_analysis` module with `--target_type user_identification`. Run from project root: `python saliency_analysis/main.py --checkpoint <path/to/best_model.pth> --target_type user_identification --segment_length 4s --hdf5_dir <same_as_training_fold> --output_dir <output_dir>`. Use the same `--hdf5_dir` as for training that fold (directory containing `participant_id_to_class_idx.json` and HDF5 files). See `saliency_analysis/README.md` and `saliency_analysis/TOPOGRAPHY_GUIDE.md`.
