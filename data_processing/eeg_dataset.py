@@ -102,34 +102,27 @@ def get_recommended_num_workers(segment_length: str, num_gpus: int) -> int:
     return 2 * n if n >= 2 else 4
 
 
-def compute_class_weights_from_train_hdf5(
+def compute_train_class_counts_from_hdf5(
     hdf5_dir: Union[str, Path],
     segment_length_str: str,
     target_type: str,
     task_type: str = "both",
-    weight_power: float = 1.0,
-) -> List[float]:
+) -> List[int]:
     """
-    Compute balanced class weights from training HDF5 file(s) (inverse frequency).
-    Uses the same train split and target transforms as the dataset so weights
-    match the actual training distribution.
+    Count training segments per class from HDF5 metadata (same scan as class weights).
 
     Args:
         hdf5_dir: Directory containing train/val/test HDF5 files.
-        segment_length_str: Segment length string ('1s', '2s', '4s').
+        segment_length_str: '1s', '2s', or '4s'.
         target_type: 'gender' or 'age' (classification).
-        task_type: 'active', 'passive', or 'both' (must match loader task_type).
-        weight_power: Exponent applied to each weight (default 1.0). Use >1 (e.g. 1.5)
-            to upweight minority classes more aggressively and reduce collapse.
+        task_type: 'active', 'passive', or 'both' (must match evaluation loader).
 
     Returns:
-        List of per-class weights, length = num_classes. Order matches
-        class indices from get_gender_class (0=Female, 1=Male) or
-        get_age_class (0=<8.5y, 1=8.5-12.5y, 2=>12.5y).
+        List of per-class segment counts (gender: 2 classes; age: 3 classes).
     """
     if target_type not in ("gender", "age"):
         raise ValueError(
-            f"target_type must be 'gender' or 'age' for class weights, got {target_type!r}"
+            f"target_type must be 'gender' or 'age' for class counts, got {target_type!r}"
         )
     hdf5_dir = Path(hdf5_dir)
     train_files, _, _ = EEGDataLoader._get_hdf5_file_paths(hdf5_dir, segment_length_str)
@@ -138,7 +131,6 @@ def compute_class_weights_from_train_hdf5(
     else:
         file_list = [train_files]
 
-    # Count samples per class (only read metadata, no EEG data)
     if target_type == "gender":
         num_classes = 2
         get_class = get_gender_class
@@ -173,11 +165,48 @@ def compute_class_weights_from_train_hdf5(
                     if 0 <= c < num_classes:
                         counts[c] += 1
 
-    n_samples = sum(counts)
-    if n_samples == 0:
+    if sum(counts) == 0:
         raise ValueError(
-            f"No training samples found in {file_list} for target_type={target_type!r}, task_type={task_type!r}"
+            f"No training samples found in {file_list} for target_type={target_type!r}, "
+            f"task_type={task_type!r}"
         )
+    return counts
+
+
+def compute_class_weights_from_train_hdf5(
+    hdf5_dir: Union[str, Path],
+    segment_length_str: str,
+    target_type: str,
+    task_type: str = "both",
+    weight_power: float = 1.0,
+) -> List[float]:
+    """
+    Compute balanced class weights from training HDF5 file(s) (inverse frequency).
+    Uses the same train split and target transforms as the dataset so weights
+    match the actual training distribution.
+
+    Args:
+        hdf5_dir: Directory containing train/val/test HDF5 files.
+        segment_length_str: Segment length string ('1s', '2s', '4s').
+        target_type: 'gender' or 'age' (classification).
+        task_type: 'active', 'passive', or 'both' (must match loader task_type).
+        weight_power: Exponent applied to each weight (default 1.0). Use >1 (e.g. 1.5)
+            to upweight minority classes more aggressively and reduce collapse.
+
+    Returns:
+        List of per-class weights, length = num_classes. Order matches
+        class indices from get_gender_class (0=Female, 1=Male) or
+        get_age_class (0=<8.5y, 1=8.5-12.5y, 2=>12.5y).
+    """
+    if target_type not in ("gender", "age"):
+        raise ValueError(
+            f"target_type must be 'gender' or 'age' for class weights, got {target_type!r}"
+        )
+    counts = compute_train_class_counts_from_hdf5(
+        hdf5_dir, segment_length_str, target_type, task_type=task_type
+    )
+    num_classes = len(counts)
+    n_samples = sum(counts)
     # Balanced weights: (n_samples / (n_classes * n_k))^weight_power; avoid div by zero
     base_weights = [
         n_samples / (num_classes * max(counts[k], 1)) for k in range(num_classes)
@@ -252,6 +281,69 @@ def get_train_sample_list_with_classes(
     if not samples:
         raise ValueError(
             f"No training samples found for target_type={target_type!r}, task_type={task_type!r}"
+        )
+    return samples, class_indices, participant_ids
+
+
+def get_train_sample_list_user_identification(
+    train_file: Union[str, Path, List[Path], Tuple[Path, ...]],
+    participant_id_to_class: Dict[str, int],
+    task_type: str = "both",
+) -> Tuple[List[Tuple[str, str, str]], List[int], List[str]]:
+    """
+    Return (samples, class_indices, participant_ids) for user-identification training.
+
+    samples[i] = (path_str, task_type, sample_name); class_indices[i] = user class index;
+    participant_ids[i] = participant_id from metadata. Used for P×K triplet batching.
+    """
+    if not participant_id_to_class:
+        raise ValueError("participant_id_to_class must be non-empty")
+    file_list = list(train_file) if isinstance(train_file, (list, tuple)) else [train_file]
+    samples: List[Tuple[str, str, str]] = []
+    class_indices: List[int] = []
+    participant_ids: List[str] = []
+    skipped_unknown = 0
+    for path in file_list:
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Train HDF5 file not found: {path}")
+        path_str = str(path.resolve())
+        with h5py.File(path, "r") as f:
+            task_pairs = []
+            if task_type in ("active", "both") and "active" in f:
+                task_pairs.append(("active", f["active"]))
+            if task_type in ("passive", "both") and "passive" in f:
+                task_pairs.append(("passive", f["passive"]))
+            for task_name, group in task_pairs:
+                meta_keys = sorted(k for k in group.keys() if k.startswith("metadata_"))
+                for key in meta_keys:
+                    meta = group[key]
+                    pid_attr = meta.attrs.get("participant_id")
+                    if pid_attr is None:
+                        continue
+                    participant_id = (
+                        pid_attr.decode() if isinstance(pid_attr, bytes) else str(pid_attr)
+                    )
+                    if participant_id not in participant_id_to_class:
+                        skipped_unknown += 1
+                        continue
+                    c = int(participant_id_to_class[participant_id])
+                    sample_name = key.replace("metadata_", "sample_", 1)
+                    if sample_name not in group:
+                        continue
+                    samples.append((path_str, task_name, sample_name))
+                    class_indices.append(c)
+                    participant_ids.append(participant_id)
+    if not samples:
+        raise ValueError(
+            f"No user-identification training samples found for task_type={task_type!r}. "
+            f"Skipped {skipped_unknown} samples with unknown participant_id."
+        )
+    if skipped_unknown > 0:
+        logger.info(
+            "get_train_sample_list_user_identification: skipped %d samples "
+            "with participant_id not in mapping",
+            skipped_unknown,
         )
     return samples, class_indices, participant_ids
 
@@ -332,6 +424,139 @@ class StratifiedBatchSampler(Sampler[List[int]]):
         return self.num_batches
 
 
+class PKBatchSampler(Sampler[List[int]]):
+    """
+    P×K batch sampler for metric learning (FaceNet triplet loss).
+
+    Each batch contains ``classes_per_batch`` distinct classes with
+    ``samples_per_class`` samples each (batch_size = P × K).
+
+    Epoch length is ``total_train_samples // batch_size`` (class pools wrap with
+    reshuffle), not the minimum per-class count — the latter starves training when
+    one user has few segments.
+    """
+
+    def __init__(
+        self,
+        indices_by_class: List[List[int]],
+        classes_per_batch: int,
+        samples_per_class: int,
+        shuffle: bool = True,
+        seed: Optional[int] = None,
+        batches_per_epoch: Optional[int] = None,
+        extra_negatives: int = 0,
+    ):
+        if classes_per_batch <= 0:
+            raise ValueError(f"classes_per_batch must be > 0, got {classes_per_batch}")
+        if samples_per_class <= 1:
+            raise ValueError(
+                f"samples_per_class must be > 1 for triplet mining, got {samples_per_class}"
+            )
+        batch_size = classes_per_batch * samples_per_class
+        self.classes_per_batch = classes_per_batch
+        self.samples_per_class = samples_per_class
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.base_seed = seed
+        self.epoch = 0
+        if extra_negatives < 0:
+            raise ValueError(f"extra_negatives must be >= 0, got {extra_negatives}")
+        self.extra_negatives = int(extra_negatives)
+
+        eligible = [k for k, g in enumerate(indices_by_class) if len(g) >= samples_per_class]
+        if len(eligible) < classes_per_batch:
+            short = [
+                (k, len(indices_by_class[k]))
+                for k in range(len(indices_by_class))
+                if len(indices_by_class[k]) < samples_per_class
+            ]
+            raise ValueError(
+                f"Need at least {classes_per_batch} classes with >={samples_per_class} "
+                f"training samples for P×K={classes_per_batch}×{samples_per_class}. "
+                f"Only {len(eligible)} classes qualify. "
+                f"Example short classes (index, count): {short[:10]}"
+            )
+
+        self.indices_by_class = indices_by_class
+        self.eligible_classes = eligible
+        total_train_samples = sum(len(indices_by_class[c]) for c in eligible)
+        default_batches = max(1, total_train_samples // batch_size)
+        if batches_per_epoch is not None:
+            if batches_per_epoch <= 0:
+                raise ValueError(
+                    f"batches_per_epoch must be > 0, got {batches_per_epoch}"
+                )
+            self.num_batches = int(batches_per_epoch)
+        else:
+            self.num_batches = default_batches
+        self.min_class_batches = min(
+            len(indices_by_class[c]) // samples_per_class for c in eligible
+        )
+
+    def set_epoch(self, epoch: int) -> None:
+        """Advance RNG seed so each epoch draws different P×K batches."""
+        self.epoch = int(epoch)
+
+    def _epoch_seed(self) -> Optional[int]:
+        if self.base_seed is None:
+            return None
+        return self.base_seed + self.epoch
+
+    def __iter__(self):
+        rng = random.Random(self._epoch_seed())
+        pointers = {c: 0 for c in self.eligible_classes}
+        class_pools = {
+            c: list(self.indices_by_class[c]) for c in self.eligible_classes
+        }
+        if self.shuffle:
+            for c in self.eligible_classes:
+                rng.shuffle(class_pools[c])
+            eligible_order = list(self.eligible_classes)
+            rng.shuffle(eligible_order)
+        else:
+            eligible_order = list(self.eligible_classes)
+
+        for _ in range(self.num_batches):
+            if self.shuffle:
+                chosen = rng.sample(eligible_order, self.classes_per_batch)
+            else:
+                start = (_ * self.classes_per_batch) % len(eligible_order)
+                chosen = [
+                    eligible_order[(start + i) % len(eligible_order)]
+                    for i in range(self.classes_per_batch)
+                ]
+            batch: List[int] = []
+            for c in chosen:
+                start = pointers[c]
+                end = start + self.samples_per_class
+                pool = class_pools[c]
+                if end > len(pool):
+                    rng.shuffle(pool)
+                    pointers[c] = 0
+                    start = 0
+                    end = self.samples_per_class
+                batch.extend(pool[start:end])
+                pointers[c] = end
+            if self.shuffle:
+                rng.shuffle(batch)
+            if self.extra_negatives > 0:
+                out_classes = set(chosen)
+                neg_class_pool = [c for c in self.eligible_classes if c not in out_classes]
+                if not neg_class_pool:
+                    raise RuntimeError(
+                        "extra_negatives > 0 but no out-of-batch classes available in PK sampler."
+                    )
+                for _ in range(self.extra_negatives):
+                    c = rng.choice(neg_class_pool)
+                    idx = rng.choice(self.indices_by_class[c])
+                    batch.append(idx)
+                rng.shuffle(batch)
+            yield batch
+
+    def __len__(self) -> int:
+        return self.num_batches
+
+
 class EEGMapDataset(Dataset):
     """
     Map-style dataset for stratified batching: loads by index from a pre-built list of (path, task_type, sample_name).
@@ -348,6 +573,7 @@ class EEGMapDataset(Dataset):
         combined_transform: Optional[callable] = None,
         transform: Optional[callable] = None,
         class_indices: Optional[List[int]] = None,
+        user_identification_transform: Optional[UserIdentificationTransform] = None,
     ):
         self.samples = samples
         self.target_type = target_type
@@ -355,7 +581,8 @@ class EEGMapDataset(Dataset):
         self.age_transform = age_transform
         self.combined_transform = combined_transform
         self.transform = transform
-        self.class_indices = class_indices  # When set, use as label source so labels match StratifiedBatchSampler
+        self.class_indices = class_indices  # When set, use as label source so labels match the sampler
+        self.user_identification_transform = user_identification_transform
         self._file_cache: Dict[str, Any] = {}
 
     def __len__(self):
@@ -390,13 +617,15 @@ class EEGMapDataset(Dataset):
             "task_number": task_number,
             "sample_id": sample_name,
         }
-        # Use class_indices when provided (stratified batching) so labels match the sampler exactly
+        # Use class_indices when provided (stratified / PK batching) so labels match the sampler
         if self.class_indices is not None and self.target_type in ("gender", "age"):
             c = self.class_indices[idx]
             if self.target_type == "gender":
                 sample["gender"] = torch.tensor(c, dtype=torch.long)
             else:
                 sample["age"] = torch.tensor(c, dtype=torch.long)
+        elif self.class_indices is not None and self.target_type == "user_identification":
+            sample["user_identification"] = torch.tensor(self.class_indices[idx], dtype=torch.long)
         else:
             if self.gender_transform and self.target_type in ("gender", "both", "combined"):
                 sample["gender"] = self.gender_transform(gender)
@@ -408,6 +637,18 @@ class EEGMapDataset(Dataset):
                 sample["gender"] = gender_classification_transform(gender)
             if self.target_type == "age" and "age" not in sample:
                 sample["age"] = age_classification_transform(age)
+            if (
+                self.target_type == "user_identification"
+                and "user_identification" not in sample
+            ):
+                if self.user_identification_transform is None:
+                    raise ValueError(
+                        "user_identification_transform is required when target_type is "
+                        "'user_identification' and class_indices are not provided"
+                    )
+                sample["user_identification"] = self.user_identification_transform(
+                    participant_id
+                )
         return sample
 
 
@@ -932,6 +1173,113 @@ class EEGDataLoader:
             class_indices=class_indices,
         )
         return train_dataset, class_indices, participant_ids, num_classes
+
+    @staticmethod
+    def create_pk_user_identification_train_loader(
+        hdf5_dir: Union[str, Path],
+        segment_length: str,
+        participant_id_to_class: Dict[str, int],
+        classes_per_batch: int,
+        samples_per_class: int,
+        task_type: str = "both",
+        num_workers: int = 8,
+        random_seed: Optional[int] = None,
+        user_identification_transform: Optional[UserIdentificationTransform] = None,
+        batches_per_epoch: Optional[int] = None,
+        max_batches_per_epoch: int = 10000,
+        extra_negatives: int = 0,
+    ) -> DataLoader:
+        """
+        Map-style train DataLoader with P×K batching for FaceNet triplet training.
+
+        batch_size = classes_per_batch * samples_per_class + extra_negatives (FaceNet adds
+        random out-of-batch negatives beyond the P×K core).
+        Default epoch length matches ArcFace training cap (``max_batches_per_epoch``).
+        """
+        hdf5_dir = Path(hdf5_dir)
+        train_files, val_files, test_files = EEGDataLoader._get_hdf5_file_paths(
+            hdf5_dir, segment_length
+        )
+        EEGDataLoader._verify_hdf5_files(train_files, val_files, test_files)
+
+        samples, class_indices, _ = get_train_sample_list_user_identification(
+            train_files,
+            participant_id_to_class=participant_id_to_class,
+            task_type=task_type,
+        )
+        num_classes = max(participant_id_to_class.values()) + 1
+        indices_by_class: List[List[int]] = [[] for _ in range(num_classes)]
+        for idx, c in enumerate(class_indices):
+            if c < 0 or c >= num_classes:
+                raise ValueError(
+                    f"Sample index {idx} has invalid class {c}; expected [0, {num_classes - 1}]"
+                )
+            indices_by_class[c].append(idx)
+
+        batch_size = classes_per_batch * samples_per_class
+        total_pk_samples = sum(
+            len(g) for g in indices_by_class if len(g) >= samples_per_class
+        )
+        auto_batches = max(1, total_pk_samples // batch_size)
+        if batches_per_epoch is None:
+            effective_batches = min(max_batches_per_epoch, auto_batches)
+        else:
+            if batches_per_epoch <= 0:
+                raise ValueError(
+                    f"batches_per_epoch must be > 0, got {batches_per_epoch}"
+                )
+            effective_batches = int(batches_per_epoch)
+
+        train_dataset = EEGMapDataset(
+            samples=samples,
+            target_type="user_identification",
+            transform=None,
+            class_indices=class_indices,
+            user_identification_transform=user_identification_transform,
+        )
+        sampler = PKBatchSampler(
+            indices_by_class=indices_by_class,
+            classes_per_batch=classes_per_batch,
+            samples_per_class=samples_per_class,
+            shuffle=True,
+            seed=random_seed,
+            batches_per_epoch=effective_batches,
+            extra_negatives=extra_negatives,
+        )
+        loader_kwargs = EEGDataLoader._common_loader_kwargs(num_workers, random_seed)
+        loader_kwargs["batch_sampler"] = sampler
+        loader = DataLoader(
+            train_dataset,
+            **loader_kwargs,
+        )
+        eligible = sum(1 for g in indices_by_class if len(g) >= samples_per_class)
+        short_classes = [
+            (k, len(g))
+            for k, g in enumerate(indices_by_class)
+            if 0 < len(g) < samples_per_class
+        ]
+        total_pk_samples = sum(len(g) for g in indices_by_class if len(g) >= samples_per_class)
+        logger.info(
+            "PK train loader: P=%d K=%d core_batch=%d extra_negatives=%d "
+            "eligible_classes=%d/%d batches/epoch=%d (min-class heuristic would be %d; total_pk_samples=%d)",
+            classes_per_batch,
+            samples_per_class,
+            classes_per_batch * samples_per_class,
+            extra_negatives,
+            eligible,
+            num_classes,
+            len(sampler),
+            sampler.min_class_batches,
+            total_pk_samples,
+        )
+        if short_classes:
+            logger.warning(
+                "PK sampler excluded %d classes with fewer than K=%d train samples (examples: %s)",
+                len(short_classes),
+                samples_per_class,
+                short_classes[:5],
+            )
+        return loader
 
     @staticmethod
     def _common_loader_kwargs(
