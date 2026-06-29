@@ -35,6 +35,7 @@ if str(_project_root) not in sys.path:
 
 # Import LaBraM-specific modules
 from labram_dataset import prepare_labram_dataset, collate_labram_with_participant_ids
+from classification_eval_utils import compute_classification_eval_stats
 
 # Reuse participant-level aggregation from data_processing (same as CNN)
 try:
@@ -683,11 +684,22 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
     else:
         pred = torch.cat(pred, dim=0).numpy()
         true = torch.cat(true, dim=0).numpy()
-        ret = utils.get_metrics(
-            pred, true, metrics, is_binary, 0.5,
-            is_regression=is_regression, age_min=age_min, age_max=age_max,
-        )
-        ret['loss'] = metric_logger.loss.global_avg
+        if is_regression:
+            ret = utils.get_metrics(
+                pred, true, metrics, is_binary, 0.5,
+                is_regression=is_regression, age_min=age_min, age_max=age_max,
+            )
+            ret['loss'] = metric_logger.loss.global_avg
+        else:
+            ret = compute_classification_eval_stats(
+                pred,
+                true,
+                all_participant_ids,
+                metrics=metrics,
+                is_binary=is_binary,
+                aggregate_by_participant=aggregate_by_participant,
+                loss=metric_logger.loss.global_avg,
+            )
 
     # Participant-level aggregation (segment-level vs majority vote / mean prob), reusing data_processing.aggregation (same as CNN)
     do_agg = (
@@ -790,40 +802,6 @@ def evaluate(data_loader, model, device, header='Test:', ch_names=None, metrics=
             pred_mean, true_mean, metrics, is_binary=False, threshold=0.5,
             is_regression=True, age_min=age_min, age_max=age_max,
         )
-    elif do_agg and not is_multi_output and not is_regression:
-        # pred/true are already numpy after the single-output branch above
-        pred_all = pred
-        true_all = true
-        if len(all_participant_ids) != len(pred_all):
-            raise ValueError(
-                f"Participant-level aggregation requires one participant_id per segment. "
-                f"Got {len(all_participant_ids)} participant_ids for {len(pred_all)} segments."
-            )
-        if is_binary:
-            probs = pred_all
-            pred_cls = (probs > 0.5).astype(np.int64)
-        else:
-            probs = torch.softmax(torch.from_numpy(pred_all), dim=1).numpy()
-            pred_cls = np.argmax(probs, axis=1)
-        _, true_mp, pred_mp, prob_mp = aggregate_predictions_by_group(
-            pred_cls, true_all, all_participant_ids,
-            prediction_type='classification', aggregation=AGGREGATION_MEAN_PROB,
-            probabilities=probs)
-        _, true_mv, pred_mv, prob_mv = aggregate_predictions_by_group(
-            pred_cls, true_all, all_participant_ids,
-            prediction_type='classification', aggregation=AGGREGATION_MAJORITY_VOTE,
-            probabilities=probs)
-        ret['segment_metrics'] = {k: v for k, v in ret.items() if k not in ('loss',)}
-        # Binary: use probabilities when available (for ROC etc.), else predictions.
-        # Multiclass: mean_prob has 2D prob_mp — pass it so get_metrics/multiclass_metrics_fn get (n, n_classes). Majority vote gives 1D class indices; get_metrics converts to 2D when needed.
-        if is_binary:
-            out_mp = prob_mp if prob_mp is not None else pred_mp
-            out_mv = prob_mv if prob_mv is not None else pred_mv
-        else:
-            out_mp = prob_mp if prob_mp is not None else pred_mp
-            out_mv = pred_mv
-        ret['participant_mean_prob_metrics'] = utils.get_metrics(out_mp, true_mp, metrics, is_binary, 0.5)
-        ret['participant_metrics'] = utils.get_metrics(out_mv, true_mv, metrics, is_binary, 0.5)
 
     return ret
 
