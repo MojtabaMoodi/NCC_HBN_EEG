@@ -18,6 +18,11 @@ data_processing/processed_eeg_data*
 LaBraM/__pycache__/*
 LaBraM/data_processor/__pycache__/*
 LaBraM/results/*
+LaBraM/random_classifier/results/*.json
+LaBraM/confusion_matrix/results/*.json
+LaBraM/confusion_matrix/logs/slurm-*.out
+LaBraM/confusion_matrix/logs/slurm-*.err
+LaBraM/confusion_matrix/logs/run_all_confusion_matrices_slurm-*.log
 LaBraM/report_2025-12-16/*
 LaBraM/runs/logs/*
 utils/__pycache__/*
