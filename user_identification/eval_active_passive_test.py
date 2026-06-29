@@ -58,6 +58,7 @@ for _p in (_project_root, _labram_dir):
 
 import utils as labram_utils  # noqa: E402
 from CNN.models.arcface_loss import ArcFaceLoss  # noqa: E402
+from user_identification.embedding_criterion_utils import load_criterion_from_checkpoint  # noqa: E402
 from data_processing.target_transforms import create_user_identification_transform_from_hdf5  # noqa: E402
 from LaBraM.labram_dataset import prepare_labram_dataset  # noqa: E402
 from user_identification.labram_model import LaBraMUserIdentificationWrapper  # noqa: E402
@@ -106,12 +107,22 @@ def _parse_args() -> argparse.Namespace:
 
 def _load_checkpoint(path: Path, device: torch.device) -> Dict[str, Any]:
     ckpt = torch.load(path, map_location=device, weights_only=False)
-    needed = ["model_state_dict", "arcface_state_dict", "num_classes"]
+    needed = ["model_state_dict", "num_classes"]
     missing = [k for k in needed if k not in ckpt]
     if missing:
         raise KeyError(f"Checkpoint {path} missing keys: {missing}")
     if "embedding_dim" not in ckpt:
-        raise KeyError(f"Checkpoint {path} missing 'embedding_dim' (required for ArcFace).")
+        raise KeyError(f"Checkpoint {path} missing 'embedding_dim'.")
+    loss_type = ckpt.get("loss_type", "arcface")
+    if loss_type == "arcface" and "arcface_state_dict" not in ckpt:
+        raise KeyError(f"ArcFace checkpoint {path} missing 'arcface_state_dict'.")
+    if loss_type == "triplet" and (
+        "prototype_state_dict" not in ckpt and "triplet_criterion_state_dict" not in ckpt
+    ):
+        raise KeyError(
+            f"Triplet checkpoint {path} missing prototype state. "
+            "Train with --loss_type triplet or refresh prototypes before eval."
+        )
     return ckpt
 
 
@@ -123,7 +134,7 @@ def _build_model_and_criterion(
     arcface_margin: float,
     arcface_scale: float,
     arcface_easy_margin: bool,
-) -> Tuple[torch.nn.Module, ArcFaceLoss]:
+) -> Tuple[torch.nn.Module, torch.nn.Module, str]:
     num_classes = int(ckpt["num_classes"])
     embedding_dim = int(ckpt["embedding_dim"])
     model = LaBraMUserIdentificationWrapper(
@@ -137,16 +148,16 @@ def _build_model_and_criterion(
     model.to(device)
     model.eval()
 
-    criterion = ArcFaceLoss(
+    criterion, loss_type = load_criterion_from_checkpoint(
+        ckpt,
         num_classes=num_classes,
         embedding_dim=embedding_dim,
-        margin=arcface_margin,
-        scale=arcface_scale,
-        easy_margin=arcface_easy_margin,
-    ).to(device)
-    criterion.load_state_dict(ckpt["arcface_state_dict"], strict=True)
-    criterion.eval()
-    return model, criterion
+        device=device,
+        arcface_margin=arcface_margin,
+        arcface_scale=arcface_scale,
+        arcface_easy_margin=arcface_easy_margin,
+    )
+    return model, criterion, loss_type
 
 
 def _eval_task_split(
@@ -155,7 +166,8 @@ def _eval_task_split(
     task_type: str,
     transform: Any,
     model: torch.nn.Module,
-    criterion: ArcFaceLoss,
+    criterion: torch.nn.Module,
+    loss_type: str,
     device: torch.device,
     batch_size: int,
     num_workers: int,
@@ -186,8 +198,8 @@ def _eval_task_split(
         header=f"Test ({task_type}):",
         ch_names=None,
         metrics=["accuracy"],
-        use_arcface=True,
         criterion=criterion,
+        loss_type=loss_type,
         collect_predictions=collect,
     )
     predictions_path: Optional[str] = None
@@ -228,7 +240,7 @@ def _eval_one_fold(
     fold_index: int,
 ) -> Dict[str, Any]:
     ckpt = _load_checkpoint(checkpoint, device)
-    model, criterion = _build_model_and_criterion(
+    model, criterion, loss_type = _build_model_and_criterion(
         ckpt,
         device,
         args.dropout_rate,
@@ -243,6 +255,7 @@ def _eval_one_fold(
         "hdf5_dir": str(hdf5_dir.resolve()),
         "segment_length": segment_length,
         "num_classes": int(ckpt["num_classes"]),
+        "loss_type": loss_type,
         "checkpoint_val_accuracy_percent": float(ckpt.get("val_accuracy", float("nan"))),
         "checkpoint_test_accuracy_percent": float(ckpt.get("test_accuracy", float("nan"))),
     }
@@ -262,6 +275,7 @@ def _eval_one_fold(
             transform,
             model,
             criterion,
+            loss_type,
             device,
             args.batch_size,
             args.num_workers,
