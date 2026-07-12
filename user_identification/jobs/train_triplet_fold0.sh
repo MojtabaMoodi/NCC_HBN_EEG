@@ -40,7 +40,8 @@ conda run -n eeg_env --no-capture-output python user_identification/train_labram
   --triplet_extra_negatives 128 \
   --triplet_margin 0.2 \
   --triplet_mining semi_hard \
-  --early_stopping_patience 0 \
+  --early_stopping_patience 10 \
+  --early_stopping_min_delta 1e-4 \
   --lr 5e-4 \
   --layer_decay 0.9 \
   --weight_decay 0.05 \
