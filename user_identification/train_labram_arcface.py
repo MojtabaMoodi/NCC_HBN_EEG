@@ -47,6 +47,58 @@ from einops import rearrange
 from torch.utils.data import DataLoader
 
 
+def _serialize_training_tracker(
+    *,
+    loss_type: str,
+    best_val_loss: float,
+    patience_counter: int,
+    max_accuracy: float,
+    best_test_accuracy: float,
+) -> dict:
+    """Persist early-stopping tracker state in checkpoints for resume."""
+    return {
+        "patience_counter": patience_counter,
+        "val_accuracy": max_accuracy,
+        "test_accuracy": best_test_accuracy,
+        **({"best_val_loss": best_val_loss} if loss_type == "triplet" else {}),
+    }
+
+
+def _restore_training_tracker_from_checkpoints(
+    checkpoint: dict,
+    output_dir: Path,
+    loss_type: str,
+) -> tuple[float, float, float, int]:
+    """Restore best metrics and patience counter when resuming training."""
+    max_accuracy = float(checkpoint.get("val_accuracy") or 0.0)
+    best_test_accuracy = float(checkpoint.get("test_accuracy") or 0.0)
+    patience_counter = int(checkpoint.get("patience_counter") or 0)
+
+    if loss_type == "triplet":
+        best_val_loss = checkpoint.get("best_val_loss")
+        if best_val_loss is None and checkpoint.get("val_loss") is not None:
+            best_val_loss = checkpoint["val_loss"]
+        if best_val_loss is None:
+            best_path = output_dir / "best_model.pth"
+            if best_path.exists():
+                best_ckpt = torch.load(best_path, map_location="cpu", weights_only=False)
+                if best_ckpt.get("best_val_loss") is not None:
+                    best_val_loss = best_ckpt["best_val_loss"]
+                elif best_ckpt.get("val_loss") is not None:
+                    best_val_loss = best_ckpt["val_loss"]
+                if best_ckpt.get("val_accuracy") is not None:
+                    max_accuracy = float(best_ckpt["val_accuracy"])
+                if best_ckpt.get("test_accuracy") is not None:
+                    best_test_accuracy = float(best_ckpt["test_accuracy"])
+                if best_ckpt.get("patience_counter") is not None:
+                    patience_counter = int(best_ckpt["patience_counter"])
+        best_val_loss = float(best_val_loss if best_val_loss is not None else float("inf"))
+    else:
+        best_val_loss = float("inf")
+
+    return max_accuracy, best_test_accuracy, best_val_loss, patience_counter
+
+
 def get_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -139,9 +191,10 @@ def get_args():
     
     # Early stopping parameters
     parser.add_argument('--early_stopping_patience', type=int, default=10,
-                       help='Number of epochs to wait before early stopping (0 to disable)')
+                       help='Epochs without improvement before early stopping (0 to disable)')
     parser.add_argument('--early_stopping_min_delta', type=float, default=1e-4,
-                       help='Minimum change in validation accuracy to qualify as improvement')
+                       help='Minimum improvement to reset patience: val accuracy (ArcFace) or '
+                            'val loss decrease (triplet)')
     
     # System parameters
     parser.add_argument('--device', type=str, default='cuda',
@@ -607,17 +660,14 @@ def main():
         # Training loop uses 0-indexed epochs (range(0, args.epochs))
         # If checkpoint has epoch 50 (1-indexed), it means we completed epoch 49 (0-indexed)
         # So we should start from epoch 50 (0-indexed) = epoch 51 (1-indexed)
+        checkpoint_epoch_1indexed = start_epoch
         if 'epoch' in checkpoint:
             checkpoint_epoch_1indexed = checkpoint['epoch']  # 1-indexed: last completed epoch + 1
             # Convert to 0-indexed: if checkpoint says 50 (completed epoch 49), start from 50
             start_epoch = checkpoint_epoch_1indexed  # Keep as-is: checkpoint epoch 50 means start from 50 (0-indexed)
-        if 'val_accuracy' in checkpoint:
-            max_accuracy = checkpoint['val_accuracy']
-        if 'test_accuracy' in checkpoint:
-            best_test_accuracy = checkpoint['test_accuracy']
-        
-        # Reset patience counter when resuming (we'll start counting from the resumed epoch)
-        patience_counter = 0
+        max_accuracy, best_test_accuracy, best_val_loss, patience_counter = (
+            _restore_training_tracker_from_checkpoints(checkpoint, output_dir, args.loss_type)
+        )
         
         # Warn if resuming from last epoch (no more training will happen)
         if start_epoch >= args.epochs:
@@ -628,6 +678,13 @@ def main():
         if not args.distributed or labram_utils.is_main_process():
             print(f"   ✅ Loaded checkpoint from epoch {checkpoint_epoch_1indexed} (completed)")
             print(f"   ✅ Best validation accuracy so far: {max_accuracy:.4f}%")
+            if args.loss_type == "triplet" and math.isfinite(best_val_loss):
+                print(f"   ✅ Best validation loss so far: {best_val_loss:.4f}")
+            if args.early_stopping_patience > 0:
+                print(
+                    f"   ✅ Early stopping patience counter: {patience_counter}/"
+                    f"{args.early_stopping_patience}"
+                )
             if start_epoch < args.epochs:
                 print(f"   ✅ Continuing training from epoch {start_epoch + 1} to {args.epochs}")
             else:
@@ -766,6 +823,15 @@ def main():
                     }
                     if separation_stats is not None:
                         checkpoint['embedding_separation'] = separation_stats
+                    checkpoint.update(
+                        _serialize_training_tracker(
+                            loss_type=args.loss_type,
+                            best_val_loss=best_val_loss,
+                            patience_counter=patience_counter,
+                            max_accuracy=max_accuracy,
+                            best_test_accuracy=best_test_accuracy,
+                        )
+                    )
                     checkpoint.update(checkpoint_extra_state(args.loss_type, criterion))
                     checkpoint_path = output_dir / 'best_model.pth'
                     torch.save(checkpoint, checkpoint_path)
@@ -832,6 +898,15 @@ def main():
                     'loss_scaler_state_dict': loss_scaler.state_dict(),
                     'freeze_backbone': bool(args.freeze_backbone),
                 }
+                checkpoint.update(
+                    _serialize_training_tracker(
+                        loss_type=args.loss_type,
+                        best_val_loss=best_val_loss,
+                        patience_counter=patience_counter,
+                        max_accuracy=max_accuracy,
+                        best_test_accuracy=best_test_accuracy,
+                    )
+                )
                 checkpoint.update(checkpoint_extra_state(args.loss_type, criterion))
                 torch.save(checkpoint, checkpoint_path)
     
