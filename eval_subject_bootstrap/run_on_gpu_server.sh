@@ -64,7 +64,7 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 
 }
 
 # Run evaluation
-python eval_subject_bootstrap/evaluate_models_vs_random.py \
+python eval_subject_bootstrap/run_bootstrap_evaluation.py \
     --train_manifest "$TRAIN_MANIFEST" \
     --test_manifest "$TEST_MANIFEST" \
     --models_config "$CONFIG_FILE" \
