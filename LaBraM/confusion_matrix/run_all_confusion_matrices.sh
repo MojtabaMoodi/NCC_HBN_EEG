@@ -9,9 +9,10 @@
 #   bash LaBraM/confusion_matrix/run_all_confusion_matrices.sh
 #
 # Optional env:
-#   DATA_PATH   HDF5 directory (required if not set below)
-#   DEVICE      torch device (required if not set below)
+#   DATA_PATH     HDF5 directory (required if not set below)
+#   DEVICE        torch device (required if not set below)
 #   PROJECT_ROOT  repo root (defaults to parent of LaBraM/)
+#   TASK_TYPES    space-separated task filters (default: both active passive)
 
 set -euo pipefail
 
@@ -31,9 +32,10 @@ fi
 RESULTS_DIR="${PROJECT_ROOT}/LaBraM/confusion_matrix/results"
 mkdir -p "${RESULTS_DIR}"
 
+TASK_TYPES="${TASK_TYPES:-both active passive}"
+
 COMMON_ARGS=(
   --data_path "${DATA_PATH}"
-  --task_type both
   --aggregate_by_participant majority_vote
   --batch_size 64
   --device "${DEVICE}"
@@ -71,12 +73,26 @@ resolve_checkpoint() {
   exit 1
 }
 
+output_json_name() {
+  local task="$1"
+  local segment="$2"
+  local task_type="$3"
+
+  if [[ "${task_type}" == "both" ]]; then
+    echo "${task}_${segment}_confusion_matrix.json"
+  else
+    echo "${task}_${segment}_${task_type}_confusion_matrix.json"
+  fi
+}
+
 run_one() {
   local task="$1"
   local segment="$2"
   local num_workers="$3"
+  local task_type="$4"
   local dataset=""
   local checkpoint=""
+  local output_json=""
 
   if [[ "${task}" == "age" ]]; then
     dataset="age_baseline"
@@ -88,22 +104,26 @@ run_one() {
   fi
 
   checkpoint="$(resolve_checkpoint "${task}" "${segment}")"
+  output_json="$(output_json_name "${task}" "${segment}" "${task_type}")"
 
-  echo "=== LaBraM ${task} ${segment} (checkpoint: ${checkpoint}) ==="
+  echo "=== LaBraM ${task} ${segment} task_type=${task_type} (checkpoint: ${checkpoint}) ==="
   python LaBraM/eval_confusion_matrix.py \
     --checkpoint "${checkpoint}" \
     --dataset "${dataset}" \
     --segment_length "${segment}" \
+    --task_type "${task_type}" \
     --num_workers "${num_workers}" \
-    --output_json "${RESULTS_DIR}/${task}_${segment}_confusion_matrix.json" \
+    --output_json "${RESULTS_DIR}/${output_json}" \
     "${COMMON_ARGS[@]}"
 }
 
-run_one age 1s 0
-run_one age 2s 4
-run_one age 4s 4
-run_one gender 1s 0
-run_one gender 2s 4
-run_one gender 4s 4
+for task_type in ${TASK_TYPES}; do
+  run_one age 1s 0 "${task_type}"
+  run_one age 2s 4 "${task_type}"
+  run_one age 4s 4 "${task_type}"
+  run_one gender 1s 0 "${task_type}"
+  run_one gender 2s 4 "${task_type}"
+  run_one gender 4s 4 "${task_type}"
+done
 
 echo "Done. Results in ${RESULTS_DIR}"
