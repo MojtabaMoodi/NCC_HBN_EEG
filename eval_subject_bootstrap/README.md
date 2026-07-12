@@ -27,7 +27,7 @@ python eval_subject_bootstrap/generate_manifests.py \
     --output eval_subject_bootstrap/manifests/test_manifest_4s.csv
 
 # 2. Run evaluation
-python eval_subject_bootstrap/evaluate_models_vs_random.py \
+python eval_subject_bootstrap/run_bootstrap_evaluation.py \
     --train_manifest eval_subject_bootstrap/manifests/train_manifest_4s.csv \
     --test_manifest eval_subject_bootstrap/manifests/test_manifest_4s.csv \
     --models_config eval_subject_bootstrap/config.yaml \
@@ -191,7 +191,7 @@ models:
 ### Step 3: Run Evaluation
 
 ```bash
-python eval_subject_bootstrap/evaluate_models_vs_random.py \
+python eval_subject_bootstrap/run_bootstrap_evaluation.py \
     --train_manifest eval_subject_bootstrap/manifests/train_manifest_4s.csv \
     --test_manifest eval_subject_bootstrap/manifests/test_manifest_4s.csv \
     --models_config eval_subject_bootstrap/config.yaml \
@@ -373,7 +373,7 @@ The following modifications ensure compatibility with all model types:
    - Improved LaBraM checkpoint loading to handle multiple formats and filter computed keys
    - Enhanced dict output handling with fallback keys including `'age'` for multi-output models
 
-2. **`evaluate_models_vs_random.py`**:
+2. **`run_bootstrap_evaluation.py`**:
    - Updated `run_inference()` to pass model name for automatic preprocessing detection
    - Modified to detect LaBraM models and automatically get input_chans
 
@@ -408,7 +408,7 @@ eval_subject_bootstrap/
 ├── config.yaml                  # Model list and checkpoint paths (edit for your runs)
 ├── run_on_gpu_server.sh         # One-shot: generate manifests + run evaluation
 ├── generate_manifests.py        # Build train/test manifests from HDF5
-├── evaluate_models_vs_random.py # Main script: inference + bootstrap + comparison
+├── run_bootstrap_evaluation.py # Main script: inference + bootstrap + comparison
 ├── bootstrap.py                 # Bootstrap and random baseline logic
 ├── io_utils.py                 # Manifest load/save, subject aggregation
 ├── metrics.py                  # Subject-level metrics
