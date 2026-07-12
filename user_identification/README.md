@@ -402,7 +402,7 @@ Alternative to ArcFace: **FaceNet-pure** metric learning ([Schroff et al. 2015](
 | **Batch size** | Must equal `P×K + extra_negatives` (e.g. 32×12+128=**512**) |
 | **Training metric** | **Batch-local** nearest-prototype accuracy (classes in current batch only); not global 2500-way accuracy |
 | **Val/test metric** | Full **train centroids** refreshed each epoch → nearest prototype over all known users |
-| **Early stopping** | Tracks **validation loss** (prototype CE), not val accuracy (often ~0% early on) |
+| **Early stopping** | Tracks **validation loss** (prototype CE) with `--early_stopping_patience` (default 10; set 0 to disable) |
 | **Open-set** | Unchanged: train centroids + OOD distance + known-user score in `analyze_confidence.py` |
 
 Implementation: `CNN/models/triplet_loss.py` (`TripletLoss`, `PrototypeClassifier`, `TripletTrainingCriterion`).
@@ -425,7 +425,8 @@ python user_identification/train_labram_arcface.py \
   --triplet_extra_negatives 128 \
   --triplet_margin 0.2 \
   --triplet_mining semi_hard \
-  --early_stopping_patience 0 \
+  --early_stopping_patience 10 \
+  --early_stopping_min_delta 1e-4 \
   --seed 42 --num_workers 8
 ```
 
