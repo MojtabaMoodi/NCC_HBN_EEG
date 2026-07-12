@@ -202,6 +202,21 @@ def compute_classification_eval_stats(
     return ret
 
 
+# Display names for confusion-matrix axes (aligned with CNN/experiment.py class_names).
+CLASSIFICATION_DISPLAY_LABELS: Dict[str, List[str]] = {
+    "age": ["<8.5 years", "8.5-12.5 years", ">12.5 years"],
+    "gender": ["Female", "Male"],
+}
+
+
+def classification_display_labels(dataset_type: str, class_indices: Sequence[int]) -> List[str]:
+    """Map integer class indices to human-readable axis labels."""
+    names = CLASSIFICATION_DISPLAY_LABELS.get(dataset_type)
+    if names is None:
+        return [str(index) for index in class_indices]
+    return [names[index] if index < len(names) else str(index) for index in class_indices]
+
+
 def classification_label_indices(*, is_binary: bool, nb_classes_config: int) -> List[int]:
     """Fixed class indices for confusion matrices (gender: 0/1; age: 0..C-1)."""
     if is_binary:
