@@ -67,6 +67,7 @@ from metrics import (  # noqa: E402
     compute_regression_metrics,
 )
 from model_loader import get_labram_input_chans, get_model_output, load_model_from_config  # noqa: E402
+from prob_utils import logits_to_probabilities  # noqa: E402
 from task_specs import TASK_IDS, get_task_spec, get_window_spec  # noqa: E402
 
 
@@ -177,15 +178,6 @@ class ManifestDataset(Dataset):
         self._hdf5_files.clear()
 
 
-def _logits_to_probabilities(logits: torch.Tensor, num_classes: int) -> np.ndarray:
-    if num_classes == 1:
-        prob_positive = torch.sigmoid(logits).cpu().numpy()
-        if prob_positive.ndim == 1:
-            prob_positive = prob_positive[:, np.newaxis]
-        return np.concatenate([1.0 - prob_positive, prob_positive], axis=-1)
-    return torch.softmax(logits, dim=-1).cpu().numpy()
-
-
 def run_classification_inference(
     model: nn.Module,
     dataloader: DataLoader,
@@ -201,9 +193,6 @@ def run_classification_inference(
     output_key = model_config.get("output_key")
     model_name = model_config["name"].lower()
     input_chans = get_labram_input_chans() if model_name == "labram" else None
-
-    # LaBraM gender uses a single logit; probabilities are expanded to 2 columns downstream.
-    prob_num_classes = 2 if num_classes == 1 else num_classes
 
     all_probs: List[np.ndarray] = []
     all_labels: List[np.ndarray] = []
@@ -224,7 +213,8 @@ def run_classification_inference(
                 prediction_type="classification",
                 num_classes=num_classes,
             )
-            probs = _logits_to_probabilities(logits, prob_num_classes)
+            # Pass head width (1 for binary LaBraM), not label-space size.
+            probs = logits_to_probabilities(logits, num_classes)
 
             all_probs.append(probs)
             all_labels.append(labels)

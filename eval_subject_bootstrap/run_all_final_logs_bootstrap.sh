@@ -33,9 +33,19 @@ done
 MANIFEST_DIR="${MANIFEST_DIR:-${EEG_ROOT}/eval_subject_bootstrap/manifests}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${EEG_ROOT}/eval_subject_bootstrap/outputs/final_logs}"
 
-ALL_BACKENDS="cnn,resnet18,resnet34,resnet50,labram"
-TASKS=(age_classification gender_classification age_regression)
-WINDOWS=(1s 2s 4s)
+# Optional overrides for partial re-runs (comma-separated).
+# Example: TASKS=gender_classification BACKENDS=labram
+BACKENDS="${BACKENDS:-cnn,resnet18,resnet34,resnet50,labram}"
+if [[ -n "${TASKS:-}" ]]; then
+  IFS=',' read -r -a TASKS <<< "${TASKS}"
+else
+  TASKS=(age_classification gender_classification age_regression)
+fi
+if [[ -n "${WINDOWS:-}" ]]; then
+  IFS=',' read -r -a WINDOWS <<< "${WINDOWS}"
+else
+  WINDOWS=(1s 2s 4s)
+fi
 
 mkdir -p "${OUTPUT_ROOT}"
 
@@ -50,11 +60,11 @@ run_one() {
     extra_args+=(--regression_baseline_stat "${REGRESSION_BASELINE_STAT}")
   fi
 
-  echo "=== bootstrap ${task} ${window} ==="
+  echo "=== bootstrap ${task} ${window} backends=${BACKENDS} ==="
   python "${SCRIPT_DIR}/run_bootstrap_evaluation.py" \
     --task "${task}" \
     --segment_length "${window}" \
-    --backends "${ALL_BACKENDS}" \
+    --backends "${BACKENDS}" \
     --hdf5_base_dir "${HDF5_BASE_DIR}" \
     --eeg_root "${EEG_ROOT}" \
     --manifest_dir "${MANIFEST_DIR}" \
